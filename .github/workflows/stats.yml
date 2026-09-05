@@ -40,7 +40,7 @@ jobs:
           filename: inject.json
           label: '@Inject'
           message: ${{ steps.stats.outputs.inject }}
-          color: green
+          color: orange
 
       - name: "@Redirect badge"
         uses: Schneegans/dynamic-badges-action@master
@@ -50,7 +50,17 @@ jobs:
           filename: redirect.json
           label: '@Redirect'
           message: ${{ steps.stats.outputs.redirect }}
-          color: blue
+          color: yellow
+
+      - name: "@ModifyConstant badge"
+        uses: Schneegans/dynamic-badges-action@master
+        with:
+          auth: ${{ secrets.GH_TOKEN }}
+          gistID: dc5cf49ced449ef6cda0c106718f8e53
+          filename: modifyconstant.json
+          label: '@ModifyConstant'
+          message: ${{ steps.stats.outputs.modifyconstant }}
+          color: green
 
       - name: "@Mixin badge"
         uses: Schneegans/dynamic-badges-action@master
@@ -60,7 +70,7 @@ jobs:
           filename: mixin.json
           label: '@Mixin'
           message: ${{ steps.stats.outputs.mixin }}
-          color: grey
+          color: cyan
 
       - name: Field badge
         uses: Schneegans/dynamic-badges-action@master
@@ -70,7 +80,7 @@ jobs:
           filename: field.json
           label: 'Field'
           message: ${{ steps.stats.outputs.field }}
-          color: black
+          color: blue
 
       - name: Method badge
         uses: Schneegans/dynamic-badges-action@master
@@ -80,4 +90,4 @@ jobs:
           filename: method.json
           label: 'Method'
           message: ${{ steps.stats.outputs.method }}
-          color: white
+          color: purple
