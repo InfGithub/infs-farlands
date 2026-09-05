@@ -3,13 +3,11 @@
 ![@Overwrite](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2FInfGithub%2Fdc5cf49ced449ef6cda0c106718f8e53%2Fraw%2Foverwrite.json)
 ![@Inject](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2FInfGithub%2Fdc5cf49ced449ef6cda0c106718f8e53%2Fraw%2Finject.json)
 ![@Redirect](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2FInfGithub%2Fdc5cf49ced449ef6cda0c106718f8e53%2Fraw%2Fredirect.json)
+![@Mixin](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2FInfGithub%2Fdc5cf49ced449ef6cda0c106718f8e53%2Fraw%2Fmixin.json)
 ![Field](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2FInfGithub%2Fdc5cf49ced449ef6cda0c106718f8e53%2Fraw%2Ffield.json)
 ![Method](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2FInfGithub%2Fdc5cf49ced449ef6cda0c106718f8e53%2Fraw%2Fmethod.json)
 
-如你所见，Inf's Farlands 目前正从 NeoForge 1.21.1 转移至 Fabric 26.1.2。
+本模组正转移至 Fabric 26.1.2。
 
-理由是 NeoForge 的 API 过于笨重，且本 Mod 几乎都是 Mixin 在发挥作用。
-
-相较之下 Fabric 显得更加轻量化，对 Mixin 也有更好的支持。同时新版本的 Vanilla 在架构上也更加先进。
-
-目前该分支为 Alpha 阶段，新的 Release 在很长一段时间内都不再会发布。
+- 目前为 Alpha 阶段。
+- 新 Release 暂无日期。

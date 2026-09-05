@@ -15,5 +15,6 @@ count_handle() { # $1 = Field|Method
 printf 'overwrite=%s\n' "$(count_annot 'Overwrite')"
 printf 'inject=%s\n' "$(count_annot 'Inject')"
 printf 'redirect=%s\n' "$(count_annot 'Redirect')"
+printf 'mixin=%s\n' "$(count_annot 'Mixin')"
 printf 'field=%s\n' "$(count_handle 'Field')"
 printf 'method=%s\n' "$(count_handle 'Method')"
