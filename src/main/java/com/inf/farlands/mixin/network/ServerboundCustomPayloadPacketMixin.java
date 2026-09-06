@@ -9,8 +9,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import com.inf.farlands.network.ServerPacketHandlers;
-import com.inf.farlands.network.Serverbounds;
+import com.inf.farlands.util.network.ServerPacketHandlers;
+import com.inf.farlands.util.network.Serverbounds;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;

@@ -1,7 +1,7 @@
 package com.inf.farlands.client.register.packet;
 
-import com.inf.farlands.network.Commonbounds;
-import com.inf.farlands.debug.tool.clamp.ClampTogglePacket;
+import com.inf.farlands.network.debug.tool.clamp.ClampTogglePacket;
+import com.inf.farlands.util.network.Commonbounds;
 
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload.TypeAndCodec;
 

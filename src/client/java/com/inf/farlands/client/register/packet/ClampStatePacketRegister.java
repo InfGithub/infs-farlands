@@ -2,7 +2,7 @@ package com.inf.farlands.client.register.packet;
 
 import com.inf.farlands.client.network.ClientPacketHandlers;
 import com.inf.farlands.debug.tool.clamp.ClampMode;
-import com.inf.farlands.debug.tool.clamp.ClampStatePacket;
+import com.inf.farlands.network.debug.tool.clamp.ClampStatePacket;
 
 import net.minecraft.client.Minecraft;
 

@@ -1,4 +1,4 @@
-package com.inf.farlands.debug.tool.clamp;
+package com.inf.farlands.network.debug.tool.clamp;
 
 import com.inf.farlands.InfSFarlands;
 

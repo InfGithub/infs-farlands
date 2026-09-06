@@ -32,6 +32,17 @@
     "expand/xz/border/WorldBorderCommandMixin",
     "expand/xz/border/WorldBorderMixin",
 
+    "expand/y/ChunkAccessMixin",
+    "expand/y/ChunkGeneratorMixin",
+    "expand/y/LevelChunk$BoundTickingBlockEntityMixin",
+    "expand/y/LevelChunkMixin",
+    "expand/y/LevelHeightAccessorMixin",
+    "expand/y/LevelMixin",
+    "expand/y/NoiseBasedChunkGeneratorMixin",
+    "expand/y/ProtoChunkMixin",
+    "expand/y/ServerChunkCacheMixin",
+    "expand/y/ServerLevelMixin",
+
     "fix/xz/AABBMixin",
     "fix/xz/BoundingBoxMixin",
     "fix/xz/ChunkGeneratorMixin",

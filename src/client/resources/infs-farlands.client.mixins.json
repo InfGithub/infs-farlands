@@ -9,6 +9,7 @@
     "debug/tool/clamp/LevelRendererMixin",
     "debug/tool/clamp/LocalPlayerMixin",
     "expand/xyz/pos/LightDebugRendererMixin",
+    "expand/y/ClientPacketListenerMixin",
     "fix/xz/EntityRendererMixin",
     "fix/xz/LevelRendererMixin",
     "fix/xz/RenderSectionRegionMixin",

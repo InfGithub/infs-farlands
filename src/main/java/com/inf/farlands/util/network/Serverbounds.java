@@ -1,4 +1,4 @@
-package com.inf.farlands.network;
+package com.inf.farlands.util.network;
 
 import java.util.ArrayList;
 import java.util.List;

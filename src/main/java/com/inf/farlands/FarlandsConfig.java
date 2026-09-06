@@ -43,6 +43,14 @@ public class FarlandsConfig {
                         Map.of("en_us", "Radius of the vertical simulation distance.", "zh_cn", "垂直模拟距离的半径"));
         public static final int verticalSimulationDistance;
 
+        public static final ConfigEntry<Integer> FSA_CLEANUP_MARGIN = Config.register(
+                        "fsaCleanupMargin",
+                        int.class,
+                        8,
+                        Map.of("en_us", "Sections outside all player windows plus this margin are cleanup candidates.",
+                                        "zh_cn", "玩家窗口并集外加上该余量的 section 为清理候选。"));
+        public static final int fsaCleanupMargin;
+
         static {
                 Config.init();
                 borderAbsoluteMax = BORDER_ABSOLUTE_MAX.get();
@@ -50,5 +58,6 @@ public class FarlandsConfig {
                 worldGenMaxY = WORLD_GEN_MAX_Y.get();
                 maxCapIter = MAX_CAP_ITER.get();
                 verticalSimulationDistance = VERTICAL_SIMULATION_DISTANCE.get();
+                fsaCleanupMargin = FSA_CLEANUP_MARGIN.get();
         }
 }

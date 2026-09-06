@@ -1,6 +1,5 @@
 package com.inf.farlands.client.mixin.debug.tool.clamp;
 
-import com.inf.farlands.debug.tool.clamp.ClampTogglePacket;
 import net.minecraft.client.KeyboardHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.KeyEvent;
@@ -9,6 +8,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+import com.inf.farlands.network.debug.tool.clamp.ClampTogglePacket;
 
 /** F3+K 触发钳制模式 toggle。客户端发请求，服务端校验 OP。 */
 @Mixin(KeyboardHandler.class)

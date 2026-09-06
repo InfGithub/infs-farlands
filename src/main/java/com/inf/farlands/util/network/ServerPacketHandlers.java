@@ -1,4 +1,4 @@
-package com.inf.farlands.network;
+package com.inf.farlands.util.network;
 
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;

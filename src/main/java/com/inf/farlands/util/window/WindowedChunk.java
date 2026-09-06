@@ -5,11 +5,15 @@ import java.util.Map;
 
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 
 /**
  * 窗口系统一等公民接口，由 ChunkAccessMixin 注入到 ChunkAccess。
  */
 public interface WindowedChunk {
+
+    /** chunk 的 section 容器工厂（26.1.2 构造器参数，mixin 存字段），跨类建 section 用。 */
+    PalettedContainerFactory containerFactory();
 
     /** 中心下方半径，下界 = center - N，N = Config.verticalSimulationDistance。 */
     default int windowHalfBelow() {
