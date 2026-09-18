@@ -17,6 +17,6 @@ public class MinecraftServerMixin {
 
     @Inject(method = "tickServer", at = @At("RETURN"))
     private void onServerTickEnd(CallbackInfo ci) {
-        FarlandsTick.atEnd(tickCount);
+        FarlandsTick.atEnd((MinecraftServer) (Object) this, tickCount);
     }
 }

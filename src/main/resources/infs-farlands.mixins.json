@@ -62,6 +62,12 @@
     "network/ClientboundCustomPayloadPacketMixin",
     "network/ServerboundCustomPayloadPacketMixin",
 
+    "light/BuiltInRegistriesMixin",
+    "light/ChunkMapLightEngineMixin",
+    "light/ChunkSkyLightSourcesMixin",
+    "light/LevelChunkSectionMixin",
+    "light/ClientboundLevelChunkWithLightPacketMixin",
+
     "tick/MinecraftServerMixin"
   ],
   "injectors": {

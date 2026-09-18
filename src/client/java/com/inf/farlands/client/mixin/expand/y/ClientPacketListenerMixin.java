@@ -1,9 +1,10 @@
 package com.inf.farlands.client.mixin.expand.y;
 
+import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.light.FarLandsLightEngine;
+import com.inf.farlands.light.FarLandsLightPacketData;
 import com.inf.farlands.util.maps.Common;
 import com.inf.farlands.util.window.WindowedChunk;
-// import com.inf.farlands.light.FarLandsLightEngine;
-// import com.inf.farlands.light.FarLandsLightPacketData;
 
 import java.util.Map;
 
@@ -12,6 +13,7 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.core.SectionPos;
 import net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket;
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -23,6 +25,9 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.network.protocol.PacketUtils;
 
@@ -127,8 +132,40 @@ public abstract class ClientPacketListenerMixin {
         }
     }
 
+    /**
+     * FarLands 光照数据应用：chunk-with-light 包 RETURN 时把附加的光照载荷灌进客户端引擎。
+     *
+     * <p>ClientboundLevelChunkWithLightPacketMixin 的 farlandsLightData 是 @Unique 私有字段，
+     * 且该 mixin 在 main 源集——客户端经反射读取（与 1.21.1 同方式，低频：每 chunk 一次）。
+     */
+    private static final java.lang.reflect.Field FARLANDS_LIGHT_FIELD;
+    static {
+        try {
+            FARLANDS_LIGHT_FIELD = ClientboundLevelChunkWithLightPacket.class
+                    .getDeclaredField("farlandsLightData");
+            FARLANDS_LIGHT_FIELD.setAccessible(true);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
-    // InfFarlands.applyPendingSectionData(this.level.dimension(), packet.getX(),
-    // packet.getZ());
-    // }
+    @Inject(method = "handleLevelChunkWithLight", at = @At("RETURN"))
+    private void onLevelChunkWithLight(ClientboundLevelChunkWithLightPacket packet, CallbackInfo ci) {
+        if (!(this.level.getLightEngine() instanceof FarLandsLightEngine fle)) {
+            return;
+        }
+        try {
+            FarLandsLightPacketData fd = (FarLandsLightPacketData) FARLANDS_LIGHT_FIELD.get(packet);
+            if (fd != null) {
+                fd.apply(fle, packet.getX(), packet.getZ());
+            }
+        } catch (Exception e) {
+            // 不静默吞错：catch ignored 会掩盖 farlandsLightData 应用失败
+            InfSFarlands.LOGGER.error("FLPKT apply EXCEPTION chunk={},{}", packet.getX(), packet.getZ(), e);
+        }
+        // §5 缓存补应用：chunk 加载完成（即 replaceWithPacketData 之后）→ 应用此前因
+        // chunk 未加载而缓存的 §5 section 数据，防方块数据永久缺失——空缺/双端不同步。
+        com.inf.farlands.client.register.packet.ChunkDataPacketRegister.applyPendingSectionData(
+                this.level, packet.getX(), packet.getZ());
+    }
 }

@@ -9,5 +9,7 @@ public class FarlandsRegister {
 
     public static void register() {
         ClampStatePacketRegister.registerHandler();
+        LightUpdatePacketRegister.registerHandler();
+        ChunkDataPacketRegister.registerHandler();
     }
 }

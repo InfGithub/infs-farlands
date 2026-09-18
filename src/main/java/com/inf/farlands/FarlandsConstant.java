@@ -9,7 +9,8 @@ public class FarlandsConstant {
     /**
      * Mineshaft 结构起点 chunk 的绝对安全上界（防 int 溢出，非玩法边界）。
      *
-     * <p>Room 起点 west = chunkX×16+2（getBlockX(2)）。最坏走廊链沿 +X 延伸
+     * <p>
+     * Room 起点 west = chunkX×16+2（getBlockX(2)）。最坏走廊链沿 +X 延伸
      * 至 box 端 = west+99（护栏 80 + 走廊段长 20 − 1，XSpan=10 组合可达），
      * 要求 box 端 ≤ MAX_BLOCK−5：chunkX×16+2+99 ≤ 2147483642
      * → chunkX ≤ (MAX_BLOCK−106)/16 = 134217721（向下取整，16 对齐稳定）。

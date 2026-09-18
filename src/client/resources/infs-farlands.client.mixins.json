@@ -15,7 +15,8 @@
     "fix/xz/RenderSectionRegionMixin",
     "fix/xz/WeatherEffectRendererMixin",
     "fix/xyz/SectionRenderDispatcher$RenderSectionMixin",
-    "network/ClientboundCustomPayloadPacketMixin"
+    "network/ClientboundCustomPayloadPacketMixin",
+    "light/ClientChunkCacheLightEngineMixin"
   ],
   "injectors": {
     "defaultRequire": 1
