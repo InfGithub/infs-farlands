@@ -59,6 +59,11 @@
 
     "fix/y/LevelMixin",
 
+    "serialize/SerializableChunkDataMixin",
+    "serialize/LevelChunkSetBlockStateMixin",
+    "serialize/ServerLevelMixin",
+    "serialize/MinecraftServerMixin",
+
     "network/ClientboundCustomPayloadPacketMixin",
     "network/ServerboundCustomPayloadPacketMixin",
 

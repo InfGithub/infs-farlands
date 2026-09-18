@@ -11,6 +11,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.network.expand.y.ChunkDataPacket;
+import com.inf.farlands.serialize.SectionLifecycle;
+import com.inf.farlands.serialize.TerrainHooks;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import io.netty.buffer.Unpooled;
@@ -80,11 +82,15 @@ public final class ChunkDataSender {
         PENDING_QUEUES.remove(id);
     }
 
-    /** 服务端每 tick 入口：窗口差量 + 限量发包。 */
-    public static void tick(MinecraftServer server) {
+    /** 服务端每 tick 入口：窗口差量 + 限量发包。
+     * 返回 true 表示任一玩家窗口发生变化，调用方 FarlandsTick 据此驱动 fsa 清理判定。 */
+    public static boolean tick(MinecraftServer server) {
         List<ServerPlayer> players = server.getPlayerList().getPlayers();
+        boolean windowChanged = false;
         for (ServerPlayer player : players) {
-            updatePlayerWindow(player);
+            if (updatePlayerWindow(player)) {
+                windowChanged = true;
+            }
         }
         for (ServerPlayer player : players) {
             flushPendingSections(player);
@@ -96,6 +102,7 @@ public final class ChunkDataSender {
         }
         WINDOW_STATES.keySet().retainAll(roster);
         PENDING_QUEUES.keySet().retainAll(roster);
+        return windowChanged;
     }
 
     /**
@@ -137,13 +144,27 @@ public final class ChunkDataSender {
         return true;
     }
 
-    /** 该 sectionY 入队到玩家 tracking view 内每个 chunk。 */
+    /**
+     * 该 sectionY 入队到玩家 tracking view 内每个 chunk，并对已加载的 chunk 触发 fsa 读回。
+     *
+     * <p>fsa 读回要在磁盘有数据时恢复 section、光照与 stage，并补发 section 包。它与 §5 发送
+     * 复用同一次窗口差量检测。旧仓库这两件事同在 {@code InfFarlands.updatePlayerWindow} 的
+     * {@code enqueueGenForSection} 里，即 §5 入队加 {@code SectionLifecycle.loadSection}，
+     * 本 port 在此合并。只对 ChunkStatus.FULL 的 chunk 读回。
+     */
     private static void enqueueForWindow(ServerPlayer player, int sectionY) {
         int s = sectionY;
-        player.getChunkTrackingView().forEach(cp -> PENDING_QUEUES
-                .computeIfAbsent(player.getUUID(), k -> new ConcurrentHashMap<>())
-                .computeIfAbsent(cp.pack(), k -> new IntArraySet())
-                .add(s));
+        ServerLevel level = player.level();
+        player.getChunkTrackingView().forEach(cp -> {
+            PENDING_QUEUES
+                    .computeIfAbsent(player.getUUID(), k -> new ConcurrentHashMap<>())
+                    .computeIfAbsent(cp.pack(), k -> new IntArraySet())
+                    .add(s);
+            ChunkAccess ca = level.getChunk(cp.x(), cp.z(), ChunkStatus.FULL, false);
+            if (ca instanceof LevelChunk lc) {
+                SectionLifecycle.loadSection(lc, s, () -> TerrainHooks.enqueueGen(lc));
+            }
+        });
     }
 
     /**

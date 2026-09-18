@@ -51,6 +51,22 @@ public class FarlandsConfig {
                                         "zh_cn", "玩家窗口并集外加上该余量的 section 为清理候选。"));
         public static final int fsaCleanupMargin;
 
+        public static final ConfigEntry<Integer> FSA_CACHE_LIMIT = Config.register(
+                        "fsaCacheLimit",
+                        int.class,
+                        128,
+                        Map.of("en_us", "Maximum number of open fsa files kept in cache.",
+                                        "zh_cn", "打开的 fsa 文件缓存上限。"));
+        public static final int fsaCacheLimit;
+
+        public static final ConfigEntry<Long> FSA_PERSIST_INTERVAL = Config.register(
+                        "fsaPersistInterval",
+                        long.class,
+                        6000L,
+                        Map.of("en_us", "Interval in ticks between periodic persistence of dirty sections.",
+                                        "zh_cn", "定期持久化脏 section 的间隔，单位 tick。"));
+        public static final long fsaPersistInterval;
+
         // 光照
 
         public static final ConfigEntry<Integer> PARALLEL_LIGHT_THREADS = Config.register(
@@ -91,6 +107,8 @@ public class FarlandsConfig {
                 maxCapIter = MAX_CAP_ITER.get();
                 verticalSimulationDistance = VERTICAL_SIMULATION_DISTANCE.get();
                 fsaCleanupMargin = FSA_CLEANUP_MARGIN.get();
+                fsaCacheLimit = resolveFsaCacheLimit(FSA_CACHE_LIMIT.get());
+                fsaPersistInterval = resolveFsaPersistInterval(FSA_PERSIST_INTERVAL.get());
                 parallelLightThreads = resolveLightThreads(PARALLEL_LIGHT_THREADS.get());
                 maxLightTasksPerTick = MAX_LIGHT_TASKS_PER_TICK.get();
                 sectionSendBytesPerTick = SECTION_SEND_BYTES_PER_TICK.get();
@@ -101,5 +119,15 @@ public class FarlandsConfig {
                         return Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
                 }
                 return Math.min(64, raw);
+        }
+
+        /** fsa 文件缓存上限下限 1：0/负值会让 LinkedHashMap 构造抛异常。配置系统无范围校验，就地钳制。 */
+        private static int resolveFsaCacheLimit(int raw) {
+                return Math.max(1, raw);
+        }
+
+        /** 周期持久化间隔下限 1：0 会让 FarlandsTick 的取模除零。配置系统无范围校验，就地钳制。 */
+        private static long resolveFsaPersistInterval(long raw) {
+                return Math.max(1L, raw);
         }
 }
