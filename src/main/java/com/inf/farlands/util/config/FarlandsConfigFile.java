@@ -2,6 +2,7 @@ package com.inf.farlands.util.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
@@ -25,11 +26,13 @@ import java.util.Map;
  * "note": { "<lang>": "<text>", ... }, // 多语言注释
  * "lastWriteBackTime": <unixSeconds>, // 最后回写时间戳
  * "settings": {
- * "<entryName>": { "note": { ... }, "value": <literal>, "default": <literal> },
+ * "<entryName>": { "note": { ... }, "value": <literal>, "default": <literal>, "enums": [ ... ] },
  * ...
  * }
  * }
  * }</pre>
+ *
+ * <p>"enums" 只出现在枚举条目上，列出该枚举当前的全部取值，供手改配置时对照。
  */
 public final class FarlandsConfigFile {
 
@@ -41,6 +44,7 @@ public final class FarlandsConfigFile {
     private static final String SETTINGS = "settings";
     private static final String VALUE = "value";
     private static final String DEFAULT = "default";
+    private static final String ENUMS = "enums";
 
     private FarlandsConfigFile() {
     }
@@ -89,11 +93,16 @@ public final class FarlandsConfigFile {
                     obj.add(DEFAULT, toValueJson(entry.defaultValue(), entry.type()));
                     dirty2[0] = true;
                 }
+                if (entry.type().isEnum() && !obj.has(ENUMS)) {
+                    addEnumsIfEnum(obj, entry.type());
+                    dirty2[0] = true;
+                }
             } else {
                 JsonObject obj = new JsonObject();
                 obj.add(NOTE, toNotesJson(entry.notes()));
                 obj.add(VALUE, toValueJson(entry.defaultValue(), entry.type()));
                 obj.add(DEFAULT, toValueJson(entry.defaultValue(), entry.type()));
+                addEnumsIfEnum(obj, entry.type());
                 settings.add(name, obj);
                 dirty2[0] = true;
             }
@@ -127,8 +136,10 @@ public final class FarlandsConfigFile {
         for (Map.Entry<String, ConfigEntry<?>> e : entries.entrySet()) {
             JsonObject obj = new JsonObject();
             obj.add(NOTE, toNotesJson(e.getValue().notes()));
-            obj.add(VALUE, toValueJson(e.getValue().defaultValue(), e.getValue().type()));
+            // 这里写当前值而不是默认值：缺 default 或 enums 触发的回填重写，不能把用户改过的值冲掉
+            obj.add(VALUE, toValueJson(e.getValue().get(), e.getValue().type()));
             obj.add(DEFAULT, toValueJson(e.getValue().defaultValue(), e.getValue().type()));
+            addEnumsIfEnum(obj, e.getValue().type());
             settings.add(e.getKey(), obj);
         }
         root.add(SETTINGS, settings);
@@ -150,6 +161,20 @@ public final class FarlandsConfigFile {
             o.addProperty(e.getKey(), e.getValue());
         }
         return o;
+    }
+
+    // enums 序列化
+
+    /** 枚举条目补上 enums 列表，即该枚举当前的全部取值；非枚举类型不写这个键。 */
+    private static void addEnumsIfEnum(JsonObject obj, Class<?> type) {
+        if (!type.isEnum()) {
+            return;
+        }
+        JsonArray arr = new JsonArray();
+        for (Object constant : type.getEnumConstants()) {
+            arr.add(((Enum<?>) constant).name());
+        }
+        obj.add(ENUMS, arr);
     }
 
     // value 序列化：类型分派

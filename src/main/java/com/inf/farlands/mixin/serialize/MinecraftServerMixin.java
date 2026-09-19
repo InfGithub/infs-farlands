@@ -3,6 +3,7 @@ package com.inf.farlands.mixin.serialize;
 import com.inf.farlands.InfSFarlands;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
+import com.inf.farlands.terrain.pipeline.GenQueue;
 
 import net.minecraft.server.MinecraftServer;
 
@@ -22,7 +23,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * 顺序不可调换。卸载编码任务由 flushChunk 提交到 ENCODE_POOL，必须先于 awaitIODrain 完成
  * 提交，否则其 IO 写不被等待，关服就丢已卸载的 section 数据。
  *
- * GenQueue.awaitIdle 这一步随 terrain 缺席，不接。
+ * GenQueue.awaitIdle 在 IO 排空之后、同步兜底写之前，等在途生成与光照收敛，有界 5 秒。
+ * 超时后的在途 section 由 shutdownSyncFlush 的 isChunkBusy 跳过兜底，重进重生成。
  */
 @Mixin(MinecraftServer.class)
 public abstract class MinecraftServerMixin {
@@ -34,6 +36,7 @@ public abstract class MinecraftServerMixin {
             SectionLifecycle.awaitEncodeTasks(server, 5000);
             SectionIO.awaitIODrain();
             SectionIO.drainMainThreadTasks(server);
+            GenQueue.awaitIdle(5000);
             SectionLifecycle.shutdownSyncFlush(server);
         } catch (Exception e) {
             InfSFarlands.LOGGER.error("farlands: fsa shutdown flush failed", e);

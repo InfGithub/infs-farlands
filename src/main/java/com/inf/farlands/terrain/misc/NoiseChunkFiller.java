@@ -1,6 +1,7 @@
-package com.inf.farlands.terrain.noisefiller;
+package com.inf.farlands.terrain.misc;
 
-import java.lang.reflect.Method;
+import com.inf.farlands.mixin.noise.NoiseChunkInvoker;
+
 import java.util.function.Supplier;
 
 import net.minecraft.SharedConstants;
@@ -32,44 +33,6 @@ import net.minecraft.world.level.levelgen.blending.Blender;
 public final class NoiseChunkFiller {
 
     private NoiseChunkFiller() {
-    }
-
-    private static final Method M_CELL_WIDTH;
-    private static final Method M_CELL_HEIGHT;
-    private static final Method M_SELECT_CELL_YZ;
-    private static final Method M_ADVANCE_CELL_X;
-    private static final Method M_INIT_FIRST_CELL_X;
-    private static final Method M_UPDATE_FOR_Y;
-    private static final Method M_UPDATE_FOR_X;
-    private static final Method M_UPDATE_FOR_Z;
-    private static final Method M_GET_INTERP_STATE;
-    private static final Method M_AQUIFER;
-
-    static {
-        try {
-            M_CELL_WIDTH = NoiseChunk.class.getDeclaredMethod("cellWidth");
-            M_CELL_WIDTH.setAccessible(true);
-            M_CELL_HEIGHT = NoiseChunk.class.getDeclaredMethod("cellHeight");
-            M_CELL_HEIGHT.setAccessible(true);
-            M_SELECT_CELL_YZ = NoiseChunk.class.getDeclaredMethod("selectCellYZ", int.class, int.class);
-            M_SELECT_CELL_YZ.setAccessible(true);
-            M_ADVANCE_CELL_X = NoiseChunk.class.getDeclaredMethod("advanceCellX", int.class);
-            M_ADVANCE_CELL_X.setAccessible(true);
-            M_INIT_FIRST_CELL_X = NoiseChunk.class.getDeclaredMethod("initializeForFirstCellX");
-            M_INIT_FIRST_CELL_X.setAccessible(true);
-            M_UPDATE_FOR_Y = NoiseChunk.class.getDeclaredMethod("updateForY", int.class, double.class);
-            M_UPDATE_FOR_Y.setAccessible(true);
-            M_UPDATE_FOR_X = NoiseChunk.class.getDeclaredMethod("updateForX", int.class, double.class);
-            M_UPDATE_FOR_X.setAccessible(true);
-            M_UPDATE_FOR_Z = NoiseChunk.class.getDeclaredMethod("updateForZ", int.class, double.class);
-            M_UPDATE_FOR_Z.setAccessible(true);
-            M_GET_INTERP_STATE = NoiseChunk.class.getDeclaredMethod("getInterpolatedState");
-            M_GET_INTERP_STATE.setAccessible(true);
-            M_AQUIFER = NoiseChunk.class.getDeclaredMethod("aquifer");
-            M_AQUIFER.setAccessible(true);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 
     /** 窗口滑入 section 的按需填充。 */
@@ -130,11 +93,12 @@ public final class NoiseChunkFiller {
         ChunkPos cpos = chunk.getPos();
         int baseX = cpos.getMinBlockX();
         int baseZ = cpos.getMinBlockZ();
-        Aquifer aquifer = (Aquifer) invoke(M_AQUIFER, noisechunk);
-        invoke(M_INIT_FIRST_CELL_X, noisechunk);
+        NoiseChunkInvoker inv = (NoiseChunkInvoker) noisechunk;
+        Aquifer aquifer = inv.farlands$aquifer();
+        inv.farlands$initializeForFirstCellX();
         BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos();
-        int cw = (int) invoke(M_CELL_WIDTH, noisechunk);
-        int ch = (int) invoke(M_CELL_HEIGHT, noisechunk);
+        int cw = inv.farlands$cellWidth();
+        int ch = inv.farlands$cellHeight();
         int cellsX = 16 / cw;
         int cellsZ = 16 / cw;
 
@@ -144,9 +108,9 @@ public final class NoiseChunkFiller {
         }
 
         for (int cx = 0; cx < cellsX; cx++) {
-            invoke(M_ADVANCE_CELL_X, noisechunk, cx);
+            inv.farlands$advanceCellX(cx);
             for (int cz = 0; cz < cellsZ; cz++) {
-                fillCellColumn(noisechunk, chunk, settings, minSection, maxSection, minCellY, cellCountY,
+                fillCellColumn(noisechunk, inv, chunk, settings, minSection, maxSection, minCellY, cellCountY,
                         ch, cw, cx, cz, baseX, baseZ, hmOcean, hmSurface, aquifer, mpos, cpos);
             }
         }
@@ -155,6 +119,7 @@ public final class NoiseChunkFiller {
 
     private static void fillCellColumn(
             NoiseChunk noisechunk,
+            NoiseChunkInvoker inv,
             ChunkAccess chunk,
             NoiseGeneratorSettings settings,
             int minSection,
@@ -181,7 +146,7 @@ public final class NoiseChunkFiller {
         int prevSecIdx = chunk.getSectionsCount() - 1;
         LevelChunkSection section = chunk.getSection(prevSecIdx);
         for (int cy = cyEnd; cy >= cyStart; cy--) {
-            invoke(M_SELECT_CELL_YZ, noisechunk, cy, cz);
+            inv.farlands$selectCellYZ(cy, cz);
             for (int ky = ch - 1; ky >= 0; ky--) {
                 int blockY = (minCellY + cy) * ch + ky;
                 int ry = blockY & 15;
@@ -190,16 +155,16 @@ public final class NoiseChunkFiller {
                     prevSecIdx = secIdx;
                     section = chunk.getSection(secIdx);
                 }
-                invoke(M_UPDATE_FOR_Y, noisechunk, blockY, (double) ky / (double) ch);
+                inv.farlands$updateForY(blockY, (double) ky / (double) ch);
                 for (int kx = 0; kx < cw; kx++) {
                     int blockX = baseX + cx * cw + kx;
                     int rx = blockX & 15;
-                    invoke(M_UPDATE_FOR_X, noisechunk, blockX, (double) kx / (double) cw);
+                    inv.farlands$updateForX(blockX, (double) kx / (double) cw);
                     for (int kz = 0; kz < cw; kz++) {
                         int blockZ = baseZ + cz * cw + kz;
                         int rz = blockZ & 15;
-                        invoke(M_UPDATE_FOR_Z, noisechunk, blockZ, (double) kz / (double) cw);
-                        BlockState bs = (BlockState) invoke(M_GET_INTERP_STATE, noisechunk);
+                        inv.farlands$updateForZ(blockZ, (double) kz / (double) cw);
+                        BlockState bs = inv.farlands$getInterpolatedState();
                         if (bs == null) {
                             bs = settings.defaultBlock();
                         }
@@ -234,13 +199,5 @@ public final class NoiseChunkFiller {
             }
         }
         return state;
-    }
-
-    private static Object invoke(Method m, Object target, Object... args) {
-        try {
-            return m.invoke(target, args);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 }

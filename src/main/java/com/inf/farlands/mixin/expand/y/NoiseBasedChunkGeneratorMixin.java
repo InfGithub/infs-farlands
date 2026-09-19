@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
-import com.inf.farlands.terrain.noisefiller.NoiseChunkFiller;
+import com.inf.farlands.terrain.misc.NoiseChunkFiller;
 
 import net.minecraft.core.Holder;
 

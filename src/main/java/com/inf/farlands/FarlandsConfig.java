@@ -2,6 +2,10 @@ package com.inf.farlands;
 
 import java.util.Map;
 
+import com.inf.farlands.terrain.system.BiomeSystemType;
+import com.inf.farlands.terrain.system.CarverSystemType;
+import com.inf.farlands.terrain.system.SurfaceSystemType;
+import com.inf.farlands.terrain.system.TerrainSystemType;
 import com.inf.farlands.util.config.Config;
 import com.inf.farlands.util.config.ConfigEntry;
 
@@ -67,6 +71,114 @@ public class FarlandsConfig {
                                         "zh_cn", "定期持久化脏 section 的间隔，单位 tick。"));
         public static final long fsaPersistInterval;
 
+        // 地形系统
+
+        public static final ConfigEntry<TerrainSystemType> OVERWORLD_TERRAIN_SYSTEM = Config.register(
+                        "overworldTerrainSystem",
+                        TerrainSystemType.class,
+                        TerrainSystemType.VOID,
+                        Map.of("en_us", "Terrain system for overworld generation.", "zh_cn", "主世界地形系统。"));
+        public static final TerrainSystemType overworldTerrainSystem;
+
+        public static final ConfigEntry<TerrainSystemType> NETHER_TERRAIN_SYSTEM = Config.register(
+                        "theNetherTerrainSystem",
+                        TerrainSystemType.class,
+                        TerrainSystemType.VOID,
+                        Map.of("en_us", "Terrain system for the nether generation.", "zh_cn", "下界地形系统。"));
+        public static final TerrainSystemType netherTerrainSystem;
+
+        public static final ConfigEntry<TerrainSystemType> END_TERRAIN_SYSTEM = Config.register(
+                        "theEndTerrainSystem",
+                        TerrainSystemType.class,
+                        TerrainSystemType.VOID,
+                        Map.of("en_us", "Terrain system for the end generation.", "zh_cn", "末地地形系统。"));
+        public static final TerrainSystemType endTerrainSystem;
+
+        public static final ConfigEntry<BiomeSystemType> OVERWORLD_BIOME_SYSTEM = Config.register(
+                        "overworldBiomeSystem",
+                        BiomeSystemType.class,
+                        BiomeSystemType.VOID,
+                        Map.of("en_us", "Biome system for overworld biomes.", "zh_cn", "主世界群系系统。"));
+        public static final BiomeSystemType overworldBiomeSystem;
+
+        public static final ConfigEntry<BiomeSystemType> NETHER_BIOME_SYSTEM = Config.register(
+                        "theNetherBiomeSystem",
+                        BiomeSystemType.class,
+                        BiomeSystemType.VOID,
+                        Map.of("en_us", "Biome system for the nether biomes.", "zh_cn", "下界群系系统。"));
+        public static final BiomeSystemType netherBiomeSystem;
+
+        public static final ConfigEntry<BiomeSystemType> END_BIOME_SYSTEM = Config.register(
+                        "theEndBiomeSystem",
+                        BiomeSystemType.class,
+                        BiomeSystemType.VOID,
+                        Map.of("en_us", "Biome system for the end biomes.", "zh_cn", "末地群系系统。"));
+        public static final BiomeSystemType endBiomeSystem;
+
+        public static final ConfigEntry<SurfaceSystemType> OVERWORLD_SURFACE_SYSTEM = Config.register(
+                        "overworldSurfaceSystem",
+                        SurfaceSystemType.class,
+                        SurfaceSystemType.VOID,
+                        Map.of("en_us", "Surface system for overworld terrain.", "zh_cn", "主世界地表系统。"));
+        public static final SurfaceSystemType overworldSurfaceSystem;
+
+        public static final ConfigEntry<SurfaceSystemType> NETHER_SURFACE_SYSTEM = Config.register(
+                        "theNetherSurfaceSystem",
+                        SurfaceSystemType.class,
+                        SurfaceSystemType.VOID,
+                        Map.of("en_us", "Surface system for the nether terrain.", "zh_cn", "下界地表系统。"));
+        public static final SurfaceSystemType netherSurfaceSystem;
+
+        public static final ConfigEntry<SurfaceSystemType> END_SURFACE_SYSTEM = Config.register(
+                        "theEndSurfaceSystem",
+                        SurfaceSystemType.class,
+                        SurfaceSystemType.VOID,
+                        Map.of("en_us", "Surface system for the end terrain.", "zh_cn", "末地地表系统。"));
+        public static final SurfaceSystemType endSurfaceSystem;
+
+        public static final ConfigEntry<CarverSystemType> OVERWORLD_CARVER_SYSTEM = Config.register(
+                        "overworldCarverSystem",
+                        CarverSystemType.class,
+                        CarverSystemType.VOID,
+                        Map.of("en_us", "Carver system for overworld terrain.", "zh_cn", "主世界雕刻系统。"));
+        public static final CarverSystemType overworldCarverSystem;
+
+        public static final ConfigEntry<CarverSystemType> NETHER_CARVER_SYSTEM = Config.register(
+                        "theNetherCarverSystem",
+                        CarverSystemType.class,
+                        CarverSystemType.VOID,
+                        Map.of("en_us", "Carver system for the nether terrain.", "zh_cn", "下界雕刻系统。"));
+        public static final CarverSystemType netherCarverSystem;
+
+        public static final ConfigEntry<CarverSystemType> END_CARVER_SYSTEM = Config.register(
+                        "theEndCarverSystem",
+                        CarverSystemType.class,
+                        CarverSystemType.VOID,
+                        Map.of("en_us", "Carver system for the end terrain.", "zh_cn", "末地雕刻系统。"));
+        public static final CarverSystemType endCarverSystem;
+
+        // 地形管线
+
+        public static final ConfigEntry<Integer> MAX_GEN_TASKS_PER_TICK = Config.register(
+                        "maxGenTasksPerTick",
+                        int.class,
+                        2000,
+                        Map.of("en_us",
+                                        "Max terrain-pipeline gen tasks consumed per wake.",
+                                        "zh_cn",
+                                        "地形管线每次唤醒消费的生成任务上限。"));
+        public static final int maxGenTasksPerTick;
+
+        public static final ConfigEntry<Integer> GEN_WORKER_THREADS = Config.register(
+                        "genWorkerThreads",
+                        int.class,
+                        0,
+                        Map.of("en_us",
+                                        "Terrain generation worker threads. 0 = auto: half of CPU logical processors; 1 = single background thread; N = exactly N threads, max 64.",
+                                        "zh_cn",
+                                        "地形生成线程数。0 = 自动取 CPU 逻辑线程数一半；1 = 单个后台线程；N = 恰好 N 个线程，上限 64。"));
+        public static final int genWorkerThreads;
+
         // 光照
 
         public static final ConfigEntry<Integer> PARALLEL_LIGHT_THREADS = Config.register(
@@ -109,9 +221,28 @@ public class FarlandsConfig {
                 fsaCleanupMargin = FSA_CLEANUP_MARGIN.get();
                 fsaCacheLimit = resolveFsaCacheLimit(FSA_CACHE_LIMIT.get());
                 fsaPersistInterval = resolveFsaPersistInterval(FSA_PERSIST_INTERVAL.get());
+                overworldTerrainSystem = OVERWORLD_TERRAIN_SYSTEM.get();
+                netherTerrainSystem = NETHER_TERRAIN_SYSTEM.get();
+                endTerrainSystem = END_TERRAIN_SYSTEM.get();
+                overworldBiomeSystem = OVERWORLD_BIOME_SYSTEM.get();
+                netherBiomeSystem = NETHER_BIOME_SYSTEM.get();
+                endBiomeSystem = END_BIOME_SYSTEM.get();
+                overworldSurfaceSystem = OVERWORLD_SURFACE_SYSTEM.get();
+                netherSurfaceSystem = NETHER_SURFACE_SYSTEM.get();
+                endSurfaceSystem = END_SURFACE_SYSTEM.get();
+                overworldCarverSystem = OVERWORLD_CARVER_SYSTEM.get();
+                netherCarverSystem = NETHER_CARVER_SYSTEM.get();
+                endCarverSystem = END_CARVER_SYSTEM.get();
+                maxGenTasksPerTick = resolveMaxGenTasksPerTick(MAX_GEN_TASKS_PER_TICK.get());
+                genWorkerThreads = GEN_WORKER_THREADS.get();
                 parallelLightThreads = resolveLightThreads(PARALLEL_LIGHT_THREADS.get());
                 maxLightTasksPerTick = MAX_LIGHT_TASKS_PER_TICK.get();
                 sectionSendBytesPerTick = SECTION_SEND_BYTES_PER_TICK.get();
+        }
+
+        /** 生成任务上限下限 1：0 会让 drainGen 每轮一个任务都不消费。配置系统无范围校验，就地钳制。 */
+        private static int resolveMaxGenTasksPerTick(int raw) {
+                return Math.max(1, raw);
         }
 
         private static int resolveLightThreads(int raw) {

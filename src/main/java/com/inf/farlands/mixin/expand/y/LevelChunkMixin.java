@@ -98,16 +98,15 @@ public abstract class LevelChunkMixin {
         WindowedChunk wc = (WindowedChunk) this;
         Map<Integer, LevelChunkSection> all = wc.windowedAllSections();
 
-        LevelChunkSection[] window = ca.getSections();
-        int windowMinY = wc.getWindowMinY();
-        for (int i = 0; i < window.length; i++) {
-            LevelChunkSection s = window[i];
-            if (s == null) {
-                s = new LevelChunkSection(wc.containerFactory());
-                window[i] = s;
-                all.put(windowMinY + i, s);
-            }
+        int sectionCount = buffer.readVarInt();
+        for (int i = 0; i < sectionCount; i++) {
+            int sectionY = buffer.readVarInt();
+            // 不可变切换：新建 section 整体替换。PalettedContainer.read 的 createOrReuseData 会复用
+            // 现有 Data 原地改 palette，与渲染编译线程并发读会读到 palette 中间状态。
+            LevelChunkSection s = new LevelChunkSection(wc.containerFactory());
             s.read(buffer);
+            all.put(sectionY, s);
+            ca.getSection(ca.getSectionIndexFromSectionY(sectionY)); // 数组同步：get 内部执行 arr[idx]=s
         }
 
         heightmaps.forEach(ca::setHeightmap);

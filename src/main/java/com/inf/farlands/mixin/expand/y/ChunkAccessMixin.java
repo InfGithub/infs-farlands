@@ -1,6 +1,6 @@
 package com.inf.farlands.mixin.expand.y;
 
-// import com.inf.farlands.CarvingMaskStorage;
+import com.inf.farlands.terrain.CarvingMaskStorage;
 import com.inf.farlands.util.window.EntitySectionWindow;
 import com.inf.farlands.util.window.WindowedChunk;
 
@@ -29,6 +29,7 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeResolver;
 import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.CarvingMask;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainerFactory;
@@ -49,9 +50,8 @@ import net.minecraft.world.level.chunk.ProtoChunk;
 
 import org.slf4j.Logger;
 
-// public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStorage {
 @Mixin(ChunkAccess.class)
-public abstract class ChunkAccessMixin implements WindowedChunk {
+public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStorage {
 
     @Unique
     private final Map<Integer, LevelChunkSection> allSections = new ConcurrentHashMap<>();
@@ -82,25 +82,30 @@ public abstract class ChunkAccessMixin implements WindowedChunk {
     @Unique
     private PalettedContainerFactory containerFactory;
 
-    // @Unique
-    // private final Map<GenerationStep.Carving, CarvingMask> carvingMasks = new
-    // EnumMap<>(GenerationStep.Carving.class);
+    /**
+     * carving mask 载体。26.1.2 只有单个 mask，没有 GenerationStep.Carving 分组。
+     * 不用字段初始化器，懒建在 getOrCreateCarvingMask 里，避免交接文档 §10.1 那个静默丢初始化器的坑。
+     */
+    @Unique
+    private CarvingMask farlandsCarvingMask;
 
-    // @Override
-    // public CarvingMask getCarvingMask(GenerationStep.Carving step) {
-    // return this.carvingMasks.get(step);
-    // }
+    @Override
+    public CarvingMask getCarvingMask() {
+        return this.farlandsCarvingMask;
+    }
 
-    // @Override
-    // public CarvingMask getOrCreateCarvingMask(GenerationStep.Carving step) {
-    // return this.carvingMasks.computeIfAbsent(step,
-    // s -> new CarvingMask(this.getHeight(), this.getMinY()));
-    // }
+    @Override
+    public CarvingMask getOrCreateCarvingMask() {
+        if (this.farlandsCarvingMask == null) {
+            this.farlandsCarvingMask = new CarvingMask(this.getHeight(), this.getMinY());
+        }
+        return this.farlandsCarvingMask;
+    }
 
-    // @Override
-    // public void setCarvingMask(GenerationStep.Carving step, CarvingMask mask) {
-    // this.carvingMasks.put(step, mask);
-    // }
+    @Override
+    public void setCarvingMask(CarvingMask mask) {
+        this.farlandsCarvingMask = mask;
+    }
 
     @Shadow
     protected LevelHeightAccessor levelHeightAccessor;

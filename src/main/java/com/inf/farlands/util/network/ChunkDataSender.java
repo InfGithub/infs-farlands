@@ -11,8 +11,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.network.expand.y.ChunkDataPacket;
+import com.inf.farlands.network.expand.y.FarLandsLightUpdatePacket;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.TerrainHooks;
+import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
+import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import io.netty.buffer.Unpooled;
@@ -63,6 +66,9 @@ public final class ChunkDataSender {
     private static final class PlayerWindowState {
         int centerY;
         ResourceKey<Level> dimension;
+        /** 上次 XZ chunk 坐标，P2 动态优先级触发检测用。 */
+        int lastChunkX = Integer.MIN_VALUE;
+        int lastChunkZ = Integer.MIN_VALUE;
 
         PlayerWindowState(int centerY, ResourceKey<Level> dimension) {
             this.centerY = centerY;
@@ -82,11 +88,22 @@ public final class ChunkDataSender {
         PENDING_QUEUES.remove(id);
     }
 
+    /** 本 tick 是否有玩家跨 chunk 移动，驱动地形与光照队列按当前距离重排。 */
+    private static volatile boolean playersMoved;
+
+    /** 取走并清除玩家移动标志。 */
+    public static boolean consumePlayersMoved() {
+        boolean moved = playersMoved;
+        playersMoved = false;
+        return moved;
+    }
+
     /** 服务端每 tick 入口：窗口差量 + 限量发包。
      * 返回 true 表示任一玩家窗口发生变化，调用方 FarlandsTick 据此驱动 fsa 清理判定。 */
     public static boolean tick(MinecraftServer server) {
         List<ServerPlayer> players = server.getPlayerList().getPlayers();
         boolean windowChanged = false;
+        playersMoved = false;
         for (ServerPlayer player : players) {
             if (updatePlayerWindow(player)) {
                 windowChanged = true;
@@ -127,6 +144,13 @@ public final class ChunkDataSender {
             }
             return true;
         }
+        // P2 动态优先级：任一玩家跨 chunk 移动时，地形与光照队列按当前距离重排。
+        ChunkPos pc = player.chunkPosition();
+        if (state.lastChunkX != pc.x() || state.lastChunkZ != pc.z()) {
+            state.lastChunkX = pc.x();
+            state.lastChunkZ = pc.z();
+            playersMoved = true;
+        }
         if (state.centerY == centerY) {
             return false;
         }
@@ -162,7 +186,12 @@ public final class ChunkDataSender {
                     .add(s);
             ChunkAccess ca = level.getChunk(cp.x(), cp.z(), ChunkStatus.FULL, false);
             if (ca instanceof LevelChunk lc) {
-                SectionLifecycle.loadSection(lc, s, () -> TerrainHooks.enqueueGen(lc));
+                // fsa 读回优先：磁盘有数据则恢复数据、光照与 stage 并补发，不重生成。读回完成后
+                // 再补填 biome 并入生成队列，GenQueue.enqueue 的 isOrAfter 会跳过已读回的 section。
+                SectionLifecycle.loadSection(lc, s, () -> {
+                    BiomeFiller.fillSectionBiomes(level, lc, s);
+                    TerrainHooks.enqueueGen(lc, s);
+                });
             }
         });
     }
@@ -218,12 +247,21 @@ public final class ChunkDataSender {
             if (!(chunk instanceof LevelChunk lc)) {
                 continue;
             }
+            if (GenQueue.isChunkBusy(lc)) {
+                // 生成或光照在途：整块留队列，不读半成品 section。genPool 正在写 section 时
+                // 序列化会撞 vanilla 的 PalettedContainer 多线程检测，直接 CTD。
+                continue;
+            }
             IntIterator it = e.getValue().iterator();
             while (it.hasNext()) {
                 int sy = it.nextInt();
                 LevelChunkSection section = ((WindowedChunk) lc).windowedAllSections().get(sy);
                 if (section == null || section.hasOnlyAir()) {
                     it.remove(); // 空 section 无需发送
+                    continue;
+                }
+                if (GenQueue.isLightInFlight(lc) && ((WindowedChunk) lc).isSectionDirty(sy)) {
+                    // 生成 fill 的 section 光照播种未完成，留队列等光照。读回的 section 未脏，放行发送。
                     continue;
                 }
                 FriendlyByteBuf tmp = new FriendlyByteBuf(Unpooled.buffer());
@@ -259,5 +297,40 @@ public final class ChunkDataSender {
         long dx = (long) ChunkPos.getX(chunkKey) - playerChunk.x();
         long dz = (long) ChunkPos.getZ(chunkKey) - playerChunk.z();
         return dx * dx + dz * dz;
+    }
+
+    /**
+     * 播种完成后主动广播该 chunk 全部光照，含空 section 的 15。
+     *
+     * <p>增量包链依赖 chunk 达 ENTITY_TICKING，而空壳先发加光照后补的管线里播种时往往未达，
+     * 客户端会保持邻居传播写入的渐黑。本方法绕开该依赖，播种完成即对 tracking 玩家发全窗口光照。
+     */
+    public static void broadcastChunkLight(ServerLevel level, LevelChunk chunk) {
+        ChunkPos cp = chunk.getPos();
+        List<ServerPlayer> players = new ArrayList<>();
+        for (ServerPlayer p : level.players()) {
+            if (p.getChunkTrackingView().contains(cp)) {
+                players.add(p);
+            }
+        }
+        if (players.isEmpty()) {
+            return;
+        }
+        LevelLightEngine le = level.getChunkSource().getLightEngine();
+        List<FarLandsLightUpdatePacket.SectionLight> sky = new ArrayList<>();
+        List<FarLandsLightUpdatePacket.SectionLight> block = new ArrayList<>();
+        for (Integer sy : ((WindowedChunk) chunk).windowedAllSections().keySet()) {
+            SectionPos spos = SectionPos.of(cp, sy);
+            sky.add(new FarLandsLightUpdatePacket.SectionLight(sy,
+                    FarLandsLightUpdatePacket.encodeSectionLight(
+                            le.getLayerListener(LightLayer.SKY).getDataLayerData(spos))));
+            block.add(new FarLandsLightUpdatePacket.SectionLight(sy,
+                    FarLandsLightUpdatePacket.encodeSectionLight(
+                            le.getLayerListener(LightLayer.BLOCK).getDataLayerData(spos))));
+        }
+        FarLandsLightUpdatePacket pkt = new FarLandsLightUpdatePacket(level.dimension(), cp.x(), cp.z(), sky, block);
+        for (ServerPlayer p : players) {
+            p.connection.send(new ClientboundCustomPayloadPacket(pkt));
+        }
     }
 }

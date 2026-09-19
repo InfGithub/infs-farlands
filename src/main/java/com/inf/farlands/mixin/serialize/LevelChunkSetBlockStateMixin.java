@@ -21,8 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * 26.1.2 的签名是 setBlockState(BlockPos, BlockState, int flags)，1.21.1 是
  * setBlockState(BlockPos, BlockState, boolean isMoving)，已 javap 核实。
  *
- * 另一处标脏点是 terrain 的 fill，旧 GenTask 逐段 fill 后标脏。terrain 未移植，因此当前
- * 只有本 mixin 一个标脏点。
+ * 另一处标脏点是 terrain 的 fill，GenTask 逐段 fill 与 surface、carvers 升段后标脏。
  */
 @Mixin(LevelChunk.class)
 public abstract class LevelChunkSetBlockStateMixin {

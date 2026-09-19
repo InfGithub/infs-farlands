@@ -64,10 +64,9 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
  * Long2ObjectLinkedOpenHashMap 装 ChunkHolder，语义等价于旧的 getChunks，即全部可见
  * ChunkHolder。ChunkHolder.getLatestChunk 声明在父类 GenerationChunkHolder 上，
  * 26.1.2 仍在。
- * stage 由 SectionStage 承载，取值 0 UNPROCESSED、1 NOISE、2 LIGHTED。旧仓库是
- * NeoForge attachment，且与 terrain 共用。
- * terrain 未移植，GenQueue.isChunkBusy 与 GenQueue.enqueueChunk 两处走 TerrainHooks
- * 空实现。
+ * stage 由 SectionStage 承载，取值 0 UNPROCESSED、1 BIOMES、2 NOISE、3 SURFACE、4 CARVERS、
+ * 5 LIGHTED。旧仓库是 NeoForge attachment，且与 terrain 共用。
+ * terrain 侧调用收口在 TerrainHooks，即 GenQueue.isChunkBusy 与 GenQueue.enqueueChunk。
  * 条目的 block_states 与 biomes codec 从 chunk 的 PalettedContainerFactory 取。
  * ChunkPos.toLong 改名 pack，cp.x 与 cp.z 改成 cp.x() 与 cp.z()。
  * chunk.getSectionIndexFromSectionY 来自 LevelHeightAccessor 而非 WindowedChunk，
@@ -266,8 +265,8 @@ public final class SectionLifecycle {
 
     /**
      * 光照完成后的补触发，把该 chunk 的脏 section 入队 PERSIST。此时 fill 与光照都已完成，
-     * 数据完整。调用点保证不 busy，因此无条件入队，幂等。terrain 未移植期间无调用方，
-     * 旧调用点是 GenQueue.triggerLight 的 lightChunk whenComplete。
+     * 数据完整。调用点保证不 busy，因此无条件入队，幂等。调用点是 GenQueue.triggerLight 的
+     * lightChunk whenComplete。
      */
     public static void persistChunkDirty(LevelChunk lc) {
         enqueueDirty(lc);
@@ -495,10 +494,9 @@ public final class SectionLifecycle {
     /**
      * chunk 加载后读回窗口内的 section，主线程执行，全部完成后跑 onDone，随后可入生成队列。
      *
-     * terrain 未移植期间无调用方。旧调用点是 terrain 的 chunk 短路链，即
-     * GenerationChunkHolderMixin 的 existence flow：建空壳，后台填 biome，回主线程调
-     * loadChunkSections，完成后 enqueueChunk。本 port 的单 section 读回走 loadSection，
-     * 由窗口滑入触发，整窗读回保留实现，等 terrain 接线。
+     * 调用点是 terrain 的 chunk 短路链，即 GenerationChunkHolderMixin 的 existence flow：
+     * 建空壳，后台填 biome，回主线程调 loadChunkSections，完成后 enqueueChunk。单 section 读回
+     * 走 loadSection，由窗口滑入触发。
      */
     public static void loadChunkSections(LevelChunk lc, Runnable onDone) {
         ServerLevel level = (ServerLevel) lc.getLevel();
