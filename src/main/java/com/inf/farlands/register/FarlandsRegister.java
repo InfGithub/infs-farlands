@@ -1,5 +1,7 @@
 package com.inf.farlands.register;
 
+import com.inf.farlands.command.FarlandsCommandRegistry;
+import com.inf.farlands.register.command.FarlandsTickCommand;
 import com.inf.farlands.register.packet.*;
 
 public class FarlandsRegister {
@@ -13,5 +15,7 @@ public class FarlandsRegister {
 
     public static void register() {
         ClampTogglePacketRegister.registerHandler();
+        // 命令监听器只在此登记一次；Commands 每次重建（含数据包 reload）时由 CommandsMixin 统一 fire。
+        FarlandsCommandRegistry.register(FarlandsTickCommand::register);
     }
 }

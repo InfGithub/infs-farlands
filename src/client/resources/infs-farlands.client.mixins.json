@@ -18,6 +18,7 @@
     "fix.xz.WeatherEffectRendererMixin",
     "fix.xyz.SectionRenderDispatcher$RenderSectionMixin",
     "network.ClientboundCustomPayloadPacketMixin",
+    "command.ClientPacketListenerMixin",
     "light.ClientChunkCacheMixin",
     "render.ViewAreaMixin",
     "render.LevelRendererMixin",
