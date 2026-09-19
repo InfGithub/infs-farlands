@@ -30,7 +30,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * 源集里不存在。这里遍历 windowedAllSections 而不是窗口数组，视图外的段也能出集合。
  */
 @Mixin(LevelChunk.class)
-public class LevelChunkEmptinessNotifyMixin {
+public class LevelChunkMixin {
 
     @Inject(method = "replaceWithPacketData(Lnet/minecraft/network/FriendlyByteBuf;Ljava/util/Map;Ljava/util/function/Consumer;)V", at = @At("RETURN"))
     private void farlands$notifyEmptiness(FriendlyByteBuf buffer, Map<?, ?> heightmaps,

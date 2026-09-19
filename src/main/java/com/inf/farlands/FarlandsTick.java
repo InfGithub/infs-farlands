@@ -23,7 +23,7 @@ public class FarlandsTick {
 
     private static void swapBlockLookup(int tickCount) {
         int size = BlockUtil.size();
-        InfSFarlands.LOGGER.info("Swapping BlockUtil.lookup, size: {}", size);
+        InfsFarlands.LOGGER.info("Swapping BlockUtil.lookup, size: {}", size);
         BlockUtil.swap();
     }
 
@@ -31,14 +31,14 @@ public class FarlandsTick {
         int beforeSize = SectionUtil.size();
         SectionUtil.trim(tickCount);
         int afterSize = SectionUtil.size();
-        InfSFarlands.LOGGER.info("Trimmed SectionUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
+        InfsFarlands.LOGGER.info("Trimmed SectionUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
     }
 
     private static void trimAquiferLookup(int tickCount) {
         int beforeSize = AquiferUtil.size();
         AquiferUtil.trim(tickCount);
         int afterSize = AquiferUtil.size();
-        InfSFarlands.LOGGER.info("Trimmed AquiferUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
+        InfsFarlands.LOGGER.info("Trimmed AquiferUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
     }
 
     /** 服务端 tick 末尾统一入口。 */

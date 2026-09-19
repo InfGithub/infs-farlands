@@ -1,7 +1,7 @@
 package com.inf.farlands.terrain.pipeline;
 
 import com.inf.farlands.FarlandsConstant;
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.carverFiller.CarverFiller;
@@ -86,7 +86,7 @@ public final class GenTask {
                 try {
                     GenQueue.filler(serverLevel).fill(serverLevel, chunk, seg[0], seg[1]);
                 } catch (Exception e) {
-                    InfSFarlands.LOGGER.error("GENTASK fill ex chunk={},{} {}",
+                    InfsFarlands.LOGGER.error("GENTASK fill ex chunk={},{} {}",
                             chunk.getPos().x(), chunk.getPos().z(), e.toString());
                     throw e;
                 }
@@ -102,7 +102,7 @@ public final class GenTask {
             try {
                 SurfaceFiller.applySurfaceIfNeeded(serverLevel, chunk);
             } catch (Exception e) {
-                InfSFarlands.LOGGER.error("GENTASK surface ex chunk={},{} {}",
+                InfsFarlands.LOGGER.error("GENTASK surface ex chunk={},{} {}",
                         chunk.getPos().x(), chunk.getPos().z(), e.toString());
             }
             // CARVERS 独立于 segments 与 surface，surface 后紧跟，只替换 fill 产物方块。
@@ -111,7 +111,7 @@ public final class GenTask {
             try {
                 carved = CarverFiller.applyCarversIfNeeded(serverLevel, chunk);
             } catch (Exception e) {
-                InfSFarlands.LOGGER.error("GENTASK carvers ex chunk={},{} {}",
+                InfsFarlands.LOGGER.error("GENTASK carvers ex chunk={},{} {}",
                         chunk.getPos().x(), chunk.getPos().z(), e.toString());
             }
             // 光照触发条件是 carvers 完成，carvers 是光照前最后一个阶段。

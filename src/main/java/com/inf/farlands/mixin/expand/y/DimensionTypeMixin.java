@@ -27,7 +27,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * 取 MIN_Y = -MAX_BLOCK、MAX_Y = MAX_BLOCK - 1：两端差 8 格于满量程，原因是 NoiseSettings.guardY
  * 用 MAX_Y + 1 当上界，MAX_Y 取到 Integer.MAX_VALUE 会让它溢出成负数，原版维度当场被拒。
  * MAX_Y 侧另外还受 DensityFunctions 与 NoiseRouterData 里 MIN_Y*2 / MAX_Y*2 的 int 参数限制，
- * 那几处已由 DensityFunctionsLongRangeMixin / NoiseRouterDataOverflowMixin 改成 long 并饱和。
+ * 那几处已由 DensityFunctions$YClampedGradientMixin / DensityFunctions$FindTopSurfaceMixin /
+ * NoiseRouterDataMixin 改成 long 并饱和。
  */
 @Mixin(DimensionType.class)
 public class DimensionTypeMixin {

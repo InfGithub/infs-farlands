@@ -16,7 +16,8 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * 地表阶段的写方块改为直写 section，绕开 ChunkAccess.setBlockState 的副作用。
  *
  * 背景：surface 与 fill 都跑在 genPool 线程上，但 fill 走 section.setBlockState(..., false)
- * 直写，surface 走 vanilla SurfaceSystem 的 BlockColumn，最终落到 ChunkAccess.setBlockState。
+ * 直写，surface 走 vanilla SurfaceSystem 的 BlockColumn，最终落到
+ * ChunkAccess.setBlockState。
  * 后者有 vanilla 该有的副作用链：LevelChunk.setBlockState -> onPlace -> scheduleTick。于是
  * genPool 线程会去写 LevelChunkTicks 的 PriorityQueue，而服务端线程同时在 LevelTicks.tick
  * 里 poll 同一个队列。PriorityQueue 非线程安全，两线程交错使堆的 size 与数组失去自洽，
@@ -32,7 +33,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * pos.getY() 取该值，索引语义与原版一致。
  */
 @Mixin(targets = "net.minecraft.world.level.levelgen.SurfaceSystem$1")
-public class SurfaceSystemBlockColumnMixin {
+public class SurfaceSystem$1Mixin {
 
     @Redirect(method = "setBlock", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/ChunkAccess;setBlockState(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Lnet/minecraft/world/level/block/state/BlockState;"))
     private BlockState farlands$directSectionWrite(ChunkAccess chunk, BlockPos pos, BlockState state) {

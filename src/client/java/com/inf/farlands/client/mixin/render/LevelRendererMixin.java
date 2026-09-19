@@ -26,7 +26,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * 窗口必须每帧拉，因为 chunk 会在相机不动时陆续加载进来，而 vanilla 只在相机跨 section 时才会
  * 扫一遍，之后加载的 chunk 永远没被扫到。
  *
- * 不调 vanilla 的 repositionCamera：它结尾会 getSectionOcclusionGraph().invalidate()，每帧调等于
+ * 不调 vanilla 的 repositionCamera：它结尾会
+ * getSectionOcclusionGraph().invalidate()，每帧调等于
  * 每帧整图重建，还附赠每帧一遍全部渲染槽位的比较与重指。渲染网格的竖直环绕改由 vanilla 自己的
  * 跨段守卫驱动，那个守卫比较相机 section 的 X/Y/Z 三者，且 cullTerrain 在 compileSections 之前，
  * 时序够用。
@@ -35,7 +36,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * 窗口未变时早退，因此每帧调用在相机不跨 section 时零开销。
  */
 @Mixin(LevelRenderer.class)
-public class FarlandsLevelRendererUpdateMixin {
+public class LevelRendererMixin {
 
     @Shadow
     private ViewArea viewArea;

@@ -2,7 +2,7 @@ package com.inf.farlands.terrain.pipeline;
 
 import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.FarlandsConstant;
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.light.FarLandsLightEngine;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
@@ -62,7 +62,7 @@ public final class GenQueue {
      */
     public static final TicketType GEN_WORK_TICKET = Registry.register(
             BuiltInRegistries.TICKET_TYPE,
-            InfSFarlands.id("gen_work"),
+            InfsFarlands.id("gen_work"),
             new TicketType(TicketType.NO_TIMEOUT, TicketType.FLAG_LOADING));
 
     /** 触发本类 clinit，即上面的注册。仅供 BuiltInRegistriesMixin 在冻结前调用。 */
@@ -420,7 +420,7 @@ public final class GenQueue {
                     SectionIO.runOnMainThread(
                             () -> ChunkDataSender.broadcastChunkLight(serverLevel, chunk), serverLevel);
                 } else {
-                    InfSFarlands.LOGGER.error("farlands: light failed chunk={}", chunk.getPos(), t);
+                    InfsFarlands.LOGGER.error("farlands: light failed chunk={}", chunk.getPos(), t);
                 }
                 LIGHT_IN_FLIGHT.remove(key);
                 if (SectionStage.hasAnyGen(chunk)) {

@@ -156,7 +156,7 @@ public final class SectionStorage implements AutoCloseable {
     public PendingWrite prepareWrite(int idx, byte[] entry) {
         int need = (entry.length + SECTOR_BYTES - 1) / SECTOR_BYTES;
         if (need > MAX_SECTORS_PER_SECTION) {
-            com.inf.farlands.InfSFarlands.LOGGER.error("fsa section too large: {} bytes at idx {}", entry.length, idx);
+            com.inf.farlands.InfsFarlands.LOGGER.error("fsa section too large: {} bytes at idx {}", entry.length, idx);
             return null;
         }
         int alloc = allocate(need);

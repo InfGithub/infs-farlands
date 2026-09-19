@@ -27,7 +27,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * 调用方对返回值不感兴趣，原字节码在调用后立即 pop，因此返回 null 安全。
  */
 @Mixin(net.minecraft.world.level.levelgen.carver.WorldCarver.class)
-public class WorldCarverCarveBlockMixin {
+public class WorldCarverMixin {
 
     @Redirect(method = "carveBlock", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/ChunkAccess;setBlockState(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Lnet/minecraft/world/level/block/state/BlockState;"))
     private BlockState farlands$directSectionWrite(ChunkAccess chunk, BlockPos pos, BlockState state) {

@@ -24,7 +24,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * 另一处标脏点是 terrain 的 fill，GenTask 逐段 fill 与 surface、carvers 升段后标脏。
  */
 @Mixin(LevelChunk.class)
-public abstract class LevelChunkSetBlockStateMixin {
+public abstract class LevelChunkMixin {
 
     @Inject(method = "setBlockState(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Lnet/minecraft/world/level/block/state/BlockState;", at = @At("RETURN"))
     private void farlands$markSectionDirty(BlockPos pos, BlockState state, int flags,

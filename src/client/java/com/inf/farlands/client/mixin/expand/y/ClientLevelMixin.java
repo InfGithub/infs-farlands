@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * setServerVerifiedBlockState 走的是 super.setBlock，绕过本注入，服务端包照常生效。
  */
 @Mixin(ClientLevel.class)
-public class ClientLevelSetBlockMixin {
+public class ClientLevelMixin {
 
     @SuppressWarnings("resource")
     @Inject(method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z", at = @At("HEAD"), cancellable = true)

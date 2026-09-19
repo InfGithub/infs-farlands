@@ -8,7 +8,7 @@ import com.inf.farlands.register.FarlandsRegister;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class InfSFarlands implements ModInitializer {
+public class InfsFarlands implements ModInitializer {
 	public static final String MOD_ID = "infs-farlands";
 
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);

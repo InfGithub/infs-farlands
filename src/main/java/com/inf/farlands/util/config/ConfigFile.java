@@ -26,7 +26,8 @@ import java.util.Map;
  * "note": { "<lang>": "<text>", ... }, // 多语言注释
  * "lastWriteBackTime": <unixSeconds>, // 最后回写时间戳
  * "settings": {
- * "<entryName>": { "note": { ... }, "value": <literal>, "default": <literal>, "enums": [ ... ] },
+ * "<entryName>": { "note": { ... }, "value": <literal>, "default": <literal>,
+ * "enums": [ ... ] },
  * ...
  * }
  * }
@@ -34,7 +35,7 @@ import java.util.Map;
  *
  * <p>"enums" 只出现在枚举条目上，列出该枚举当前的全部取值，供手改配置时对照。
  */
-public final class FarlandsConfigFile {
+public final class ConfigFile {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting()
             .disableHtmlEscaping()
@@ -46,7 +47,7 @@ public final class FarlandsConfigFile {
     private static final String DEFAULT = "default";
     private static final String ENUMS = "enums";
 
-    private FarlandsConfigFile() {
+    private ConfigFile() {
     }
 
     /**

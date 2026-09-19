@@ -1,6 +1,6 @@
 package com.inf.farlands.mixin.serialize;
 
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.terrain.pipeline.GenQueue;
@@ -39,7 +39,7 @@ public abstract class MinecraftServerMixin {
             GenQueue.awaitIdle(5000);
             SectionLifecycle.shutdownSyncFlush(server);
         } catch (Exception e) {
-            InfSFarlands.LOGGER.error("farlands: fsa shutdown flush failed", e);
+            InfsFarlands.LOGGER.error("farlands: fsa shutdown flush failed", e);
         }
     }
 }

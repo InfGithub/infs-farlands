@@ -3,7 +3,7 @@ package com.inf.farlands.client;
 import net.fabricmc.api.ClientModInitializer;
 import com.inf.farlands.client.register.FarlandsRegister;
 
-public class InfSFarlandsClient implements ClientModInitializer {
+public class InfsFarlandsClient implements ClientModInitializer {
 
 	static {
 		FarlandsRegister.registerStatic();

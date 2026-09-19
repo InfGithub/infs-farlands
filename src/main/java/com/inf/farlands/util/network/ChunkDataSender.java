@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.network.expand.y.ChunkDataPacket;
-import com.inf.farlands.network.expand.y.FarLandsLightUpdatePacket;
+import com.inf.farlands.network.expand.y.LightUpdatePacket;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.TerrainHooks;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
@@ -98,8 +98,10 @@ public final class ChunkDataSender {
         return moved;
     }
 
-    /** 服务端每 tick 入口：窗口差量 + 限量发包。
-     * 返回 true 表示任一玩家窗口发生变化，调用方 FarlandsTick 据此驱动 fsa 清理判定。 */
+    /**
+     * 服务端每 tick 入口：窗口差量 + 限量发包。
+     * 返回 true 表示任一玩家窗口发生变化，调用方 FarlandsTick 据此驱动 fsa 清理判定。
+     */
     public static boolean tick(MinecraftServer server) {
         List<ServerPlayer> players = server.getPlayerList().getPlayers();
         boolean windowChanged = false;
@@ -171,7 +173,8 @@ public final class ChunkDataSender {
     /**
      * 该 sectionY 入队到玩家 tracking view 内每个 chunk，并对已加载的 chunk 触发 fsa 读回。
      *
-     * <p>fsa 读回要在磁盘有数据时恢复 section、光照与 stage，并补发 section 包。它与 §5 发送
+     * <p>
+     * fsa 读回要在磁盘有数据时恢复 section、光照与 stage，并补发 section 包。它与 §5 发送
      * 复用同一次窗口差量检测。旧仓库这两件事同在 {@code InfFarlands.updatePlayerWindow} 的
      * {@code enqueueGenForSection} 里，即 §5 入队加 {@code SectionLifecycle.loadSection}，
      * 本 port 在此合并。只对 ChunkStatus.FULL 的 chunk 读回。
@@ -302,7 +305,8 @@ public final class ChunkDataSender {
     /**
      * 播种完成后主动广播该 chunk 全部光照，含空 section 的 15。
      *
-     * <p>增量包链依赖 chunk 达 ENTITY_TICKING，而空壳先发加光照后补的管线里播种时往往未达，
+     * <p>
+     * 增量包链依赖 chunk 达 ENTITY_TICKING，而空壳先发加光照后补的管线里播种时往往未达，
      * 客户端会保持邻居传播写入的渐黑。本方法绕开该依赖，播种完成即对 tracking 玩家发全窗口光照。
      */
     public static void broadcastChunkLight(ServerLevel level, LevelChunk chunk) {
@@ -317,18 +321,18 @@ public final class ChunkDataSender {
             return;
         }
         LevelLightEngine le = level.getChunkSource().getLightEngine();
-        List<FarLandsLightUpdatePacket.SectionLight> sky = new ArrayList<>();
-        List<FarLandsLightUpdatePacket.SectionLight> block = new ArrayList<>();
+        List<LightUpdatePacket.SectionLight> sky = new ArrayList<>();
+        List<LightUpdatePacket.SectionLight> block = new ArrayList<>();
         for (Integer sy : ((WindowedChunk) chunk).windowedAllSections().keySet()) {
             SectionPos spos = SectionPos.of(cp, sy);
-            sky.add(new FarLandsLightUpdatePacket.SectionLight(sy,
-                    FarLandsLightUpdatePacket.encodeSectionLight(
+            sky.add(new LightUpdatePacket.SectionLight(sy,
+                    LightUpdatePacket.encodeSectionLight(
                             le.getLayerListener(LightLayer.SKY).getDataLayerData(spos))));
-            block.add(new FarLandsLightUpdatePacket.SectionLight(sy,
-                    FarLandsLightUpdatePacket.encodeSectionLight(
+            block.add(new LightUpdatePacket.SectionLight(sy,
+                    LightUpdatePacket.encodeSectionLight(
                             le.getLayerListener(LightLayer.BLOCK).getDataLayerData(spos))));
         }
-        FarLandsLightUpdatePacket pkt = new FarLandsLightUpdatePacket(level.dimension(), cp.x(), cp.z(), sky, block);
+        LightUpdatePacket pkt = new LightUpdatePacket(level.dimension(), cp.x(), cp.z(), sky, block);
         for (ServerPlayer p : players) {
             p.connection.send(new ClientboundCustomPayloadPacket(pkt));
         }

@@ -1,6 +1,6 @@
 package com.inf.farlands.mixin.terrain.pipeline;
 
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
@@ -69,11 +69,14 @@ public abstract class GenerationChunkHolderMixin {
             M_SCHEDULE_CHUNK_LOAD.setAccessible(true);
             F_LEVEL = ChunkMap.class.getDeclaredField("level");
             F_LEVEL.setAccessible(true);
-            M_GET_OR_CREATE_FUTURE = GenerationChunkHolder.class.getDeclaredMethod("getOrCreateFuture", ChunkStatus.class);
+            M_GET_OR_CREATE_FUTURE = GenerationChunkHolder.class.getDeclaredMethod("getOrCreateFuture",
+                    ChunkStatus.class);
             M_GET_OR_CREATE_FUTURE.setAccessible(true);
-            M_COMPLETE_FUTURE = GenerationChunkHolder.class.getDeclaredMethod("completeFuture", ChunkStatus.class, ChunkAccess.class);
+            M_COMPLETE_FUTURE = GenerationChunkHolder.class.getDeclaredMethod("completeFuture", ChunkStatus.class,
+                    ChunkAccess.class);
             M_COMPLETE_FUTURE.setAccessible(true);
-            M_IS_STATUS_DISALLOWED = GenerationChunkHolder.class.getDeclaredMethod("isStatusDisallowed", ChunkStatus.class);
+            M_IS_STATUS_DISALLOWED = GenerationChunkHolder.class.getDeclaredMethod("isStatusDisallowed",
+                    ChunkStatus.class);
             M_IS_STATUS_DISALLOWED.setAccessible(true);
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -85,6 +88,7 @@ public abstract class GenerationChunkHolderMixin {
 
     /**
      * 延迟创建标志，不用字段初始化器。交接文档 §10.1：本类没有显式构造器，
+     * 
      * @Unique 实例字段的初始化器可能被静默丢弃，读到时会是 null。
      */
     @Unique
@@ -99,7 +103,8 @@ public abstract class GenerationChunkHolderMixin {
 
     /** 每 holder 短路只跑一次。completeFuture 对已成功完成的 future 再 complete 会抛。 */
     @Overwrite
-    public CompletableFuture<ChunkResult<ChunkAccess>> scheduleChunkGenerationTask(ChunkStatus targetStatus, ChunkMap chunkMap) {
+    public CompletableFuture<ChunkResult<ChunkAccess>> scheduleChunkGenerationTask(ChunkStatus targetStatus,
+            ChunkMap chunkMap) {
         if (farlandsIsStatusDisallowed(targetStatus)) {
             return GenerationChunkHolder.UNLOADED_CHUNK_FUTURE;
         }
@@ -129,7 +134,8 @@ public abstract class GenerationChunkHolderMixin {
             if (!isNew) {
                 levelchunk = ((ImposterProtoChunk) proto).getWrapped();
             } else {
-                levelchunk = new LevelChunk(level, (ProtoChunk) proto, p -> { });
+                levelchunk = new LevelChunk(level, (ProtoChunk) proto, p -> {
+                });
             }
             levelchunk.setFullStatus(this::getFullStatus);
             levelchunk.runPostLoad();
@@ -156,7 +162,7 @@ public abstract class GenerationChunkHolderMixin {
                                 () -> GenQueue.enqueueChunk(levelchunk));
                     }, level));
         } catch (Exception e) {
-            InfSFarlands.LOGGER.error("farlands: existence flow failed chunk={}", proto.getPos(), e);
+            InfsFarlands.LOGGER.error("farlands: existence flow failed chunk={}", proto.getPos(), e);
             throw new RuntimeException(e);
         }
     }

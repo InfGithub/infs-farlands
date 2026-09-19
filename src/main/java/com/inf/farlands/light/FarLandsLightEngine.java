@@ -1,7 +1,7 @@
 package com.inf.farlands.light;
 
 import com.inf.farlands.FarlandsConfig;
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.util.pos.IntSectionPos;
 import com.inf.farlands.util.window.WindowedChunk;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -504,7 +504,8 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
 
     /**
      * 本 tick 剩余的任务配额。真 tick 是唯一权威边界，由
-     * {@code FarlandsTick.atEnd(server, tickCount)} 经 {@link #grantTickBudget()} 发牌。
+     * {@code FarlandsTick.atEnd(server, tickCount)} 经 {@link #grantTickBudget()}
+     * 发牌。
      *
      * <p>
      * 无 tick 阶段（prepareLevels 建世界、saveEverything 保存）必须另有边界来源，否则光照
@@ -655,7 +656,7 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
                 }
             }
         } catch (Throwable t) {
-            InfSFarlands.LOGGER.error("Light task exception chunk={},{}", cx, cz, t);
+            InfsFarlands.LOGGER.error("Light task exception chunk={},{}", cx, cz, t);
         } finally {
             taskLock.unlock(cx, cz);
             tasks.onComplete.complete(null);

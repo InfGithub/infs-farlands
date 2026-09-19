@@ -2,7 +2,7 @@ package com.inf.farlands.network.expand.y;
 
 import java.util.List;
 
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
@@ -31,7 +31,7 @@ import net.minecraft.world.level.chunk.DataLayer;
  * ChunkHolder.sectionLightChanged @Inject RETURN，无范围检查。
  * 接收端：注册的客户端 handler，queueSectionData + setSectionDirty。
  */
-public record FarLandsLightUpdatePacket(
+public record LightUpdatePacket(
         ResourceKey<Level> dimension,
         int chunkX,
         int chunkZ,
@@ -41,14 +41,14 @@ public record FarLandsLightUpdatePacket(
     public record SectionLight(int sectionY, byte[] data) {
     }
 
-    public static final Type<FarLandsLightUpdatePacket> TYPE = new Type<>(
-            Identifier.fromNamespaceAndPath(InfSFarlands.MOD_ID, "light_update"));
+    public static final Type<LightUpdatePacket> TYPE = new Type<>(
+            Identifier.fromNamespaceAndPath(InfsFarlands.MOD_ID, "light_update"));
 
-    public static final StreamCodec<FriendlyByteBuf, FarLandsLightUpdatePacket> STREAM_CODEC = StreamCodec.of(
-            FarLandsLightUpdatePacket::writeTo,
-            FarLandsLightUpdatePacket::readFrom);
+    public static final StreamCodec<FriendlyByteBuf, LightUpdatePacket> STREAM_CODEC = StreamCodec.of(
+            LightUpdatePacket::writeTo,
+            LightUpdatePacket::readFrom);
 
-    public static void writeTo(FriendlyByteBuf buffer, FarLandsLightUpdatePacket pkt) {
+    public static void writeTo(FriendlyByteBuf buffer, LightUpdatePacket pkt) {
         buffer.writeResourceKey(pkt.dimension());
         buffer.writeInt(pkt.chunkX());
         buffer.writeInt(pkt.chunkZ());
@@ -67,13 +67,13 @@ public record FarLandsLightUpdatePacket(
         }
     }
 
-    public static FarLandsLightUpdatePacket readFrom(FriendlyByteBuf buffer) {
+    public static LightUpdatePacket readFrom(FriendlyByteBuf buffer) {
         ResourceKey<Level> dimension = buffer.readResourceKey(Registries.DIMENSION);
         int cx = buffer.readInt();
         int cz = buffer.readInt();
         List<SectionLight> sky = readLayer(buffer);
         List<SectionLight> block = readLayer(buffer);
-        return new FarLandsLightUpdatePacket(dimension, cx, cz, sky, block);
+        return new LightUpdatePacket(dimension, cx, cz, sky, block);
     }
 
     private static List<SectionLight> readLayer(FriendlyByteBuf buffer) {
@@ -101,7 +101,7 @@ public record FarLandsLightUpdatePacket(
     }
 
     @Override
-    public Type<FarLandsLightUpdatePacket> type() {
+    public Type<LightUpdatePacket> type() {
         return TYPE;
     }
 }

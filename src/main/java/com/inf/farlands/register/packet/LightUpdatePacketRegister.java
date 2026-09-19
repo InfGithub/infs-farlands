@@ -1,6 +1,6 @@
 package com.inf.farlands.register.packet;
 
-import com.inf.farlands.network.expand.y.FarLandsLightUpdatePacket;
+import com.inf.farlands.network.expand.y.LightUpdatePacket;
 import com.inf.farlands.util.network.Commonbounds;
 
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload.TypeAndCodec;
@@ -15,7 +15,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload.TypeAndC
 public class LightUpdatePacketRegister {
     public static void registerType() {
         Commonbounds.register(new TypeAndCodec<>(
-                FarLandsLightUpdatePacket.TYPE,
-                FarLandsLightUpdatePacket.STREAM_CODEC));
+                LightUpdatePacket.TYPE,
+                LightUpdatePacket.STREAM_CODEC));
     }
 }

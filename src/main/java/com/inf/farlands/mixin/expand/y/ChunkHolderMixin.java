@@ -1,7 +1,7 @@
 package com.inf.farlands.mixin.expand.y;
 
-import com.inf.farlands.network.expand.y.FarLandsLightUpdatePacket;
-import com.inf.farlands.network.expand.y.FarLandsSectionBlocksUpdatePacket;
+import com.inf.farlands.network.expand.y.LightUpdatePacket;
+import com.inf.farlands.network.expand.y.SectionBlocksUpdatePacket;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import java.util.ArrayList;
@@ -50,7 +50,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * [-5,21]，窗口段落在外面时既越界也发不出去。
  *
  * 两处都改成以绝对 sectionY 为键，广播时用绝对坐标，并走自定义包：
- * 光照用 FarLandsLightUpdatePacket，批量方块用 FarLandsSectionBlocksUpdatePacket。后者是因为
+ * 光照用 LightUpdatePacket，批量方块用 SectionBlocksUpdatePacket。后者是因为
  * vanilla 的 ClientboundSectionBlocksUpdatePacket 用 SectionPos.STREAM_CODEC
  * 位打包，超出打包
  * 位宽的 Y 会在客户端解出垃圾坐标，而 side-channel 是进程内的，跨进程不传递。
@@ -185,7 +185,7 @@ public abstract class ChunkHolderMixin {
                             SectionPos.sectionRelativeZ(packed));
                     i++;
                 }
-                FarLandsSectionBlocksUpdatePacket pkt = new FarLandsSectionBlocksUpdatePacket(
+                SectionBlocksUpdatePacket pkt = new SectionBlocksUpdatePacket(
                         level.dimension(), sectionPos, positions, states);
                 this.broadcast(players, new ClientboundCustomPayloadPacket(pkt));
                 pkt.runUpdates((p, st) -> this.broadcastBlockEntityIfNeeded(players, level, p, st));
@@ -196,26 +196,26 @@ public abstract class ChunkHolderMixin {
     }
 
     @Unique
-    private FarLandsLightUpdatePacket farlands$buildLightPacket(LevelChunk chunk) {
-        List<FarLandsLightUpdatePacket.SectionLight> sky = farlands$buildLightLayer(
+    private LightUpdatePacket farlands$buildLightPacket(LevelChunk chunk) {
+        List<LightUpdatePacket.SectionLight> sky = farlands$buildLightLayer(
                 chunk, LightLayer.SKY, this.farlands$affectedSkySections);
-        List<FarLandsLightUpdatePacket.SectionLight> block = farlands$buildLightLayer(
+        List<LightUpdatePacket.SectionLight> block = farlands$buildLightLayer(
                 chunk, LightLayer.BLOCK, this.farlands$affectedBlockSections);
-        return new FarLandsLightUpdatePacket(chunk.getLevel().dimension(),
+        return new LightUpdatePacket(chunk.getLevel().dimension(),
                 chunk.getPos().x(), chunk.getPos().z(), sky, block);
     }
 
     @Unique
-    private List<FarLandsLightUpdatePacket.SectionLight> farlands$buildLightLayer(LevelChunk chunk, LightLayer layer,
+    private List<LightUpdatePacket.SectionLight> farlands$buildLightLayer(LevelChunk chunk, LightLayer layer,
             IntSet affected) {
         List<Integer> sectionYs = new ArrayList<>(affected);
         Collections.sort(sectionYs);
-        List<FarLandsLightUpdatePacket.SectionLight> out = new ArrayList<>(sectionYs.size());
+        List<LightUpdatePacket.SectionLight> out = new ArrayList<>(sectionYs.size());
         for (int sy : sectionYs) {
             DataLayer dl = this.lightEngine.getLayerListener(layer)
                     .getDataLayerData(SectionPos.of(chunk.getPos(), sy));
-            out.add(new FarLandsLightUpdatePacket.SectionLight(sy,
-                    FarLandsLightUpdatePacket.encodeSectionLight(dl)));
+            out.add(new LightUpdatePacket.SectionLight(sy,
+                    LightUpdatePacket.encodeSectionLight(dl)));
         }
         return out;
     }

@@ -13,14 +13,14 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * NoiseRouterData.bootstrap 里 DimensionType.MIN_Y/MAX_Y 的读取点饱和。
  *
  * 三处读取都是 *2 之前的那次 getstatic：
- *   belowBottom = MIN_Y * 2、aboveTop = MAX_Y * 2
- *   veinMinY / veinMaxY 的兜底值 -MIN_Y * 2
+ * belowBottom = MIN_Y * 2、aboveTop = MAX_Y * 2
+ * veinMinY / veinMaxY 的兜底值 -MIN_Y * 2
  *
  * DimensionType 的竖直度量取满量程后这三个乘积都会回绕。把读取换成饱和值，随后那句 imul 2
  * 就落在 int 内。
  */
 @Mixin(NoiseRouterData.class)
-public class NoiseRouterDataOverflowMixin {
+public class NoiseRouterDataMixin {
 
     /** ±MAX_BLOCK / 2：乘 2 后仍落在 int 内的最大对称边界。 */
     @Unique

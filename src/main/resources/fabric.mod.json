@@ -16,8 +16,8 @@
   "icon": "assets/infs-farlands/icon.png",
   "environment": "*",
   "entrypoints": {
-    "main": ["com.inf.farlands.InfSFarlands"],
-    "client": ["com.inf.farlands.client.InfSFarlandsClient"]
+    "main": ["com.inf.farlands.InfsFarlands"],
+    "client": ["com.inf.farlands.client.InfsFarlandsClient"]
   },
   "mixins": [
     "infs-farlands.mixins.json",

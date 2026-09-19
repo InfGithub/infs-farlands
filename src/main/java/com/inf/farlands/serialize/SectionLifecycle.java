@@ -17,7 +17,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.inf.farlands.FarlandsConfig;
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.light.FarLandsLightEngine;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
@@ -64,7 +64,8 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
  * Long2ObjectLinkedOpenHashMap 装 ChunkHolder，语义等价于旧的 getChunks，即全部可见
  * ChunkHolder。ChunkHolder.getLatestChunk 声明在父类 GenerationChunkHolder 上，
  * 26.1.2 仍在。
- * stage 由 SectionStage 承载，取值 0 UNPROCESSED、1 BIOMES、2 NOISE、3 SURFACE、4 CARVERS、
+ * stage 由 SectionStage 承载，取值 0 UNPROCESSED、1 BIOMES、2 NOISE、3 SURFACE、4
+ * CARVERS、
  * 5 LIGHTED。旧仓库是 NeoForge attachment，且与 terrain 共用。
  * terrain 侧调用收口在 TerrainHooks，即 GenQueue.isChunkBusy 与 GenQueue.enqueueChunk。
  * 条目的 block_states 与 biomes codec 从 chunk 的 PalettedContainerFactory 取。
@@ -401,7 +402,7 @@ public final class SectionLifecycle {
             try {
                 st.doWrite(e.getValue());
             } catch (Exception ex) {
-                InfSFarlands.LOGGER.error("fsa shutdown write failed {}", path, ex);
+                InfsFarlands.LOGGER.error("fsa shutdown write failed {}", path, ex);
                 continue;
             }
             for (SectionStorage.PendingWrite pw : e.getValue()) {
@@ -464,7 +465,7 @@ public final class SectionLifecycle {
         } catch (Exception e) {
             // encode 失败就静默返回，数据不写盘也就是丢失，但 dirty 保留，之后重试
             if (ENCODE_FAIL_LOGGED.getAndIncrement() < 20) {
-                InfSFarlands.LOGGER.info("ENCODE-FAIL chunk={},{} sy={} err={}",
+                InfsFarlands.LOGGER.info("ENCODE-FAIL chunk={},{} sy={} err={}",
                         lc.getPos().x(), lc.getPos().z(), sy, e.toString());
             }
             return null;

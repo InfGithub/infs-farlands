@@ -1,6 +1,6 @@
 package com.inf.farlands.client.mixin.expand.y;
 
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.light.FarLandsLightEngine;
 import com.inf.farlands.light.FarLandsLightPacketData;
 import com.inf.farlands.util.maps.Common;
@@ -135,7 +135,8 @@ public abstract class ClientPacketListenerMixin {
     /**
      * FarLands 光照数据应用：chunk-with-light 包 RETURN 时把附加的光照载荷灌进客户端引擎。
      *
-     * <p>ClientboundLevelChunkWithLightPacketMixin 的 farlandsLightData 是 @Unique 私有字段，
+     * <p>
+     * ClientboundLevelChunkWithLightPacketMixin 的 farlandsLightData 是 @Unique 私有字段，
      * 且该 mixin 在 main 源集——客户端经反射读取（与 1.21.1 同方式，低频：每 chunk 一次）。
      */
     private static final java.lang.reflect.Field FARLANDS_LIGHT_FIELD;
@@ -161,7 +162,7 @@ public abstract class ClientPacketListenerMixin {
             }
         } catch (Exception e) {
             // 不静默吞错：catch ignored 会掩盖 farlandsLightData 应用失败
-            InfSFarlands.LOGGER.error("FLPKT apply EXCEPTION chunk={},{}", packet.getX(), packet.getZ(), e);
+            InfsFarlands.LOGGER.error("FLPKT apply EXCEPTION chunk={},{}", packet.getX(), packet.getZ(), e);
         }
         // §5 缓存补应用：chunk 加载完成（即 replaceWithPacketData 之后）→ 应用此前因
         // chunk 未加载而缓存的 §5 section 数据，防方块数据永久缺失——空缺/双端不同步。

@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.network.expand.y.ChunkDataPacket;
 
 import net.minecraft.resources.ResourceKey;
@@ -20,7 +20,7 @@ public class Common {
             return;
         }
         lastConflictInfo = now;
-        InfSFarlands.LOGGER.warn("Hash Conflicted! {} key=0x{} old={},{},{} new={},{},{}",
+        InfsFarlands.LOGGER.warn("Hash Conflicted! {} key=0x{} old={},{},{} new={},{},{}",
                 kind, Long.toHexString(key), ox, oy, oz, nx, ny, nz);
     }
 
@@ -46,7 +46,8 @@ public class Common {
      * §5 数据到达但 chunk 未加载 → 缓存，等 chunk 加载后补应用。直接丢弃会导致方块
      * 数据永久缺失（服务端已出队不重发）——表现为空缺/双端不同步。
      *
-     * <p>key 含维度：tp 跨维度后旧维度缓存条目不与同坐标新维度冲突。
+     * <p>
+     * key 含维度：tp 跨维度后旧维度缓存条目不与同坐标新维度冲突。
      */
     public static void cachePendingSectionData(ResourceKey<Level> dimension, int cx, int cz, int minY,
             ChunkDataPacket.SectionEntry entry) {

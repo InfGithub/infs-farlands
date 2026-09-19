@@ -5,10 +5,10 @@ import com.inf.farlands.register.packet.*;
 public class FarlandsRegister {
     public static void registerStatic() {
         ChunkDataPacketRegister.registerType();
-        LightUpdatePacketRegister.registerType();
-        SectionBlocksUpdatePacketRegister.registerType();
         ClampStatePacketRegister.registerType();
         ClampTogglePacketRegister.registerType();
+        LightUpdatePacketRegister.registerType();
+        SectionBlocksUpdatePacketRegister.registerType();
     }
 
     public static void register() {

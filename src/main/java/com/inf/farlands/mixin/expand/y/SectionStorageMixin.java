@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.Shadow;
  * unpackChunk 保留，维度范围内已持久化 POI 的磁盘恢复不受影响。
  */
 @Mixin(SectionStorage.class)
-public abstract class SectionStorageGetOrLoadMixin {
+public abstract class SectionStorageMixin {
 
     @Shadow
     protected abstract Optional<?> get(long sectionPos);

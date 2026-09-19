@@ -1,7 +1,7 @@
 package com.inf.farlands.serialize;
 
 import com.inf.farlands.FarlandsConfig;
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -168,7 +168,7 @@ public final class SectionIO {
             try {
                 storage.doWrite(batch);
             } catch (Exception e) {
-                InfSFarlands.LOGGER.error("fsa doWrite failed {}", path, e);
+                InfsFarlands.LOGGER.error("fsa doWrite failed {}", path, e);
                 return; // 失败：不回调，不 commit
             }
             runOnMainThread(() -> {
@@ -220,7 +220,7 @@ public final class SectionIO {
             try {
                 storage.writePages(pages);
             } catch (Exception e) {
-                InfSFarlands.LOGGER.error("fsa writePages failed {}", path, e);
+                InfsFarlands.LOGGER.error("fsa writePages failed {}", path, e);
             }
         });
     }
@@ -290,7 +290,7 @@ public final class SectionIO {
             try {
                 st.writePages(pages);
             } catch (Exception e) {
-                InfSFarlands.LOGGER.error("fsa flushAllSync failed {}", p, e);
+                InfsFarlands.LOGGER.error("fsa flushAllSync failed {}", p, e);
             }
         }
     }

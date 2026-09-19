@@ -1,6 +1,6 @@
 package com.inf.farlands.network.expand.y;
 
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 
 import java.util.List;
 
@@ -31,7 +31,7 @@ public record ChunkDataPacket(
     }
 
     public static final Type<ChunkDataPacket> TYPE = new Type<>(
-            Identifier.fromNamespaceAndPath(InfSFarlands.MOD_ID, "chunk_data"));
+            Identifier.fromNamespaceAndPath(InfsFarlands.MOD_ID, "chunk_data"));
 
     public static final StreamCodec<FriendlyByteBuf, ChunkDataPacket> STREAM_CODEC = StreamCodec.of(
             ChunkDataPacket::writeTo,

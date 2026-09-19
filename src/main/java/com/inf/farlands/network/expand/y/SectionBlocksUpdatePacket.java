@@ -2,7 +2,7 @@ package com.inf.farlands.network.expand.y;
 
 import java.util.function.BiConsumer;
 
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -25,20 +25,20 @@ import net.minecraft.world.level.block.state.BlockState;
  *
  * 维度字段与 ChunkDataPacket 同：tp 跨维度在途的旧包由接收端按维度丢弃。
  */
-public record FarLandsSectionBlocksUpdatePacket(
+public record SectionBlocksUpdatePacket(
         ResourceKey<Level> dimension,
         SectionPos sectionPos,
         short[] positions,
         BlockState[] states) implements CustomPacketPayload {
 
-    public static final Type<FarLandsSectionBlocksUpdatePacket> TYPE = new Type<>(
-            Identifier.fromNamespaceAndPath(InfSFarlands.MOD_ID, "section_blocks"));
+    public static final Type<SectionBlocksUpdatePacket> TYPE = new Type<>(
+            Identifier.fromNamespaceAndPath(InfsFarlands.MOD_ID, "section_blocks"));
 
-    public static final StreamCodec<FriendlyByteBuf, FarLandsSectionBlocksUpdatePacket> STREAM_CODEC = StreamCodec.of(
-            FarLandsSectionBlocksUpdatePacket::writeTo,
-            FarLandsSectionBlocksUpdatePacket::readFrom);
+    public static final StreamCodec<FriendlyByteBuf, SectionBlocksUpdatePacket> STREAM_CODEC = StreamCodec.of(
+            SectionBlocksUpdatePacket::writeTo,
+            SectionBlocksUpdatePacket::readFrom);
 
-    public static void writeTo(FriendlyByteBuf buffer, FarLandsSectionBlocksUpdatePacket pkt) {
+    public static void writeTo(FriendlyByteBuf buffer, SectionBlocksUpdatePacket pkt) {
         buffer.writeResourceKey(pkt.dimension());
         buffer.writeInt(pkt.sectionPos().x());
         buffer.writeInt(pkt.sectionPos().y());
@@ -49,7 +49,7 @@ public record FarLandsSectionBlocksUpdatePacket(
         }
     }
 
-    public static FarLandsSectionBlocksUpdatePacket readFrom(FriendlyByteBuf buffer) {
+    public static SectionBlocksUpdatePacket readFrom(FriendlyByteBuf buffer) {
         ResourceKey<Level> dimension = buffer.readResourceKey(Registries.DIMENSION);
         SectionPos sectionPos = SectionPos.of(buffer.readInt(), buffer.readInt(), buffer.readInt());
         int count = buffer.readVarInt();
@@ -60,11 +60,11 @@ public record FarLandsSectionBlocksUpdatePacket(
             positions[i] = (short) (packed & 4095L);
             states[i] = Block.BLOCK_STATE_REGISTRY.byId((int) (packed >>> 12));
         }
-        return new FarLandsSectionBlocksUpdatePacket(dimension, sectionPos, positions, states);
+        return new SectionBlocksUpdatePacket(dimension, sectionPos, positions, states);
     }
 
     @Override
-    public Type<FarLandsSectionBlocksUpdatePacket> type() {
+    public Type<SectionBlocksUpdatePacket> type() {
         return TYPE;
     }
 

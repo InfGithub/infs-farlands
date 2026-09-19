@@ -4,11 +4,11 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 
 /**
  * 配置入口：静态持有全部配置项。
- * 注册在 static 块，InfSFarlands.onInitialize 调 {@link #init()} 读文件。
+ * 注册在 static 块，InfsFarlands.onInitialize 调 {@link #init()} 读文件。
  */
 public final class Config {
 
@@ -35,9 +35,9 @@ public final class Config {
             return;
         }
         initialized = true;
-        FarlandsConfigFile.load(
+        ConfigFile.load(
                 Path.of(System.getProperty("user.dir"), "config", "%s.json".formatted(
-                        InfSFarlands.MOD_ID)),
+                        InfsFarlands.MOD_ID)),
                 Map.of("en_us", "Inf's Farlands configuration", "zh_cn", "Inf's Farlands 配置文件"),
                 ENTRIES);
     }

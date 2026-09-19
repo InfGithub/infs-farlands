@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
-import com.inf.farlands.InfSFarlands;
+import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.util.map.Long2ObjectStripedMap;
 
 import net.minecraft.core.BlockPos;
@@ -56,7 +56,7 @@ public final class FarLandsLightQueue {
      */
     public static final TicketType CHUNK_WORK_TICKET = Registry.register(
             BuiltInRegistries.TICKET_TYPE,
-            InfSFarlands.id("light_chunk_work"),
+            InfsFarlands.id("light_chunk_work"),
             new TicketType(TicketType.NO_TIMEOUT, TicketType.FLAG_LOADING));
 
     /** 触发本类 {@code <clinit>}（即上面的注册）。仅供 BuiltInRegistriesMixin 在冻结前调用。 */

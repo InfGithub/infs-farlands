@@ -11,7 +11,8 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 /**
  * 放置与破坏的建造高度判定放宽到世界生成界。
  *
- * vanilla 在 handleUseItemOn 里取 level.getMaxY() 与 getMinY()，pos.getY() 高于 maxY 就发
+ * vanilla 在 handleUseItemOn 里取 level.getMaxY() 与 getMinY()，pos.getY() 高于 maxY
+ * 就发
  * sendBuildLimitMessage 的上界提示，低于 minY 发下界提示；handlePlayerAction 把
  * level.getMaxY() 传给 handleBlockBreakAction，那里只查上界。两处各只有一个调用点，后续判断
  * 读的是局部变量，所以覆写这几个返回值即可。维度竖直度量未放宽时它们是 320 与 -64，窗口滑到
@@ -26,7 +27,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * ServerLevelSetBlockMixin 同形，因此这里放宽不会放进越界方块。
  */
 @Mixin(net.minecraft.server.network.ServerGamePacketListenerImpl.class)
-public class ServerBuildLimitMixin {
+public class ServerGamePacketListenerImplMixin {
 
     @Redirect(method = "handleUseItemOn", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;getMaxY()I"))
     private int farlands$placeMaxY(ServerLevel level) {

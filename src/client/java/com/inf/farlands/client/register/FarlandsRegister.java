@@ -8,9 +8,9 @@ public class FarlandsRegister {
     }
 
     public static void register() {
+        ChunkDataPacketRegister.registerHandler();
         ClampStatePacketRegister.registerHandler();
         LightUpdatePacketRegister.registerHandler();
-        ChunkDataPacketRegister.registerHandler();
         SectionBlocksUpdatePacketRegister.registerHandler();
     }
 }

@@ -25,7 +25,7 @@ import org.spongepowered.asm.mixin.Unique;
  * 中心的连续 gridSizeY 段铺进这 gridSizeY 个槽位。XZ 与水平窗口判定保持原样。
  *
  * repositionCamera 只在相机跨 section 时由 LevelRenderer 调用，它结尾的 invalidate 因此不再每帧
- * 触发。每帧要做的窗口拉正已移到 FarlandsLevelRendererUpdateMixin。
+ * 触发。每帧要做的窗口拉正已移到 render/LevelRendererMixin。
  */
 @Mixin(ViewArea.class)
 public abstract class ViewAreaMixin {

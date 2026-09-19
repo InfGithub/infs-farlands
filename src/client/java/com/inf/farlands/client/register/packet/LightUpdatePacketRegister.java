@@ -1,7 +1,7 @@
 package com.inf.farlands.client.register.packet;
 
 import com.inf.farlands.client.network.ClientPacketHandlers;
-import com.inf.farlands.network.expand.y.FarLandsLightUpdatePacket;
+import com.inf.farlands.network.expand.y.LightUpdatePacket;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.SectionPos;
@@ -18,7 +18,7 @@ public class LightUpdatePacketRegister {
 
     public static void registerHandler() {
         ClientPacketHandlers.register(
-                FarLandsLightUpdatePacket.TYPE,
+                LightUpdatePacket.TYPE,
                 (payload, context) -> {
                     if (Minecraft.getInstance().level == null) {
                         return;
@@ -27,10 +27,10 @@ public class LightUpdatePacketRegister {
                         return;
                     }
                     LevelLightEngine le = Minecraft.getInstance().level.getLightEngine();
-                    for (FarLandsLightUpdatePacket.SectionLight e : payload.sky()) {
+                    for (LightUpdatePacket.SectionLight e : payload.sky()) {
                         applyLight(le, LightLayer.SKY, payload.chunkX(), payload.chunkZ(), e);
                     }
-                    for (FarLandsLightUpdatePacket.SectionLight e : payload.block()) {
+                    for (LightUpdatePacket.SectionLight e : payload.block()) {
                         applyLight(le, LightLayer.BLOCK, payload.chunkX(), payload.chunkZ(), e);
                     }
                 });
@@ -38,9 +38,9 @@ public class LightUpdatePacketRegister {
 
     /** 光照增量应用：data=null → 清空该 section 层，getLightValue 恢复搜索；非 null → 覆盖。 */
     private static void applyLight(LevelLightEngine le, LightLayer layer, int cx, int cz,
-            FarLandsLightUpdatePacket.SectionLight e) {
+            LightUpdatePacket.SectionLight e) {
         le.queueSectionData(layer, SectionPos.of(cx, e.sectionY(), cz),
-                FarLandsLightUpdatePacket.decodeSectionLight(e.data()));
+                LightUpdatePacket.decodeSectionLight(e.data()));
         Minecraft mc = Minecraft.getInstance();
         if (mc.levelRenderer != null) {
             mc.levelRenderer.setSectionDirty(cx, e.sectionY(), cz);

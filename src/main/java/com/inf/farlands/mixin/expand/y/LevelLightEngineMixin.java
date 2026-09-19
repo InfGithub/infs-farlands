@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.Overwrite;
  *
  * 光照实际只需要覆盖玩家窗口上下各一格。窗口半高由 verticalSimulationDistance 决定，
  * 所以这里取 2 * half + 3 = 窗口段数加两格 padding。绝对 sectionY 的记账在
- * ChunkHolderMixin 与 FarLandsLightUpdatePacket 里，不受这里的跨度影响。
+ * ChunkHolderMixin 与 LightUpdatePacket 里，不受这里的跨度影响。
  */
 @Mixin(LevelLightEngine.class)
 public class LevelLightEngineMixin {
