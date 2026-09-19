@@ -1,0 +1,5 @@
+{
+  "infs-farlands.clamp.enabled": "钳制模式：已启用",
+  "infs-farlands.clamp.disabled": "钳制模式：已禁用",
+  "infs-farlands.clamp.no_permission": "钳制模式：需要 Commands Gamemaster 权限。"
+}

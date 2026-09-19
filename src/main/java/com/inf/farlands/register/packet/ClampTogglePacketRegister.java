@@ -27,14 +27,17 @@ public class ClampTogglePacketRegister {
                 ClampMode clamp = (ClampMode) player;
                 boolean enabled = !clamp.isClampEnabled();
                 clamp.setClampEnabled(enabled);
+                // 文本取自 assets/infs-farlands/lang，服务端只发 translate key，客户端渲染时查表
                 player.sendSystemMessage(
-                        Component.literal(enabled ? "Clamp mode: Enabled" : "Clamp mode: Disabled"),
+                        Component.translatable(enabled
+                                ? "infs-farlands.clamp.enabled"
+                                : "infs-farlands.clamp.disabled"),
                         true);
                 // 状态同步到客户端：客户端据此钳制预测位置，阻止预测覆盖服务端钳制
                 player.connection.send(new ClientboundCustomPayloadPacket(new ClampStatePacket(enabled)));
             } else {
                 player.sendSystemMessage(
-                        Component.literal("Clamp mode: Requires Commands Gamemaster permission."), true);
+                        Component.translatable("infs-farlands.clamp.no_permission"), true);
             }
 
         });

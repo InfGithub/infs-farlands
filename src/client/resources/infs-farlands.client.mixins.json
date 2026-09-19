@@ -18,6 +18,7 @@
     "fix.xz.WeatherEffectRendererMixin",
     "fix.xyz.SectionRenderDispatcher$RenderSectionMixin",
     "network.ClientboundCustomPayloadPacketMixin",
+    "pack.PackRepositoryMixin",
     "light.ClientChunkCacheLightEngineMixin",
     "render.ViewAreaMixin",
     "render.FarlandsLevelRendererUpdateMixin",

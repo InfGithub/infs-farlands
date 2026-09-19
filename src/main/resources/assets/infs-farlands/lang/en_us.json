@@ -1,0 +1,5 @@
+{
+  "infs-farlands.clamp.enabled": "Clamp mode: Enabled",
+  "infs-farlands.clamp.disabled": "Clamp mode: Disabled",
+  "infs-farlands.clamp.no_permission": "Clamp mode: Requires Commands Gamemaster permission."
+}
