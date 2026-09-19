@@ -5,5 +5,12 @@
   "advancements.infs-farlands.root.title": "Inf's Farlands",
   "advancements.infs-farlands.root.description": "Nothing built can last forever, and every legend, no matter how great, fades with time.",
   "advancements.infs-farlands.int-block-pos.title": "return new IntBlockPos(2026, 7, 17);",
-  "advancements.infs-farlands.int-block-pos.description": "Swapped BlockUtil.lookup."
+  "advancements.infs-farlands.int-block-pos.description": "Swapped BlockUtil.lookup.",
+  "commands.infs-farlands.section.light.dump": "Section light dump written to server log.",
+  "commands.infs-farlands.client.section.light.dump": "Section light dump written to client log.",
+  "commands.infs-farlands.section.biome.dump": "Section biome dump written to server log.",
+  "commands.infs-farlands.section.pipeline.state": "Section pipeline state written to server log.",
+  "commands.infs-farlands.section.block.dump": "Section block data dump written to server log.",
+  "commands.infs-farlands.client.section.block.dump": "Section block data dump written to client log.",
+  "commands.infs-farlands.client.section.biome.dump": "Section biome dump written to client log."
 }

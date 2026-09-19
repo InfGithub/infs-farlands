@@ -1,0 +1,234 @@
+package com.inf.farlands.register.command;
+
+import java.util.TreeMap;
+
+import com.inf.farlands.InfsFarlands;
+import com.inf.farlands.command.CommandRegistrationEvent;
+import com.inf.farlands.serialize.SectionStage;
+import com.inf.farlands.util.window.WindowedChunk;
+
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.SectionPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.DataLayer;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.lighting.LevelLightEngine;
+
+/**
+ * 服务端诊断命令族 {@code /farlands section ...}：把玩家当前 section 的光照层、群系、
+ * 方块数据与地形管线状态 dump 到日志，用于极端坐标下的对账。
+ *
+ * <p>
+ * 本类不引用任何客户端类，专用服务器也能加载；客户端侧同名命令见
+ * {@code ClientFarLandsCommands}，两者输出同一格式以便逐格对比。
+ *
+ * <p>
+ * 移植自上一版本（NeoForge 1.21.1），按下述 26.1.2 / 本仓库差异适配：
+ * <ul>
+ * <li>{@code RegisterCommandsEvent} → {@link CommandRegistrationEvent}；</li>
+ * <li>{@code InfFarlands} → {@link InfsFarlands}（类名改过）；</li>
+ * <li>{@code WindowedChunk} 由 {@code com.inf.farlands.window} 移到
+ * {@code com.inf.farlands.util.window}；</li>
+ * <li>{@code FarLandsGenState.forEachStage} → 本仓库的状态机承载是 {@link SectionStage}，
+ * 它只提供单点读取，故这里自行遍历窗口内的 section；</li>
+ * <li>{@code player.serverLevel()} → {@code (ServerLevel) player.level()}；</li>
+ * <li>{@code source.hasPermission(2)} →
+ * {@code Commands.hasPermission(LEVEL_GAMEMASTERS)}；</li>
+ * <li>{@code ChunkPos.x/z} 字段 → {@code x()/z()} accessor。</li>
+ * </ul>
+ */
+public class FarLandsCommands {
+
+    public static void register(CommandRegistrationEvent event) {
+        event.getDispatcher().register(
+                Commands.literal("farlands")
+                        .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .then(Commands.literal("section")
+                                .then(Commands.literal("light")
+                                        .then(Commands.literal("dump")
+                                                .executes(ctx -> dump(ctx.getSource()))))
+                                .then(Commands.literal("biome")
+                                        .then(Commands.literal("dump")
+                                                .executes(ctx -> dumpBiomeCmd(ctx.getSource()))))
+                                .then(Commands.literal("block")
+                                        .then(Commands.literal("dump")
+                                                .executes(ctx -> dumpBlocksCmd(ctx.getSource()))))
+                                .then(Commands.literal("pipeline")
+                                        .then(Commands.literal("state")
+                                                .then(Commands.literal("dump")
+                                                        .executes(ctx -> dumpPipelineState(ctx.getSource())))))));
+    }
+
+    private static int dump(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            ServerLevel level = (ServerLevel) player.level();
+            BlockPos pos = player.blockPosition();
+            SectionPos sec = SectionPos.of(pos);
+            LevelLightEngine le = level.getChunkSource().getLightEngine();
+
+            InfsFarlands.LOGGER.info("FLDUMP server pos={},{},{} sec={},{},{}",
+                    pos.getX(), pos.getY(), pos.getZ(), sec.x(), sec.y(), sec.z());
+            dumpLayer(le, LightLayer.SKY, sec);
+            dumpLayer(le, LightLayer.BLOCK, sec);
+            source.sendSuccess(() -> Component.translatable("commands.infs-farlands.section.light.dump"), false);
+        } catch (Exception e) {
+            InfsFarlands.LOGGER.error("FLDUMP server err", e);
+        }
+        return 1;
+    }
+
+    private static int dumpBiomeCmd(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            ServerLevel level = (ServerLevel) player.level();
+            BlockPos pos = player.blockPosition();
+            SectionPos sec = SectionPos.of(pos);
+            InfsFarlands.LOGGER.info("BIODUMP server pos={},{},{} sec={},{},{}",
+                    pos.getX(), pos.getY(), pos.getZ(), sec.x(), sec.y(), sec.z());
+            dumpBiomes(level, sec);
+            source.sendSuccess(() -> Component.translatable("commands.infs-farlands.section.biome.dump"), false);
+        } catch (Exception e) {
+            InfsFarlands.LOGGER.error("BIODUMP server err", e);
+        }
+        return 1;
+    }
+
+    /** 方块数据独立命令：/farlands section block dump——light dump 不再包含方块数据。 */
+    private static int dumpBlocksCmd(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            ServerLevel level = (ServerLevel) player.level();
+            BlockPos pos = player.blockPosition();
+            SectionPos sec = SectionPos.of(pos);
+            InfsFarlands.LOGGER.info("BLOCKDUMP server pos={},{},{} sec={},{},{}",
+                    pos.getX(), pos.getY(), pos.getZ(), sec.x(), sec.y(), sec.z());
+            dumpBlocks(level, sec);
+            source.sendSuccess(() -> Component.translatable("commands.infs-farlands.section.block.dump"), false);
+        } catch (Exception e) {
+            InfsFarlands.LOGGER.error("BLOCKDUMP server err", e);
+        }
+        return 1;
+    }
+
+    /** dump 玩家当前 chunk 的 per-section 生成状态，即 PLSTATE。 */
+    private static int dumpPipelineState(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            ServerLevel level = (ServerLevel) player.level();
+            BlockPos pos = player.blockPosition();
+            ChunkPos cp = new ChunkPos(SectionPos.blockToSectionCoord(pos.getX()),
+                    SectionPos.blockToSectionCoord(pos.getZ()));
+            InfsFarlands.LOGGER.info("PLSTATE chunk={},{}", cp.x(), cp.z());
+            ChunkAccess ca = level.getChunk(cp.x(), cp.z(), ChunkStatus.FULL, false);
+            if (ca instanceof LevelChunk lc) {
+                // 上一版本是 FarLandsGenState.forEachStage；本仓库用 SectionStage 单点读，
+                // 所以自行遍历。排序只为让日志可逐次比对，语义与逐点读取一致。
+                for (Integer sy : new TreeMap<>(((WindowedChunk) lc).windowedAllSections()).keySet()) {
+                    InfsFarlands.LOGGER.info("PLSTATE   secY={} stage={}", sy, SectionStage.getStage(lc, sy));
+                }
+            } else {
+                InfsFarlands.LOGGER.info("PLSTATE   chunk null");
+            }
+            source.sendSuccess(() -> Component.translatable("commands.infs-farlands.section.pipeline.state"), false);
+        } catch (Exception e) {
+            InfsFarlands.LOGGER.error("PLSTATE err", e);
+        }
+        return 1;
+    }
+
+    /** 当前 section 的 4x4x4 biome 网格，服务端/客户端共用。 */
+    public static void dumpBiomes(Level level, SectionPos sec) {
+        try {
+            ChunkAccess ca = level.getChunk(sec.x(), sec.z(), ChunkStatus.FULL, false);
+            if (!(ca instanceof LevelChunk lc)) {
+                InfsFarlands.LOGGER.info("BIODUMP secY={} chunk null", sec.y());
+                return;
+            }
+            LevelChunkSection s = ((WindowedChunk) lc).windowedAllSections().get(sec.y());
+            if (s == null) {
+                InfsFarlands.LOGGER.info("BIODUMP secY={} section null", sec.y());
+                return;
+            }
+            for (int y = 0; y < 4; y++) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("BIODUMP secY=").append(sec.y()).append(" y=").append(y);
+                for (int z = 0; z < 4; z++) {
+                    sb.append("\nBIODUMP   z=").append(z).append(' ');
+                    for (int x = 0; x < 4; x++) {
+                        Holder<Biome> b = s.getBiomes().get(x, y, z);
+                        sb.append(b.unwrapKey().map(k -> k.identifier().getPath()).orElse("?")).append(' ');
+                    }
+                }
+                InfsFarlands.LOGGER.info("{}", sb);
+            }
+        } catch (Exception e) {
+            InfsFarlands.LOGGER.error("BIODUMP err", e);
+        }
+    }
+
+    public static void dumpLayer(LevelLightEngine le, LightLayer layer, SectionPos sec) {
+        DataLayer dl = le.getLayerListener(layer).getDataLayerData(sec);
+        String tag = layer == LightLayer.SKY ? "SKY" : "BLK";
+        if (dl == null) {
+            InfsFarlands.LOGGER.info("FLDUMP {} secY={} null", tag, sec.y());
+            return;
+        }
+        if (dl.isEmpty()) {
+            InfsFarlands.LOGGER.info("FLDUMP {} secY={} empty", tag, sec.y());
+            return;
+        }
+        for (int y = 0; y < 16; y++) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("FLDUMP ").append(tag).append(" secY=").append(sec.y()).append(" y=").append(y);
+            for (int z = 0; z < 16; z++) {
+                sb.append("\nFLDUMP   z=").append(z).append(' ');
+                for (int x = 0; x < 16; x++) {
+                    sb.append(Character.forDigit(dl.get(x, y, z) & 0xFF, 16));
+                }
+            }
+            InfsFarlands.LOGGER.info("{}", sb);
+        }
+    }
+
+    /** 方块数据：. = 空气，# = 非空气——与光照矩阵对照，区分方块格的 0 为正常、空气格的 0 为异常。 */
+    public static void dumpBlocks(Level level, SectionPos sec) {
+        try {
+            ChunkAccess ca = level.getChunk(sec.x(), sec.z(), ChunkStatus.FULL, false);
+            if (!(ca instanceof LevelChunk lc)) {
+                InfsFarlands.LOGGER.info("FLDUMP BLOCKS secY={} null", sec.y());
+                return;
+            }
+            LevelChunkSection s = ((WindowedChunk) lc).windowedAllSections().get(sec.y());
+            if (s == null) {
+                InfsFarlands.LOGGER.info("FLDUMP BLOCKS secY={} empty", sec.y());
+                return;
+            }
+            for (int y = 0; y < 16; y++) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("FLDUMP BLOCKS secY=").append(sec.y()).append(" y=").append(y);
+                for (int z = 0; z < 16; z++) {
+                    sb.append("\nFLDUMP   z=").append(z).append(' ');
+                    for (int x = 0; x < 16; x++) {
+                        sb.append(s.getBlockState(x, y, z).isAir() ? '.' : '#');
+                    }
+                }
+                InfsFarlands.LOGGER.info("{}", sb);
+            }
+        } catch (Exception e) {
+            InfsFarlands.LOGGER.error("FLDUMP BLOCKS err", e);
+        }
+    }
+}
