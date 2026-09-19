@@ -10,8 +10,10 @@ import com.inf.farlands.util.maps.SectionUtil;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
 
+import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 
 public class FarlandsTick {
     private static final int INTERVAL = 200;
@@ -21,10 +23,29 @@ public class FarlandsTick {
         return now;
     }
 
-    private static void swapBlockLookup(int tickCount) {
+    private static void swapBlockLookup(MinecraftServer server, int tickCount) {
+        // size 必须在 swap 前取：swap 之后读到的是新的空表，恒为 0。
         int size = BlockUtil.size();
         InfsFarlands.LOGGER.info("Swapping BlockUtil.lookup, size: {}", size);
         BlockUtil.swap();
+        if (size > 0) {
+            awardIntBlockPos(server);
+        }
+    }
+
+    /**
+     * 这一轮至少注册过一个坐标（swap 前的 size &gt; 0）时，给所有在线玩家授予成就。
+     * 对应进度的 criterion 是 minecraft:impossible，永不自动满足，只能由本方法授予。
+     * award 对已解锁的玩家是幂等的。
+     */
+    private static void awardIntBlockPos(MinecraftServer server) {
+        AdvancementHolder holder = server.getAdvancements().get(InfsFarlands.id("int-block-pos"));
+        if (holder == null) {
+            return;
+        }
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            player.getAdvancements().award(holder, "impossible");
+        }
     }
 
     public static void trimSectionLookup(int tickCount) {
@@ -45,7 +66,7 @@ public class FarlandsTick {
     public static void atEnd(MinecraftServer server, int tickCount) {
         now = tickCount;
         if (tickCount % INTERVAL == 0) {
-            swapBlockLookup(tickCount);
+            swapBlockLookup(server, tickCount);
             trimSectionLookup(tickCount);
             trimAquiferLookup(tickCount);
         }

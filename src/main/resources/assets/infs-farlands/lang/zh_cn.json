@@ -1,5 +1,9 @@
 {
   "infs-farlands.clamp.enabled": "钳制模式：已启用",
   "infs-farlands.clamp.disabled": "钳制模式：已禁用",
-  "infs-farlands.clamp.no_permission": "钳制模式：需要 Commands Gamemaster 权限。"
+  "infs-farlands.clamp.no_permission": "钳制模式：需要 Commands Gamemaster 权限。",
+  "advancements.infs-farlands.root.title": "Inf's Farlands",
+  "advancements.infs-farlands.root.description": "世间万物并无永恒，任何伟大的传说终将随着时间逝去。",
+  "advancements.infs-farlands.int-block-pos.title": "return new IntBlockPos(2026, 7, 17);",
+  "advancements.infs-farlands.int-block-pos.description": "Swapped BlockUtil.lookup."
 }

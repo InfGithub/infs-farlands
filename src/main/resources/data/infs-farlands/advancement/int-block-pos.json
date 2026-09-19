@@ -1,0 +1,27 @@
+{
+  "parent": "infs-farlands:root",
+  "criteria": {
+    "impossible": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "description": {
+      "translate": "advancements.infs-farlands.int-block-pos.description"
+    },
+    "icon": {
+      "id": "minecraft:grass_block"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancements.infs-farlands.int-block-pos.title"
+    }
+  },
+  "requirements": [
+    [
+      "impossible"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

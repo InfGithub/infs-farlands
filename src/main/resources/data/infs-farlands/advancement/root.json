@@ -1,0 +1,27 @@
+{
+  "criteria": {
+    "tick": {
+      "trigger": "minecraft:tick"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "background": "minecraft:gui/advancements/backgrounds/stone",
+    "description": {
+      "translate": "advancements.infs-farlands.root.description"
+    },
+    "icon": {
+      "id": "minecraft:bedrock"
+    },
+    "show_toast": false,
+    "title": {
+      "translate": "advancements.infs-farlands.root.title"
+    }
+  },
+  "requirements": [
+    [
+      "tick"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

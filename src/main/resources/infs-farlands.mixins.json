@@ -3,6 +3,7 @@
   "package": "com.inf.farlands.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "pack.PackRepositoryMixin",
     "debug.tool.clamp.BlockPlaceContextMixin",
     "debug.tool.clamp.EntityCollisionMixin",
     "debug.tool.clamp.ServerPlayerMixin",
