@@ -99,6 +99,10 @@ public class ChunkDataPacketRegister {
         ns.read(new FriendlyByteBuf(Unpooled.wrappedBuffer(e.sectionData())));
         wc.windowedAllSections().put(e.sectionY(), ns);
         lc.getSection(lc.getSectionIndexFromSectionY(e.sectionY())); // 数组同步，get 内部执行 arr[idx]=s
+        // 整体替换段对象绕开了 LevelChunk.setBlockState 的空/非空翻转通知，那条通知是 26.1.2
+        // 的 loadedEmptySections 集合唯一的出栈路径。不补发，有内容的段会被 SectionOcclusionGraph
+        // 的闸门永久钉成 EMPTY。ClientChunkCache 自己判是否在视图范围内。
+        level.getChunkSource().onSectionEmptinessChanged(e.chunkX(), e.sectionY(), e.chunkZ(), ns.hasOnlyAir());
         DataLayer bl = ChunkDataPacket.decodeLight(e.blockLight());
         if (bl != null) {
             le.queueSectionData(LightLayer.BLOCK, SectionPos.of(lc.getPos(), e.sectionY()), bl);
