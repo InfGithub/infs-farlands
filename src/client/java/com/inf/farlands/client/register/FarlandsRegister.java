@@ -11,5 +11,6 @@ public class FarlandsRegister {
         ClampStatePacketRegister.registerHandler();
         LightUpdatePacketRegister.registerHandler();
         ChunkDataPacketRegister.registerHandler();
+        SectionBlocksUpdatePacketRegister.registerHandler();
     }
 }

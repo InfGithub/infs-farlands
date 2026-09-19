@@ -6,6 +6,7 @@ public class FarlandsRegister {
     public static void registerStatic() {
         ChunkDataPacketRegister.registerType();
         LightUpdatePacketRegister.registerType();
+        SectionBlocksUpdatePacketRegister.registerType();
         ClampStatePacketRegister.registerType();
         ClampTogglePacketRegister.registerType();
     }

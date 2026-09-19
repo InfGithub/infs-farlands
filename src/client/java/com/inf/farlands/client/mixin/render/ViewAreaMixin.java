@@ -1,51 +1,122 @@
 package com.inf.farlands.client.mixin.render;
 
-import com.inf.farlands.util.window.WindowedChunk;
+import com.inf.farlands.FarlandsConfig;
 
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.ViewArea;
+import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
 import net.minecraft.core.SectionPos;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.chunk.EmptyLevelChunk;
-import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.Unique;
 
 /**
- * 客户端窗口跟随相机 Y。
+ * 客户端渲染网格的竖直环绕。
  *
- * chunk 的 windowSections 构造默认只有一段，即 windowMinY 那一段，而 SectionCopy
- * 是按 getSectionIndexFromSectionY 取 getSections()[index] 的。窗口不拉正时只有
- * 默认那一段能取到数据，其余全渲染为空。旧仓库由 ViewAreaMixin.repositionCamera
- * 每帧给附近每个 chunk 调 moveWindowTo 解决，本类是那段逻辑的移植。
+ * vanilla 把网格竖直槽位锚在 level.getMinSectionY()：createSections 的初始节点、repositionCamera
+ * 的 newSectionY、getRenderSection 与 containsSection 的范围判定都读它。ClientLevel 那两个值是
+ * 维度范围 -4 与 19，于是网格恒为 section [-4, 30]，低于 -4 的 section 在 containsSection 处被拒，
+ * getRenderSection 返回 null，遮挡图的洪泛到不了那里，octree 里没有它，最终不渲染。地形按窗口段
+ * 生成，-64 以下有数据，所以这一段是实打实缺失的。
  *
- * 只枚举已加载 chunk：未加载的没有数据可显示，等它加载时构造路径会自己建窗口。
- * buildWindow 在窗口未变时早退，因此每帧调用在相机不跨 section 时零开销。
+ * 改成与 vanilla 的 XZ 同一套环绕：查表是 slot = floorMod(sectionY, gridSizeY)，分配时把以相机为
+ * 中心的连续 gridSizeY 段铺进这 gridSizeY 个槽位。XZ 与水平窗口判定保持原样。
+ *
+ * repositionCamera 只在相机跨 section 时由 LevelRenderer 调用，它结尾的 invalidate 因此不再每帧
+ * 触发。每帧要做的窗口拉正已移到 FarlandsLevelRendererUpdateMixin。
  */
 @Mixin(ViewArea.class)
 public abstract class ViewAreaMixin {
 
     @Shadow
-    protected Level level;
+    protected LevelRenderer levelRenderer;
 
-    @Inject(method = "repositionCamera", at = @At("RETURN"))
-    private void farlands$followCameraWindow(SectionPos cameraSectionPos, CallbackInfo ci) {
-        ViewArea self = (ViewArea) (Object) this;
-        int camSecY = cameraSectionPos.y();
-        int radius = self.getViewDistance();
-        ChunkPos cpos = cameraSectionPos.chunk();
-        for (int cx = cpos.x() - radius; cx <= cpos.x() + radius; cx++) {
-            for (int cz = cpos.z() - radius; cz <= cpos.z() + radius; cz++) {
-                LevelChunk chunk = (LevelChunk) this.level.getChunk(cx, cz, ChunkStatus.FULL, false);
-                if (chunk != null && !(chunk instanceof EmptyLevelChunk)) {
-                    ((WindowedChunk) chunk).moveWindowTo(camSecY);
+    @Shadow
+    protected int sectionGridSizeX;
+
+    @Shadow
+    protected int sectionGridSizeY;
+
+    @Shadow
+    protected int sectionGridSizeZ;
+
+    @Shadow
+    private int viewDistance;
+
+    @Shadow
+    private SectionPos cameraSectionPos;
+
+    @Shadow
+    public SectionRenderDispatcher.RenderSection[] sections;
+
+    @Overwrite
+    protected void setViewDistance(int renderDistanceChunks) {
+        int horizontal = renderDistanceChunks * 2 + 1;
+        this.sectionGridSizeX = horizontal;
+        this.sectionGridSizeY = FarlandsConfig.verticalSimulationDistance * 2 + 1;
+        this.sectionGridSizeZ = horizontal;
+        this.viewDistance = renderDistanceChunks;
+    }
+
+    /**
+     * 第 gridY 个槽位装 low + floorMod(gridY - low, gridSizeY) 段，low = camSectionY - half。
+     * gridSizeY 个槽位恰好覆盖 [cam-half, cam+half] 连续段，恒含相机所在段，与查表的
+     * floorMod(sectionY, gridSizeY) 互为逆运算。
+     */
+    @Overwrite
+    public void repositionCamera(SectionPos cameraSectionPos) {
+        int half = this.sectionGridSizeY / 2;
+        int low = cameraSectionPos.y() - half;
+        for (int gridX = 0; gridX < this.sectionGridSizeX; gridX++) {
+            int lowestX = cameraSectionPos.x() - this.viewDistance;
+            int newSectionX = lowestX + Math.floorMod(gridX - lowestX, this.sectionGridSizeX);
+            for (int gridZ = 0; gridZ < this.sectionGridSizeZ; gridZ++) {
+                int lowestZ = cameraSectionPos.z() - this.viewDistance;
+                int newSectionZ = lowestZ + Math.floorMod(gridZ - lowestZ, this.sectionGridSizeZ);
+                for (int gridY = 0; gridY < this.sectionGridSizeY; gridY++) {
+                    int newSectionY = low + Math.floorMod(gridY - low, this.sectionGridSizeY);
+                    SectionRenderDispatcher.RenderSection section = this.sections[farlands$gridIndex(gridX, gridY, gridZ)];
+                    long node = SectionPos.asLong(newSectionX, newSectionY, newSectionZ);
+                    if (section.getSectionNode() != node) {
+                        section.setSectionNode(node);
+                    }
                 }
             }
         }
+        this.cameraSectionPos = cameraSectionPos;
+        this.levelRenderer.getSectionOcclusionGraph().invalidate();
+    }
+
+    /** 竖直窗口判定改成相机段加减半高，XZ 判定与原版一致。 */
+    @Overwrite
+    private boolean containsSection(int sectionX, int sectionY, int sectionZ) {
+        int half = this.sectionGridSizeY / 2;
+        int camSectionY = this.cameraSectionPos.y();
+        if (sectionY < camSectionY - half || sectionY > camSectionY + half) {
+            return false;
+        }
+        return sectionX < this.cameraSectionPos.x() - this.viewDistance
+                || sectionX > this.cameraSectionPos.x() + this.viewDistance ? false
+                        : sectionZ >= this.cameraSectionPos.z() - this.viewDistance
+                                && sectionZ <= this.cameraSectionPos.z() + this.viewDistance;
+    }
+
+    /** 与 vanilla 的 getSectionIndex 同布局，竖直下标换成 floorMod(sectionY, gridSizeY)。 */
+    @Overwrite
+    private SectionRenderDispatcher.RenderSection getRenderSection(int sectionX, int sectionY, int sectionZ) {
+        if (!this.containsSection(sectionX, sectionY, sectionZ)) {
+            return null;
+        }
+        int x = Math.floorMod(sectionX, this.sectionGridSizeX);
+        int y = Math.floorMod(sectionY, this.sectionGridSizeY);
+        int z = Math.floorMod(sectionZ, this.sectionGridSizeZ);
+        return this.sections[farlands$gridIndex(x, y, z)];
+    }
+
+    @Unique
+    private int farlands$gridIndex(int x, int y, int z) {
+        return (z * this.sectionGridSizeY + y) * this.sectionGridSizeX + x;
     }
 }

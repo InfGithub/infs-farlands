@@ -74,10 +74,20 @@ public interface LevelHeightAccessorMixin {
 
     @Overwrite
     default boolean isOutsideBuildHeight(int y) {
-        if ((Object) this instanceof ChunkAccess) {
-            LevelHeightAccessor self = (LevelHeightAccessor) (Object) this;
-            return y < self.getMinY() || y > self.getMaxY();
-        }
         return !WorldBounds.inBuildHeight(y);
+    }
+
+    /**
+     * 26.1.2 的 Level.getBlockState 与 setBlock 走 isInValidBounds，那里读的是本方法，不再是
+     * isOutsideBuildHeight。两者必须同源，否则维度界外的读写会被静默挡掉：读返回 VOID_AIR，
+     * 写返回 false 且没有任何提示。
+     *
+     * 不能对 ChunkAccess 单独用维度界。地形按窗口段生成，-64 以下由 fill 直写 section 产出，
+     * 而 SurfaceSystem 与 ProtoChunk 的高度检查受体正是 chunk 自己，走维度界会让这一段的地表
+     * 写入被静默跳过。竖直方向的真实门是 LevelMixin.rejectWindowOutside 的玩家窗口判定。
+     */
+    @Overwrite
+    default boolean isInsideBuildHeight(int y) {
+        return WorldBounds.inBuildHeight(y);
     }
 }

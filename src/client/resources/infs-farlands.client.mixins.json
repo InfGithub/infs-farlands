@@ -10,6 +10,7 @@
     "debug.tool.clamp.LocalPlayerMixin",
     "expand.xyz.pos.LightDebugRendererMixin",
     "expand.y.LevelChunkEmptinessNotifyMixin",
+    "expand.y.ClientLevelSetBlockMixin",
     "expand.y.ClientPacketListenerMixin",
     "fix.xz.EntityRendererMixin",
     "fix.xz.LevelRendererMixin",
@@ -21,7 +22,9 @@
     "render.ViewAreaMixin",
     "render.FarlandsLevelRendererUpdateMixin",
     "render.RenderSectionMixin",
-    "render.SectionCopyMixin"
+    "render.SectionCopyMixin",
+    "render.OctreeMixin",
+    "render.SectionOcclusionGraphMixin"
   ],
   "injectors": {
     "defaultRequire": 1

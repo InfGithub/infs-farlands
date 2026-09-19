@@ -6,9 +6,7 @@
     "debug.tool.clamp.BlockPlaceContextMixin",
     "debug.tool.clamp.EntityCollisionMixin",
     "debug.tool.clamp.ServerPlayerMixin",
-
     "expand.xyz.misc.Aquifer$NoiseBasedAquiferMixin",
-
     "expand.xyz.pos.BlockPos$MutableBlockPosMixin",
     "expand.xyz.pos.BlockPosMixin",
     "expand.xyz.pos.ChunkPosMixin",
@@ -17,7 +15,6 @@
     "expand.xyz.pos.PersistentEntitySectionManagerMixin",
     "expand.xyz.pos.SectionPosMixin",
     "expand.xyz.pos.SectionStorageMixin",
-
     "expand.xz.border.DedicatedServerPropertiesMixin",
     "expand.xz.border.DimensionTypeMixin",
     "expand.xz.border.EntityMixin",
@@ -31,26 +28,38 @@
     "expand.xz.border.WorldBorder$SettingsMixin",
     "expand.xz.border.WorldBorderCommandMixin",
     "expand.xz.border.WorldBorderMixin",
-
     "expand.y.ChunkAccessMixin",
+    "expand.y.ChunkHolderMixin",
     "expand.y.ChunkGeneratorMixin",
+    "expand.y.ClientboundLevelChunkPacketData$BlockEntityInfoMixin",
+    "expand.y.ClientboundLevelChunkPacketDataBlockEntityMixin",
+    "expand.y.EntityMixin",
+    "expand.y.TheEndGatewayBlockEntityMixin",
+    "expand.y.SectionStorageGetOrLoadMixin",
+    "expand.y.PoiManagerMixin",
+    "expand.y.DimensionTypeMixin",
+    "expand.y.YClampedGradientOverflowMixin",
+    "expand.y.FindTopSurfaceOverflowMixin",
+    "expand.y.NoiseRouterDataOverflowMixin",
+    "expand.y.NoiseBasedChunkGeneratorOverflowMixin",
     "expand.y.ClientboundLevelChunkPacketDataMixin",
     "expand.y.LevelChunk$BoundTickingBlockEntityMixin",
     "expand.y.LevelChunkMixin",
     "expand.y.LevelHeightAccessorMixin",
+    "expand.y.LevelLightEngineMixin",
     "expand.y.LevelMixin",
     "expand.y.NoiseBasedChunkGeneratorMixin",
     "expand.y.PlayerChunkSenderMixin",
     "expand.y.ProtoChunkMixin",
     "expand.y.ServerChunkCacheMixin",
+    "expand.y.ServerBuildLimitMixin",
     "expand.y.ServerLevelMixin",
-
     "noise.NoiseChunkInvoker",
     "noise.NoiseChunkMixin",
     "noise.HeightmapInvoker",
-
+    "terrain.carver.WorldCarverCarveBlockMixin",
     "terrain.pipeline.GenerationChunkHolderMixin",
-
+    "terrain.surface.SurfaceSystemBlockColumnMixin",
     "fix.xz.AABBMixin",
     "fix.xz.BoundingBoxMixin",
     "fix.xz.ChunkGeneratorMixin",
@@ -64,24 +73,19 @@
     "fix.xz.ScatteredFeaturePieceMixin",
     "fix.xz.VoxelShapeMixin",
     "fix.xz.WalkNodeEvaluatorMixin",
-
     "fix.y.HeightmapMixin",
     "fix.y.LevelMixin",
-
     "serialize.SerializableChunkDataMixin",
     "serialize.LevelChunkSetBlockStateMixin",
     "serialize.ServerLevelMixin",
     "serialize.MinecraftServerMixin",
-
     "network.ClientboundCustomPayloadPacketMixin",
     "network.ServerboundCustomPayloadPacketMixin",
-
     "light.BuiltInRegistriesMixin",
     "light.ChunkMapLightEngineMixin",
     "light.ChunkSkyLightSourcesMixin",
     "light.LevelChunkSectionMixin",
     "light.ClientboundLevelChunkWithLightPacketMixin",
-
     "tick.MinecraftServerMixin"
   ],
   "injectors": {
