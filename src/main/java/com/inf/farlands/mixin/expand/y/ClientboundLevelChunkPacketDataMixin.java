@@ -57,7 +57,7 @@ public class ClientboundLevelChunkPacketDataMixin {
      * {@code ClientboundLevelChunkPacketData$BlockEntityInfoMixin} 注入的字段携带。
      *
      * BlockEntityInfo 是私有静态嵌套类，源码里连类型都引用不到，所以列表字段与它上面每个字段
-     * 一律走反射，方法体里用 Object 迭代。那个注入字段在混入后带前缀，按后缀 yCorrect 查找。
+     * 一律走反射，方法体里用 Object 迭代。那个注入字段被 Mixin 加了前缀，按后缀 yCorrect 查找。
      */
 
     private static final Class<?> C_PACKET;
@@ -88,7 +88,7 @@ public class ClientboundLevelChunkPacketDataMixin {
         return f;
     }
 
-    /** 混入给 @Unique 字段加前缀，所以按后缀匹配。 */
+    /** Mixin 给 @Unique 字段加前缀，所以按后缀匹配。 */
     private static Field findYCorrect() throws NoSuchFieldException {
         for (Field f : C_BLOCK_ENTITY_INFO.getDeclaredFields()) {
             if (f.getName().endsWith("yCorrect")) {

@@ -27,7 +27,7 @@ import net.minecraft.server.packs.repository.PackSource;
  * <p>
  * 同一个 pack 同时服务 {@code CLIENT_RESOURCES} 与 {@code SERVER_DATA}：{@link PackResources}
  * 按 {@code PackType} 分派到包根下的 {@code assets/} 或 {@code data/}，所以数据包不需要任何
- * 额外代码。本类放在 main 源集，是为了让专用服务器也能加载——client 源集的混入在专用
+ * 额外代码。本类放在 main 源集，是为了让专用服务器也能加载——client 源集的 Mixin 在专用
  * 服务器上不加载。
  *
  * <p>

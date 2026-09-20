@@ -32,7 +32,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * {@code openAllSelected} 的返回值是 ImmutableList，必须复制后再追加。
  *
  * <p>
- * 放在 main 源集：数据包是服务端资源，专用服务器不加载 client 源集的混入。客户端行为不变，
+ * 放在 main 源集：数据包是服务端资源，专用服务器不加载 client 源集的 Mixin。客户端行为不变，
  * 因为 main 源集两端都加载。
  *
  * <p>
