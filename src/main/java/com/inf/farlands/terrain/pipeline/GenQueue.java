@@ -77,7 +77,9 @@ public final class GenQueue {
     private static volatile TheNetherTerrainFiller netherFiller;
     private static volatile TheEndTerrainFiller endFiller;
 
-    private static final ExecutorService POOL = Executors.newFixedThreadPool(genWorkerCount(), r -> {
+    // 规模在配置层已解析：显式值受 range(1,64) 约束，"auto" 由取值器算出，两者都 >= 1。
+    // 这里不再解释 0 哨兵——哨兵已由 "auto" 取代。
+    private static final ExecutorService POOL = Executors.newFixedThreadPool(FarlandsConfig.genWorkerThreads, r -> {
         Thread t = new Thread(r, "farlands-gen");
         t.setDaemon(true);
         return t;
@@ -92,15 +94,6 @@ public final class GenQueue {
     private static final ConcurrentHashMap<Long, AtomicBoolean> CHUNK_IN_FLIGHT = new ConcurrentHashMap<>();
 
     private GenQueue() {
-    }
-
-    /** 生成 worker 线程数。0 表示自动取 CPU 逻辑线程数一半，1 表示单线程，N 表示恰好 N。 */
-    private static int genWorkerCount() {
-        int n = FarlandsConfig.genWorkerThreads;
-        if (n <= 0) {
-            n = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
-        }
-        return n;
     }
 
     /** 惰性取维度 TerrainFiller，来自该维度第一个 ServerLevel。 */

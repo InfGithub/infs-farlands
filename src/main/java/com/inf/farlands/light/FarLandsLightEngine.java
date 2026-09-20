@@ -178,7 +178,7 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
                 : null;
         this.queue = new FarLandsLightQueue();
         this.taskLock = new LightTaskLock();
-        // 已由 FarlandsConfig 解析（0=自动取 CPU 一半，否则 clamp 1..64）
+        // 已由 FarlandsConfig 解析：显式值受 range(1,64) 约束，"auto" 由取值器算出，恒 >= 1
         int parallelism = FarlandsConfig.parallelLightThreads;
         this.lightPool = Executors.newFixedThreadPool(parallelism, r -> {
             Thread t = new Thread(r, "farlands-light");
