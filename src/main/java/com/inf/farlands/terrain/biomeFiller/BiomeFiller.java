@@ -2,7 +2,7 @@ package com.inf.farlands.terrain.biomeFiller;
 
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.BiomeSystem;
-import com.inf.farlands.terrain.system.BiomeSystemRegistry;
+import com.inf.farlands.terrain.system.biome.BiomeSystemRegistry;
 import com.inf.farlands.util.window.EntitySectionWindow;
 
 import net.minecraft.server.level.ServerLevel;

@@ -6,7 +6,7 @@ import com.inf.farlands.mixin.noise.HeightmapInvoker;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.CarverSystem;
-import com.inf.farlands.terrain.system.CarverSystemRegistry;
+import com.inf.farlands.terrain.system.carver.CarverSystemRegistry;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import java.util.ArrayList;

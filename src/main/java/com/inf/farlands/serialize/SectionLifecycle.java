@@ -64,7 +64,7 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
  * Long2ObjectLinkedOpenHashMap 装 ChunkHolder，语义等价于旧的 getChunks，即全部可见
  * ChunkHolder。ChunkHolder.getLatestChunk 声明在父类 GenerationChunkHolder 上，
  * 26.1.2 仍在。
- * stage 由 SectionStage 承载，取值 0 UNPROCESSED、1 BIOMES、2 NOISE、3 SURFACE、4
+ * stage 由 SectionStage 承载，取值 0 UNPROCESSED、1 BIOMES、2 TERRAIN、3 SURFACE、4
  * CARVERS、
  * 5 LIGHTED。旧仓库是 NeoForge attachment，且与 terrain 共用。
  * terrain 侧调用收口在 TerrainHooks，即 GenQueue.isChunkBusy 与 GenQueue.enqueueChunk。

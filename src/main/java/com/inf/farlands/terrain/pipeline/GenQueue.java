@@ -8,10 +8,10 @@ import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.carverFiller.CarverFiller;
-import com.inf.farlands.terrain.noisefiller.NoiseFiller;
-import com.inf.farlands.terrain.noisefiller.OverworldNoiseFiller;
-import com.inf.farlands.terrain.noisefiller.TheEndNoiseFiller;
-import com.inf.farlands.terrain.noisefiller.TheNetherNoiseFiller;
+import com.inf.farlands.terrain.terrainFiller.TerrainFiller;
+import com.inf.farlands.terrain.terrainFiller.OverworldTerrainFiller;
+import com.inf.farlands.terrain.terrainFiller.TheEndTerrainFiller;
+import com.inf.farlands.terrain.terrainFiller.TheNetherTerrainFiller;
 import com.inf.farlands.terrain.surfaceFiller.SurfaceFiller;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
@@ -45,9 +45,9 @@ import net.minecraft.world.level.chunk.status.ChunkStatus;
  *
  * 每次唤醒 submit 不超过 maxGenTasksPerTick 个，宽松防风暴。唤醒源是 tick 与入队的 enqueue。
  *
- * 光照衔接按 chunk 级去重：GenTask 只推进到 NOISE，随后 notifyGenerated 触发一次 fillFrom 与
+ * 光照衔接按 chunk 级去重：GenTask 只推进到 TERRAIN，随后 notifyGenerated 触发一次 fillFrom 与
  * lightChunk。每 chunk 每批次一次，CAS 在途标志去重，不逐 section 重复播种。光照完成回调把
- * 全部 NOISE 升 LIGHTED，播种覆盖全 chunk，然后释放在途，hasAnyGen 再检查驱动下一批。
+ * 全部 TERRAIN 升 LIGHTED，播种覆盖全 chunk，然后释放在途，hasAnyGen 再检查驱动下一批。
  */
 public final class GenQueue {
 
@@ -73,9 +73,9 @@ public final class GenQueue {
     /** 生成任务队列，按距最近玩家距离排序，近先生成。PriorityQueue 非线程安全，用 QUEUE 自身同步。 */
     private static final PriorityQueue<GenTask> QUEUE = new PriorityQueue<>(Comparator.comparingInt(GenTask::priority));
 
-    private static volatile OverworldNoiseFiller overworldFiller;
-    private static volatile TheNetherNoiseFiller netherFiller;
-    private static volatile TheEndNoiseFiller endFiller;
+    private static volatile OverworldTerrainFiller overworldFiller;
+    private static volatile TheNetherTerrainFiller netherFiller;
+    private static volatile TheEndTerrainFiller endFiller;
 
     private static final ExecutorService POOL = Executors.newFixedThreadPool(genWorkerCount(), r -> {
         Thread t = new Thread(r, "farlands-gen");
@@ -103,15 +103,15 @@ public final class GenQueue {
         return n;
     }
 
-    /** 惰性取维度 NoiseFiller，来自该维度第一个 ServerLevel。 */
-    static NoiseFiller filler(ServerLevel level) {
+    /** 惰性取维度 TerrainFiller，来自该维度第一个 ServerLevel。 */
+    static TerrainFiller filler(ServerLevel level) {
         if (level.dimension() == Level.NETHER) {
-            TheNetherNoiseFiller f = netherFiller;
+            TheNetherTerrainFiller f = netherFiller;
             if (f == null) {
                 synchronized (GenQueue.class) {
                     f = netherFiller;
                     if (f == null) {
-                        f = TheNetherNoiseFiller.of(level);
+                        f = TheNetherTerrainFiller.of(level);
                         netherFiller = f;
                     }
                 }
@@ -119,24 +119,24 @@ public final class GenQueue {
             return f;
         }
         if (level.dimension() == Level.END) {
-            TheEndNoiseFiller f = endFiller;
+            TheEndTerrainFiller f = endFiller;
             if (f == null) {
                 synchronized (GenQueue.class) {
                     f = endFiller;
                     if (f == null) {
-                        f = TheEndNoiseFiller.of(level);
+                        f = TheEndTerrainFiller.of(level);
                         endFiller = f;
                     }
                 }
             }
             return f;
         }
-        OverworldNoiseFiller f = overworldFiller;
+        OverworldTerrainFiller f = overworldFiller;
         if (f == null) {
             synchronized (GenQueue.class) {
                 f = overworldFiller;
                 if (f == null) {
-                    f = OverworldNoiseFiller.of(level);
+                    f = OverworldTerrainFiller.of(level);
                     overworldFiller = f;
                 }
             }
@@ -162,7 +162,7 @@ public final class GenQueue {
 
     /** Y 触发：主线程上的单 section 请求。幂等，已生成不入队，入队粒度是 chunk 级任务。 */
     public static void enqueue(LevelChunk chunk, int sectionY) {
-        if (SectionStage.isOrAfter(chunk, sectionY, SectionStage.NOISE)) {
+        if (SectionStage.isOrAfter(chunk, sectionY, SectionStage.TERRAIN)) {
             return;
         }
         // fsa 读回在途：该 section 正在从磁盘恢复，完成回调会再调 enqueue，由 isOrAfter 跳过。
@@ -207,7 +207,7 @@ public final class GenQueue {
             if (sy > FarlandsConstant.MAX_CHUNK - 1 || sy < -FarlandsConstant.MAX_CHUNK) {
                 continue;
             }
-            if (!SectionStage.isOrAfter(chunk, sy, SectionStage.NOISE)) {
+            if (!SectionStage.isOrAfter(chunk, sy, SectionStage.TERRAIN)) {
                 anyPending = true;
                 break;
             }
@@ -248,7 +248,7 @@ public final class GenQueue {
     }
 
     /**
-     * execute 完成回调：检查窗口并集内是否仍有未 NOISE 的 section，覆盖 execute 期间新入队的。
+     * execute 完成回调：检查窗口并集内是否仍有未 TERRAIN 的 section，覆盖 execute 期间新入队的。
      * 有剩余就续任务并保持 CHUNK_IN_FLIGHT 为真，无剩余才清标志并释放 fill ticket。
      *
      * 标志不在续任务时清：否则会留下"标志已清、任务尚未入队"的空窗，那期间 isChunkBusy 返回假，
@@ -268,14 +268,14 @@ public final class GenQueue {
         }
     }
 
-    /** 该 chunk 在窗口并集内是否仍有未 NOISE 的 section。 */
+    /** 该 chunk 在窗口并集内是否仍有未 TERRAIN 的 section。 */
     private static boolean hasUnprocessed(LevelChunk chunk) {
         boolean[] found = { false };
         EntitySectionWindow.forEachSectionInAnyWindow(sy -> {
             if (sy > FarlandsConstant.MAX_CHUNK - 1 || sy < -FarlandsConstant.MAX_CHUNK) {
                 return;
             }
-            if (!SectionStage.isOrAfter(chunk, sy, SectionStage.NOISE)) {
+            if (!SectionStage.isOrAfter(chunk, sy, SectionStage.TERRAIN)) {
                 found[0] = true;
             }
         });
@@ -336,7 +336,7 @@ public final class GenQueue {
     }
 
     /**
-     * 扫描单个 chunk：已加载 LevelChunk 且窗口并集内有未 NOISE 的 section，或 surface 与 carvers
+     * 扫描单个 chunk：已加载 LevelChunk 且窗口并集内有未 TERRAIN 的 section，或 surface 与 carvers
      * 待处理，则 enqueueChunk，幂等。
      */
     private static boolean scanChunk(ServerLevel level, int cx, int cz) {
@@ -424,7 +424,7 @@ public final class GenQueue {
                 }
                 LIGHT_IN_FLIGHT.remove(key);
                 if (SectionStage.hasAnyGen(chunk)) {
-                    // 光照期间新 NOISE 未被播种覆盖，下一批。
+                    // 光照期间新 TERRAIN 未被播种覆盖，下一批。
                     notifyGenerated(chunk);
                 }
             });

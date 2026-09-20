@@ -13,7 +13,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
  * 取值顺序单值，即依赖顺序，比较用 {@code >=} ：
  *   0 UNPROCESSED  未处理
  *   1 BIOMES       群系已填
- *   2 NOISE        该段已 fill
+ *   2 TERRAIN      该段已 fill
  *   3 SURFACE      地表已应用
  *   4 CARVERS      雕刻已完成
  *   5 LIGHTED      光照已完成
@@ -22,7 +22,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
  * GenQueue 共用，属于 fsa 与 terrain 的共享数据面。本 port 不用 Fabric API，stage 由 fsa
  * 自己承载，即 chunkPos 到 sectionY 到 stage 的无装箱分段 map，全 port 只有这一份状态。
  *
- * 推进点。BIOMES 在 BiomeFiller，NOISE 在 GenTask 的 fill 之后，SURFACE 在 SurfaceFiller，
+ * 推进点。BIOMES 在 BiomeFiller，TERRAIN 在 GenTask 的 fill 之后，SURFACE 在 SurfaceFiller，
  * CARVERS 在 CarverFiller，LIGHTED 在 GenQueue.triggerLight 的 whenComplete 里由
  * promoteAllGenToLighted 一次升段。
  *
@@ -34,7 +34,7 @@ public final class SectionStage {
 
     public static final int UNPROCESSED = 0;
     public static final int BIOMES = 1;
-    public static final int NOISE = 2;
+    public static final int TERRAIN = 2;
     public static final int SURFACE = 3;
     public static final int CARVERS = 4;
     public static final int LIGHTED = 5;
@@ -77,24 +77,24 @@ public final class SectionStage {
     }
 
     /**
-     * 光照完成回调：该 chunk 全部 NOISE、SURFACE、CARVERS 升 LIGHTED。光照覆盖全 chunk，
+     * 光照完成回调：该 chunk 全部 TERRAIN、SURFACE、CARVERS 升 LIGHTED。光照覆盖全 chunk，
      * 含已地表与雕刻处理的 section，CHM.replaceAll 线程安全。
      */
     public static void promoteAllGenToLighted(LevelChunk chunk) {
         ConcurrentHashMap<Integer, Integer> m = STAGES.get(chunk.getPos().pack());
         if (m != null) {
-            m.replaceAll((k, v) -> (v == NOISE || v == SURFACE || v == CARVERS) ? LIGHTED : v);
+            m.replaceAll((k, v) -> (v == TERRAIN || v == SURFACE || v == CARVERS) ? LIGHTED : v);
         }
     }
 
-    /** 该 chunk 是否还有 NOISE 未 LIGHTED 的 section。光照完成后再检查，驱动下一批。 */
+    /** 该 chunk 是否还有 TERRAIN 未 LIGHTED 的 section。光照完成后再检查，驱动下一批。 */
     public static boolean hasAnyGen(LevelChunk chunk) {
         ConcurrentHashMap<Integer, Integer> m = STAGES.get(chunk.getPos().pack());
         if (m == null) {
             return false;
         }
         for (int v : m.values()) {
-            if (v == NOISE) {
+            if (v == TERRAIN) {
                 return true;
             }
         }

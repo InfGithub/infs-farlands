@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 /**
- * NoiseChunk 的成员访问器，供 AbstractNoiseFiller 与 NoiseChunkFiller 直调，避免反射。
+ * NoiseChunk 的成员访问器，供 AbstractTerrainFiller 与 NoiseChunkFiller 直调，避免反射。
  * 26.1.2 里 cellWidth、cellHeight、getInterpolatedState 是 protected，其余 cell 驱动方法是 public。
  */
 @Mixin(NoiseChunk.class)

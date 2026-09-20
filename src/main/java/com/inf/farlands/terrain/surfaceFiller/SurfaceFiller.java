@@ -4,7 +4,7 @@ import com.inf.farlands.FarlandsConstant;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.SurfaceSystem;
-import com.inf.farlands.terrain.system.SurfaceSystemRegistry;
+import com.inf.farlands.terrain.system.surface.SurfaceSystemRegistry;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import java.util.ArrayList;
@@ -19,11 +19,11 @@ import net.minecraft.world.level.chunk.LevelChunk;
  *
  * surface 依赖 fill 产出的高度图，必须紧跟 fill 且同 chunk 串行，由 GenTask 内保证。
  *
- * 触发：GenTask fill 完成后调 applySurfaceIfNeeded，新 fill 的 section 必然是 NOISE 未
- * SURFACE。补触发：读回 stage 为 NOISE 的 section 由 GenQueue.scanAndEnqueue 的
+ * 触发：GenTask fill 完成后调 applySurfaceIfNeeded，新 fill 的 section 必然是 TERRAIN 未
+ * SURFACE。补触发：读回 stage 为 TERRAIN 的 section 由 GenQueue.scanAndEnqueue 的
  * hasSurfacePending 检查入队重试。
  *
- * 失败策略：applySurface 异常由 GenTask 捕获，section 停留 NOISE，scanAndEnqueue 补触发重试。
+ * 失败策略：applySurface 异常由 GenTask 捕获，section 停留 TERRAIN，scanAndEnqueue 补触发重试。
  */
 public final class SurfaceFiller {
 
@@ -31,7 +31,7 @@ public final class SurfaceFiller {
     }
 
     /**
-     * 该 chunk 是否已有 NOISE 未 SURFACE 且非读回的 section。
+     * 该 chunk 是否已有 TERRAIN 未 SURFACE 且非读回的 section。
      * 全 chunk 检测，非窗口并集，预加载场景窗口为空时也能触发。
      */
     public static boolean hasSurfacePending(LevelChunk chunk) {
@@ -39,7 +39,7 @@ public final class SurfaceFiller {
             if (sy > FarlandsConstant.MAX_CHUNK - 1 || sy < -FarlandsConstant.MAX_CHUNK) {
                 continue;
             }
-            if (SectionStage.isOrAfter(chunk, sy, SectionStage.NOISE)
+            if (SectionStage.isOrAfter(chunk, sy, SectionStage.TERRAIN)
                     && !SectionStage.isOrAfter(chunk, sy, SectionStage.SURFACE)
                     && !SectionIO.isReading(chunk.getPos().pack(), sy)) {
                 return true;
@@ -58,7 +58,7 @@ public final class SurfaceFiller {
         // fill 已标脏的重复标无害，幂等。
         List<Integer> list = new ArrayList<>();
         for (Integer sy : ((WindowedChunk) chunk).windowedAllSections().keySet()) {
-            if (SectionStage.isOrAfter(chunk, sy, SectionStage.NOISE)
+            if (SectionStage.isOrAfter(chunk, sy, SectionStage.TERRAIN)
                     && !SectionStage.isOrAfter(chunk, sy, SectionStage.SURFACE)) {
                 list.add(sy);
             }

@@ -10,7 +10,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
  * 旧仓库这两处是 GenQueue 的直接调用，本 port 收口到本类，让 fsa 侧只依赖这里：
  *   isChunkBusy 对应 GenQueue.isChunkBusy。生成或光照在途时 fsa 不清理、不卸载写盘，属于保守跳过。
  *   enqueueGen 对应 GenQueue.enqueueChunk 与 GenQueue.enqueue。读回完成后把 chunk 或单个 section
- *               送入生成队列，由 isOrAfter(NOISE) 自动跳过已读回的 section。
+ *               送入生成队列，由 isOrAfter(TERRAIN) 自动跳过已读回的 section。
  */
 public final class TerrainHooks {
 

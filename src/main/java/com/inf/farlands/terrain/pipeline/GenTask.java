@@ -91,14 +91,14 @@ public final class GenTask {
                     throw e;
                 }
                 for (int sy = seg[0]; sy <= seg[1]; sy++) {
-                    SectionStage.setStage(chunk, sy, SectionStage.NOISE);
+                    SectionStage.setStage(chunk, sy, SectionStage.TERRAIN);
                     // fsa 脏标记：fill 在 genPool 线程写 section 内容，CHM 安全
                     ((WindowedChunk) chunk).markSectionDirty(sy);
                 }
             }
             // SURFACE 独立于 segments，fill 后紧跟，因为依赖 fill 产出的高度图，也覆盖读回
-            // stage 为 NOISE 与 surface 失败残留。失败不抛，section 停留 NOISE 由 scanAndEnqueue
-            // 补触发重试。不触发光照，promoteAllGenToLighted 会把 NOISE 升 LIGHTED，抹掉待处理标志。
+            // stage 为 TERRAIN 与 surface 失败残留。失败不抛，section 停留 TERRAIN 由 scanAndEnqueue
+            // 补触发重试。不触发光照，promoteAllGenToLighted 会把 TERRAIN 升 LIGHTED，抹掉待处理标志。
             try {
                 SurfaceFiller.applySurfaceIfNeeded(serverLevel, chunk);
             } catch (Exception e) {
@@ -132,7 +132,7 @@ public final class GenTask {
 
     /**
      * 收集该 chunk 的待生成 section 连续段，来源是窗口并集或预加载指定集合。
-     * 过滤已 NOISE 的 section 与可玩范围，clamp 段顶防溢出。
+     * 过滤已 TERRAIN 的 section 与可玩范围，clamp 段顶防溢出。
      * 窗口模式额外跳过读回在途的 section，读回完成回调会入队。
      */
     private List<int[]> collectSegments() {
@@ -144,7 +144,7 @@ public final class GenTask {
             if (sy > FarlandsConstant.MAX_CHUNK - 1 || sy < -FarlandsConstant.MAX_CHUNK) {
                 return;
             }
-            if (SectionStage.isOrAfter(chunk, sy, SectionStage.NOISE)) {
+            if (SectionStage.isOrAfter(chunk, sy, SectionStage.TERRAIN)) {
                 return;
             }
             if (preloadSections == null && SectionIO.isReading(chunk.getPos().pack(), sy)) {

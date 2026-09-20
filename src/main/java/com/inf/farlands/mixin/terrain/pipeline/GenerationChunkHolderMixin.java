@@ -156,7 +156,7 @@ public abstract class GenerationChunkHolderMixin {
                     Util.backgroundExecutor())
                     .thenAccept(v -> SectionIO.runOnMainThread(() -> {
                         // fsa 读回：先查磁盘窗口内 section，有则读回恢复数据、光照、stage 并补发。
-                        // 完成后才 enqueueChunk，collectSegments 的 isOrAfter(NOISE) 自动跳过已读回的，
+                        // 完成后才 enqueueChunk，collectSegments 的 isOrAfter(TERRAIN) 自动跳过已读回的，
                         // 磁盘没有的 section 正常入生成队列。
                         SectionLifecycle.loadChunkSections(levelchunk,
                                 () -> GenQueue.enqueueChunk(levelchunk));

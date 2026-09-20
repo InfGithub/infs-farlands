@@ -2,10 +2,10 @@ package com.inf.farlands;
 
 import java.util.Map;
 
-import com.inf.farlands.terrain.system.BiomeSystemType;
-import com.inf.farlands.terrain.system.CarverSystemType;
-import com.inf.farlands.terrain.system.SurfaceSystemType;
-import com.inf.farlands.terrain.system.TerrainSystemType;
+import com.inf.farlands.terrain.system.biome.BiomeSystemType;
+import com.inf.farlands.terrain.system.carver.CarverSystemType;
+import com.inf.farlands.terrain.system.surface.SurfaceSystemType;
+import com.inf.farlands.terrain.system.terrain.TerrainSystemType;
 import com.inf.farlands.util.config.Config;
 import com.inf.farlands.util.config.ConfigEntry;
 

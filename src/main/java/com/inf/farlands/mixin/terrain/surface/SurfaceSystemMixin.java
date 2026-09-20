@@ -39,7 +39,7 @@ import org.spongepowered.asm.mixin.Unique;
  * <p>
  * vanilla 的 {@code buildSurface} 列扫描下界取 {@code protoChunk.getMinY()}，而
  * {@code ChunkAccess.getMinY()} 返回的是 {@code levelHeightAccessor.getMinY()}——即维度下界
- * （-64）。本 port 的地形不按维度高度生成：{@code AbstractNoiseFiller} 按窗口段构造
+ * （-64）。本 port 的地形不按维度高度生成：{@code AbstractTerrainFiller} 按窗口段构造
  * {@code NoiseSettings}（{@code new NoiseSettings(minSectionY * 16, …)}），且
  * {@code DimensionType} 的 Y 界已放宽到 ±MAX_BLOCK，所以密度函数在 -64 以下继续产出、
  * fill 也照填。于是维度下界 -64 既不是地形下界，作为扫描下界就漏掉整片地形。
