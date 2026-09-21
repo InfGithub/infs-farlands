@@ -24,6 +24,9 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
  */
 public final class VanillaBiomeSystem implements BiomeSystem {
 
+    public VanillaBiomeSystem() {
+    }
+
     @Override
     public void fillBiomes(ServerLevel level, ChunkAccess chunk, int minSectionY, int maxSectionY) {
         ChunkGenerator gen = level.getChunkSource().getGenerator();

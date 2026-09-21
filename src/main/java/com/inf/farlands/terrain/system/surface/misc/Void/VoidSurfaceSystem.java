@@ -8,6 +8,9 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 /** VOID 地表系统：不做任何地表处理。状态推进与标脏由 SurfaceFiller 负责。 */
 public final class VoidSurfaceSystem implements SurfaceSystem {
 
+    public VoidSurfaceSystem() {
+    }
+
     @Override
     public void applySurface(ServerLevel level, ChunkAccess chunk) {
     }

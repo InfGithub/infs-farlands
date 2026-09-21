@@ -16,6 +16,9 @@ import net.minecraft.world.level.levelgen.PositionalRandomFactory;
 /** VOID 噪声系统：纯空气，什么都不生成。 */
 public final class VoidNoiseSystem implements NoiseSystem {
 
+    public VoidNoiseSystem() {
+    }
+
     @Override
     public DensityFunction createFinalDensity(NoiseRouter router) {
         // 恒负。aquifer 在 density <= 0 时走流体路径，配合空气 fluidPicker 得全空气。

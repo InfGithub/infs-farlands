@@ -8,6 +8,9 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 /** VOID 雕刻系统：不雕刻。状态推进、标脏与高度图 prime 由 CarverFiller 负责。 */
 public final class VoidCarverSystem implements CarverSystem {
 
+    public VoidCarverSystem() {
+    }
+
     @Override
     public void applyCarvers(ServerLevel level, ChunkAccess chunk) {
     }

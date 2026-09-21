@@ -2,6 +2,7 @@ package com.inf.farlands.terrain.terrainFiller;
 
 import com.inf.farlands.mixin.noise.NoiseChunkInvoker;
 import com.inf.farlands.terrain.BlockSystem;
+import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.terrain.NoiseSystem;
 import com.inf.farlands.terrain.TerrainSystem;
 
@@ -37,27 +38,18 @@ import net.minecraft.world.level.levelgen.blending.Blender;
  *
  * 并发约束：fillCellColumn 更新 chunk 共享的高度图，BitStorage 非线程安全，同 chunk 的 fill
  * 必须串行，由调用方保证，不同 chunk 并行。
+ *
+ * <p>维度系统与 generatorSettings 都从 fill 的 level 形参现取：填充器实例挂在 level 上，
+ * 拿它自己的 ServerLevel 就是该维度的，因此构造器不需要参数。
  */
 public abstract class AbstractTerrainFiller implements TerrainFiller {
 
-    protected final NoiseGeneratorSettings settings;
-    protected final Aquifer.FluidPicker fluidPicker;
-
-    protected AbstractTerrainFiller(NoiseGeneratorSettings settings) {
-        this.settings = settings;
-        this.fluidPicker = createFluidPicker(settings);
+    /** 填充器实例由 ServerLevel 持有，空参构造是将来按 level 传参的落点。 */
+    protected AbstractTerrainFiller() {
     }
 
-    /** 当前填充维度。NoiseChunk 注入按此分派。 */
-    protected abstract TerrainFillerContext.TerrainDimension dimension();
-
-    /** 当前维度的地形系统，提供 finalDensity、aquifer、fluidPicker 与 BlockSystem。 */
-    protected abstract TerrainSystem terrainSystem();
-
-    /**
-     * 维度 biome 查询侧信道设置。DensityFunction.compute 没有 level 引用，需要维度
-     * 上下文的系统由子类覆写本钩子。默认空，当前无子类覆写。
-     */
+    /** 维度 biome 查询侧信道设置。DensityFunction.compute 没有 level 引用，需要维度
+     * 上下文的系统由子类覆写本钩子。默认空，当前无子类覆写。 */
     protected void setContext(RandomState randomState, ServerLevel level) {
     }
 
@@ -74,34 +66,46 @@ public abstract class AbstractTerrainFiller implements TerrainFiller {
 
     /**
      * 构建维度范围 NoiseChunk，用全高 settings，即 SURFACE 阶段的入口。
-     * 调用方须已 set TerrainFillerContext。当前 system 全是 void，本方法无调用方。
+     *
+     * <p>自己收口 TerrainSystemContext：构造 NoiseChunk 时两处 @Redirect 要按当前系统替换
+     * finalDensity 与 aquifer，而构造器里没有 level，只能靠这个侧信道。维度从 level 推导，
+     * 调用方不必知道维度。
      */
     public static NoiseChunk createDimensionNoiseChunk(ServerLevel level, ChunkAccess chunk) {
-        NoiseBasedChunkGenerator gen = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
-        NoiseGeneratorSettings genSettings = gen.generatorSettings().value();
-        NoiseSettings orig = genSettings.noiseSettings();
-        RandomState randomState = level.getChunkSource().randomState();
-        Beardifier beardifier = Beardifier.forStructuresInChunk(level.structureManager(), chunk.getPos());
-        int cellW = QuartPos.toBlock(orig.noiseSizeHorizontal());
-        int cellCountXZ = 16 / cellW;
-        return new NoiseChunk(
-                cellCountXZ, randomState,
-                chunk.getPos().getMinBlockX(), chunk.getPos().getMinBlockZ(),
-                orig, beardifier, genSettings,
-                createFluidPicker(genSettings), Blender.empty());
+        TerrainSystemContext.set(((LevelSystems) level).terrainSystem());
+        try {
+            NoiseBasedChunkGenerator gen = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
+            NoiseGeneratorSettings genSettings = gen.generatorSettings().value();
+            NoiseSettings orig = genSettings.noiseSettings();
+            RandomState randomState = level.getChunkSource().randomState();
+            Beardifier beardifier = Beardifier.forStructuresInChunk(level.structureManager(), chunk.getPos());
+            int cellW = QuartPos.toBlock(orig.noiseSizeHorizontal());
+            int cellCountXZ = 16 / cellW;
+            return new NoiseChunk(
+                    cellCountXZ, randomState,
+                    chunk.getPos().getMinBlockX(), chunk.getPos().getMinBlockZ(),
+                    orig, beardifier, genSettings,
+                    createFluidPicker(genSettings), Blender.empty());
+        } finally {
+            TerrainSystemContext.clear();
+        }
     }
 
     /** 填一段 section 的地形，1 段对应 1 个 NoiseChunk。调用方保证同 chunk 串行。 */
     @Override
     public void fill(ServerLevel level, ChunkAccess chunk, int minSectionY, int maxSectionY) {
+        TerrainSystem sys = ((LevelSystems) level).terrainSystem();
+        NoiseBasedChunkGenerator gen = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
+        NoiseGeneratorSettings settings = gen.generatorSettings().value();
+        Aquifer.FluidPicker defaultPicker = createFluidPicker(settings);
         RandomState randomState = level.getChunkSource().randomState();
-        TerrainFillerContext.set(dimension());
+        TerrainSystemContext.set(sys);
         setContext(randomState, level);
         try {
             NoiseSettings orig = settings.noiseSettings();
             // 网格分派：NoiseSystem 可自定义 noiseSize，null 用维度 settings 默认。
             int[] ns = null;
-            if (terrainSystem() instanceof NoiseSystem n) {
+            if (sys instanceof NoiseSystem n) {
                 ns = n.noiseSize();
             }
             int noiseH = ns != null ? ns[0] : orig.noiseSizeHorizontal();
@@ -116,9 +120,9 @@ public abstract class AbstractTerrainFiller implements TerrainFiller {
 
             int cellCountXZ = 16 / cellW;
             // fluidPicker 按维度系统取，null 用本类默认。
-            Aquifer.FluidPicker picker = terrainSystem().createFluidPicker(settings);
+            Aquifer.FluidPicker picker = sys.createFluidPicker(settings);
             if (picker == null) {
-                picker = this.fluidPicker;
+                picker = defaultPicker;
             }
             NoiseChunk nc = new NoiseChunk(
                     cellCountXZ, randomState,
@@ -129,16 +133,17 @@ public abstract class AbstractTerrainFiller implements TerrainFiller {
             int minCellY = Mth.floorDiv(customNS.minY(), cellH);
             int cellCountY = Mth.floorDiv(customNS.height(), cellH);
 
-            doFillRangeWithNoiseChunk(nc, chunk, minSectionY, maxSectionY, minCellY, cellCountY);
+            doFillRangeWithNoiseChunk(nc, chunk, minSectionY, maxSectionY, minCellY, cellCountY, sys, settings);
         } finally {
             clearContext();
-            TerrainFillerContext.clear();
+            TerrainSystemContext.clear();
         }
     }
 
-    /** 填充循环，对齐原版 NoiseBasedChunkGenerator.doFill。 */
+    /** 填充循环，对齐原版 NoiseBasedChunkGenerator.doFill。sys 与 settings 由 fill 现取后透传。 */
     protected void doFillRangeWithNoiseChunk(NoiseChunk noisechunk, ChunkAccess chunk,
-            int minSection, int maxSection, int minCellY, int cellCountY) {
+            int minSection, int maxSection, int minCellY, int cellCountY,
+            TerrainSystem sys, NoiseGeneratorSettings settings) {
         Heightmap hmOcean = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR_WG);
         Heightmap hmSurface = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE_WG);
         ChunkPos cpos = chunk.getPos();
@@ -157,7 +162,7 @@ public abstract class AbstractTerrainFiller implements TerrainFiller {
             noisechunk.advanceCellX(cx);
             for (int cz = 0; cz < cellsZ; cz++) {
                 fillCellColumn(noisechunk, inv, chunk, minSection, maxSection, minCellY, cellCountY,
-                        ch, cw, cx, cz, baseX, baseZ, hmOcean, hmSurface, aquifer, mpos, cpos);
+                        ch, cw, cx, cz, baseX, baseZ, hmOcean, hmSurface, aquifer, mpos, cpos, sys, settings);
             }
             noisechunk.swapSlices();
         }
@@ -182,7 +187,9 @@ public abstract class AbstractTerrainFiller implements TerrainFiller {
             Heightmap hmSurface,
             Aquifer aquifer,
             BlockPos.MutableBlockPos mpos,
-            ChunkPos cpos) {
+            ChunkPos cpos,
+            TerrainSystem sys,
+            NoiseGeneratorSettings settings) {
         int cyStart = Math.max(0, minSection * 16 / ch - minCellY);
         int cyEnd = Math.min(cellCountY - 1, (maxSection * 16 + 15) / ch - minCellY);
         if (cyStart > cyEnd) {
@@ -211,7 +218,6 @@ public abstract class AbstractTerrainFiller implements TerrainFiller {
                         int rz = blockZ & 15;
                         noisechunk.updateForZ(blockZ, (double) kz / (double) cw);
                         // 块级填充优先，否则走密度链。
-                        TerrainSystem sys = terrainSystem();
                         BlockState bs = sys instanceof BlockSystem b ? b.fillBlock(blockX, blockY, blockZ) : null;
                         if (bs == null) {
                             bs = inv.farlands$getInterpolatedState();

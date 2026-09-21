@@ -6,7 +6,7 @@ import net.minecraft.world.level.levelgen.NoiseRouter;
 /**
  * 密度链地形系统，决定地形密度函数来源。
  *
- * 由 TerrainSystemRegistry 按维度配置选择并持有单例，当前只有 VOID。
+ * 由 TerrainSystemFactory 按 level 的维度在 ServerLevel 实例化时建一份，实例随 level 走，当前只有 VOID。
  * createFinalDensity 在 NoiseChunk 构造时调用，跑 genPool 或主线程，
  * 实现必须返回新实例，DensityFunction 带状态缓存，禁止共享。
  */

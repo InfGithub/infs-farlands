@@ -7,11 +7,9 @@ import com.inf.farlands.light.FarLandsLightEngine;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
+import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.terrain.carverFiller.CarverFiller;
 import com.inf.farlands.terrain.terrainFiller.TerrainFiller;
-import com.inf.farlands.terrain.terrainFiller.OverworldTerrainFiller;
-import com.inf.farlands.terrain.terrainFiller.TheEndTerrainFiller;
-import com.inf.farlands.terrain.terrainFiller.TheNetherTerrainFiller;
 import com.inf.farlands.terrain.surfaceFiller.SurfaceFiller;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
@@ -73,10 +71,6 @@ public final class GenQueue {
     /** 生成任务队列，按距最近玩家距离排序，近先生成。PriorityQueue 非线程安全，用 QUEUE 自身同步。 */
     private static final PriorityQueue<GenTask> QUEUE = new PriorityQueue<>(Comparator.comparingInt(GenTask::priority));
 
-    private static volatile OverworldTerrainFiller overworldFiller;
-    private static volatile TheNetherTerrainFiller netherFiller;
-    private static volatile TheEndTerrainFiller endFiller;
-
     // 规模在配置层已解析：显式值受 range(1,64) 约束，"auto" 由取值器算出，两者都 >= 1。
     // 这里不再解释 0 哨兵——哨兵已由 "auto" 取代。
     private static final ExecutorService POOL = Executors.newFixedThreadPool(FarlandsConfig.genWorkerThreads, r -> {
@@ -96,45 +90,9 @@ public final class GenQueue {
     private GenQueue() {
     }
 
-    /** 惰性取维度 TerrainFiller，来自该维度第一个 ServerLevel。 */
+    /** 取该 level 的 TerrainFiller。填充器实例随 level 走，由 LevelSystems 持有。 */
     static TerrainFiller filler(ServerLevel level) {
-        if (level.dimension() == Level.NETHER) {
-            TheNetherTerrainFiller f = netherFiller;
-            if (f == null) {
-                synchronized (GenQueue.class) {
-                    f = netherFiller;
-                    if (f == null) {
-                        f = TheNetherTerrainFiller.of(level);
-                        netherFiller = f;
-                    }
-                }
-            }
-            return f;
-        }
-        if (level.dimension() == Level.END) {
-            TheEndTerrainFiller f = endFiller;
-            if (f == null) {
-                synchronized (GenQueue.class) {
-                    f = endFiller;
-                    if (f == null) {
-                        f = TheEndTerrainFiller.of(level);
-                        endFiller = f;
-                    }
-                }
-            }
-            return f;
-        }
-        OverworldTerrainFiller f = overworldFiller;
-        if (f == null) {
-            synchronized (GenQueue.class) {
-                f = overworldFiller;
-                if (f == null) {
-                    f = OverworldTerrainFiller.of(level);
-                    overworldFiller = f;
-                }
-            }
-        }
-        return f;
+        return ((LevelSystems) level).terrainFiller();
     }
 
     // 主线程：触发入队

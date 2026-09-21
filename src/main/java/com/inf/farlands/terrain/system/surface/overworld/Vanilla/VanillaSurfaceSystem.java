@@ -2,7 +2,6 @@ package com.inf.farlands.terrain.system.surface.overworld.Vanilla;
 
 import com.inf.farlands.terrain.SurfaceSystem;
 import com.inf.farlands.terrain.terrainFiller.AbstractTerrainFiller;
-import com.inf.farlands.terrain.terrainFiller.TerrainFillerContext;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import net.minecraft.core.Holder;
@@ -31,37 +30,35 @@ import net.minecraft.world.level.levelgen.WorldGenerationContext;
  *
  * 幂等：surfaceRule.tryApply 只替换 defaultBlock 即 stone，已替换的草皮不会重替换，多段 fill
  * 后重复跑无害。NoiseChunk 经 chunk.getOrCreateNoiseChunk 缓存，走 vanilla 字段，首次构造后复用。
- * 跑在 genPool 线程，即 GenTask.execute 内，TerrainFillerContext 维度 set 与 clear。
+ * 跑在 genPool 线程，即 GenTask.execute 内；构造期的 TerrainSystemContext 由
+ * createDimensionNoiseChunk 自己收口，这里不再管。
  *
- * 无状态：全部局部构造，单例共享安全。
+ * 无状态：全部局部构造，实例随 level 走、可跨线程共享。
  */
 public final class VanillaSurfaceSystem implements SurfaceSystem {
+
+    public VanillaSurfaceSystem() {
+    }
 
     @Override
     public void applySurface(ServerLevel level, ChunkAccess chunk) {
         RandomState random = level.getChunkSource().randomState();
         NoiseBasedChunkGenerator gen = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
         NoiseGeneratorSettings settings = gen.generatorSettings().value();
-        // NoiseChunkMixin 的 @Redirect 按维度分派 finalDensity 与 aquifer，SURFACE 只用
-        // preliminarySurfaceLevel，但构造本身会走那两处 @Redirect
-        TerrainFillerContext.set(TerrainFillerContext.TerrainDimension.OVERWORLD);
-        try {
-            // 维度全高 NoiseChunk，经 getOrCreateNoiseChunk 缓存到 vanilla 字段
-            NoiseChunk nc = chunk.getOrCreateNoiseChunk(
-                    p -> AbstractTerrainFiller.createDimensionNoiseChunk(level, chunk));
-            Registry<Biome> biomes = level.registryAccess().lookupOrThrow(Registries.BIOME);
-            // 自定义 source 直查 section 的 4×4×4 biome 网格，绕开 clamp；seed 用
-            // obfuscateSeed(世界种子) 复刻 vanilla WorldGenRegion fiddle 语义
-            BiomeManager biomeManager = new BiomeManager(
-                    (qx, qy, qz) -> biomeAt(chunk, biomes, qx, qy, qz),
-                    BiomeManager.obfuscateSeed(level.getSeed()));
-            WorldGenerationContext context = new WorldGenerationContext(gen, chunk);
-            random.surfaceSystem().buildSurface(
-                    random, biomeManager, biomes, settings.useLegacyRandomSource(),
-                    context, chunk, nc, settings.surfaceRule());
-        } finally {
-            TerrainFillerContext.clear();
-        }
+        // 维度全高 NoiseChunk，经 getOrCreateNoiseChunk 缓存到 vanilla 字段。SURFACE 只用
+        // preliminarySurfaceLevel，但构造本身会走 NoiseChunkMixin 那两处 @Redirect
+        NoiseChunk nc = chunk.getOrCreateNoiseChunk(
+                p -> AbstractTerrainFiller.createDimensionNoiseChunk(level, chunk));
+        Registry<Biome> biomes = level.registryAccess().lookupOrThrow(Registries.BIOME);
+        // 自定义 source 直查 section 的 4×4×4 biome 网格，绕开 clamp；seed 用
+        // obfuscateSeed(世界种子) 复刻 vanilla WorldGenRegion fiddle 语义
+        BiomeManager biomeManager = new BiomeManager(
+                (qx, qy, qz) -> biomeAt(chunk, biomes, qx, qy, qz),
+                BiomeManager.obfuscateSeed(level.getSeed()));
+        WorldGenerationContext context = new WorldGenerationContext(gen, chunk);
+        random.surfaceSystem().buildSurface(
+                random, biomeManager, biomes, settings.useLegacyRandomSource(),
+                context, chunk, nc, settings.surfaceRule());
     }
 
     /** 直查 section biome 网格，quart 局部索引取 &3；section 不存在时 the_void 兜底。 */

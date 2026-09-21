@@ -23,6 +23,9 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
  */
 public final class VoidBiomeSystem implements BiomeSystem {
 
+    public VoidBiomeSystem() {
+    }
+
     @Override
     public void fillBiomes(ServerLevel level, ChunkAccess chunk, int minSectionY, int maxSectionY) {
         Holder<Biome> theVoid = level.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.THE_VOID);

@@ -3,15 +3,13 @@ package com.inf.farlands.terrain.surfaceFiller;
 import com.inf.farlands.FarlandsConstant;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
-import com.inf.farlands.terrain.SurfaceSystem;
-import com.inf.farlands.terrain.system.surface.SurfaceSystemRegistry;
+import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
@@ -53,7 +51,7 @@ public final class SurfaceFiller {
         if (!hasSurfacePending(chunk)) {
             return new int[0];
         }
-        systemFor(level).applySurface(level, chunk);
+        ((LevelSystems) level).surfaceSystem().applySurface(level, chunk);
         // surface 修改方块，读回的 section 未标脏，不标就会写盘丢 surface 结果。
         // fill 已标脏的重复标无害，幂等。
         List<Integer> list = new ArrayList<>();
@@ -71,16 +69,5 @@ public final class SurfaceFiller {
             ((WindowedChunk) chunk).markSectionDirty(sy);
         }
         return surfaced;
-    }
-
-    /** 按维度 id 分派。Level.NETHER 与 Level.END 是 ResourceKey，不是枚举，不能用 switch。 */
-    private static SurfaceSystem systemFor(ServerLevel level) {
-        if (level.dimension() == Level.NETHER) {
-            return SurfaceSystemRegistry.getTheNether();
-        }
-        if (level.dimension() == Level.END) {
-            return SurfaceSystemRegistry.getTheEnd();
-        }
-        return SurfaceSystemRegistry.getOverworld();
     }
 }

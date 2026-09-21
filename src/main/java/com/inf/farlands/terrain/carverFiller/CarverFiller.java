@@ -5,8 +5,7 @@ import com.inf.farlands.light.IColumnMasks;
 import com.inf.farlands.mixin.noise.HeightmapInvoker;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
-import com.inf.farlands.terrain.CarverSystem;
-import com.inf.farlands.terrain.system.carver.CarverSystemRegistry;
+import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import java.util.ArrayList;
@@ -17,7 +16,6 @@ import java.util.List;
 import java.util.Set;
 
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
@@ -59,7 +57,7 @@ public final class CarverFiller {
         if (!hasCarversPending(chunk)) {
             return new int[0];
         }
-        systemFor(level).applyCarvers(level, chunk);
+        ((LevelSystems) level).carverSystem().applyCarvers(level, chunk);
         // carve 会修改方块，必须标脏，否则写盘丢雕刻结果。fill 与 surface 已标脏的重复标无害。
         List<Integer> list = new ArrayList<>();
         for (Integer sy : ((WindowedChunk) chunk).windowedAllSections().keySet()) {
@@ -79,17 +77,6 @@ public final class CarverFiller {
             primeFinalHeightmaps(chunk);
         }
         return carved;
-    }
-
-    /** 按维度 id 分派。Level.NETHER 与 Level.END 是 ResourceKey，不是枚举，不能用 switch。 */
-    private static CarverSystem systemFor(ServerLevel level) {
-        if (level.dimension() == Level.NETHER) {
-            return CarverSystemRegistry.getTheNether();
-        }
-        if (level.dimension() == Level.END) {
-            return CarverSystemRegistry.getTheEnd();
-        }
-        return CarverSystemRegistry.getOverworld();
     }
 
     // 自研最终高度图 prime，规避 vanilla primeHeightmaps 的极端 Y 扫描炸弹

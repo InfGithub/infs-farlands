@@ -2,11 +2,10 @@ package com.inf.farlands.terrain.biomeFiller;
 
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.BiomeSystem;
-import com.inf.farlands.terrain.system.biome.BiomeSystemRegistry;
+import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.util.window.EntitySectionWindow;
 
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
@@ -25,30 +24,19 @@ public final class BiomeFiller {
 
     /** 短路完成：窗口并集内每 section 填 biome 并升 BIOMES。后台线程。 */
     public static void fillChunkBiomes(ServerLevel level, LevelChunk chunk) {
-        BiomeSystem sys = systemFor(level);
+        BiomeSystem sys = ((LevelSystems) level).biomeSystem();
         EntitySectionWindow.forEachSectionInAnyWindow(sy -> seedSection(level, chunk, sys, sy));
     }
 
     /** 窗口滑入补触发：单 section，stage 小于 BIOMES 才填。主线程。 */
     public static void fillSectionBiomes(ServerLevel level, LevelChunk chunk, int sectionY) {
         if (SectionStage.getStage(chunk, sectionY) < SectionStage.BIOMES) {
-            seedSection(level, chunk, systemFor(level), sectionY);
+            seedSection(level, chunk, ((LevelSystems) level).biomeSystem(), sectionY);
         }
     }
 
     private static void seedSection(ServerLevel level, LevelChunk chunk, BiomeSystem sys, int sectionY) {
         sys.fillBiomes(level, chunk, sectionY, sectionY);
         SectionStage.setStage(chunk, sectionY, SectionStage.BIOMES);
-    }
-
-    /** 按维度 id 分派。Level.NETHER 与 Level.END 是 ResourceKey，不是枚举，不能用 switch。 */
-    private static BiomeSystem systemFor(ServerLevel level) {
-        if (level.dimension() == Level.NETHER) {
-            return BiomeSystemRegistry.getTheNether();
-        }
-        if (level.dimension() == Level.END) {
-            return BiomeSystemRegistry.getTheEnd();
-        }
-        return BiomeSystemRegistry.getOverworld();
     }
 }

@@ -3,7 +3,6 @@ package com.inf.farlands.terrain.system.carver.overworld.Vanilla;
 import com.inf.farlands.terrain.CarverSystem;
 import com.inf.farlands.terrain.CarvingMaskStorage;
 import com.inf.farlands.terrain.terrainFiller.AbstractTerrainFiller;
-import com.inf.farlands.terrain.terrainFiller.TerrainFillerContext;
 
 import java.util.function.Function;
 
@@ -42,65 +41,62 @@ import net.minecraft.world.level.levelgen.carver.ConfiguredWorldCarver;
  * 天然不会被雕。carve 只替换 config.replaceable 即 stone，替换成什么由 aquifer.computeSubstance
  * 决定，空气或水，y ≤ lavaLevel 时填岩浆。
  *
- * 无状态：全部局部构造 CarvingContext/NoiseChunk/WorldgenRandom，单例共享安全。
+ * 无状态：全部局部构造 CarvingContext/NoiseChunk/WorldgenRandom，实例随 level 走、可跨线程共享；
+ * 构造期的 TerrainSystemContext 由 createDimensionNoiseChunk 自己收口。
  */
 public final class VanillaCarverSystem implements CarverSystem {
 
     /** 起点网格半径，vanilla applyCarvers 硬编码 8。 */
     private static final int GRID_RADIUS = 8;
 
+    public VanillaCarverSystem() {
+    }
+
     @Override
     public void applyCarvers(ServerLevel level, ChunkAccess chunk) {
         RandomState random = level.getChunkSource().randomState();
         NoiseBasedChunkGenerator gen = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
         NoiseGeneratorSettings settings = gen.generatorSettings().value();
-        // NoiseChunkMixin 的 @Redirect 按维度分派 finalDensity 与 aquifer，carver 只用 aquifer，
-        // 但维度全高 NoiseChunk 的构造会走那两处 @Redirect
-        TerrainFillerContext.set(TerrainFillerContext.TerrainDimension.OVERWORLD);
-        try {
-            // 维度全高 NoiseChunk，其 aquifer 网格覆盖 carver 带，fill 的窗口段 NoiseChunk 不覆盖
-            NoiseChunk nc = chunk.getOrCreateNoiseChunk(
-                    p -> AbstractTerrainFiller.createDimensionNoiseChunk(level, chunk));
-            Aquifer aquifer = nc.aquifer();
-            CarvingContext carvingContext = new CarvingContext(
-                    gen, level.registryAccess(), chunk.getHeightAccessorForGeneration(),
-                    nc, random, settings.surfaceRule());
-            CarvingMask carvingMask = ((CarvingMaskStorage) chunk).getOrCreateCarvingMask();
+        // 维度全高 NoiseChunk，其 aquifer 网格覆盖 carver 带，fill 的窗口段 NoiseChunk 不覆盖
+        NoiseChunk nc = chunk.getOrCreateNoiseChunk(
+                p -> AbstractTerrainFiller.createDimensionNoiseChunk(level, chunk));
+        Aquifer aquifer = nc.aquifer();
+        CarvingContext carvingContext = new CarvingContext(
+                gen, level.registryAccess(), chunk.getHeightAccessorForGeneration(),
+                nc, random, settings.surfaceRule());
+        CarvingMask carvingMask = ((CarvingMaskStorage) chunk).getOrCreateCarvingMask();
 
-            // biomeAccessor 直接查 biomeSource，供 carveBlock 的表面 dirt 换草皮 topMaterial 用，
-            // 不依赖 chunk section biome，起点可能尚未生成
-            Function<BlockPos, Holder<Biome>> biomeAccessor = pos -> gen.getBiomeSource()
-                    .getNoiseBiome(QuartPos.fromBlock(pos.getX()), QuartPos.fromBlock(pos.getY()),
-                            QuartPos.fromBlock(pos.getZ()), random.sampler());
+        // biomeAccessor 直接查 biomeSource，供 carveBlock 的表面 dirt 换草皮 topMaterial 用，
+        // 不依赖 chunk section biome，起点可能尚未生成
+        Function<BlockPos, Holder<Biome>> biomeAccessor = pos -> gen.getBiomeSource()
+                .getNoiseBiome(QuartPos.fromBlock(pos.getX()), QuartPos.fromBlock(pos.getY()),
+                        QuartPos.fromBlock(pos.getZ()), random.sampler());
 
-            ChunkPos target = chunk.getPos();
-            WorldgenRandom worldgenrandom = new WorldgenRandom(
-                    new LegacyRandomSource(RandomSupport.generateUniqueSeed()));
-            for (int j = -GRID_RADIUS; j <= GRID_RADIUS; j++) {
-                for (int k = -GRID_RADIUS; k <= GRID_RADIUS; k++) {
-                    ChunkPos start = new ChunkPos(target.x() + j, target.z() + k);
-                    // quart 用 fromSection，等于 start*4，而非 fromBlock(getMinBlockX())：
-                    // getMinBlockX 被本 port 的饱和 @Overwrite 覆盖，边界 chunk 会错位
-                    Holder<Biome> biome = gen.getBiomeSource().getNoiseBiome(
-                            QuartPos.fromSection(start.x()), 0, QuartPos.fromSection(start.z()),
-                            random.sampler());
-                    // 26.1.2 把 ChunkGenerator.getBiomeGenerationSettings 标了 @Deprecated，而它对
-                    // NoiseBasedChunkGenerator 的实现就是 biome.value().getGenerationSettings()
-                    BiomeGenerationSettings biomeGen = biome.value().getGenerationSettings();
-                    int l = 0;
-                    for (Holder<ConfiguredWorldCarver<?>> holder : biomeGen.getCarvers()) {
-                        ConfiguredWorldCarver<?> carver = holder.value();
-                        worldgenrandom.setLargeFeatureSeed(level.getSeed() + l, start.x(), start.z());
-                        if (carver.isStartChunk(worldgenrandom)) {
-                            carver.carve(carvingContext, chunk, biomeAccessor, worldgenrandom,
-                                    aquifer, start, carvingMask);
-                        }
-                        l++;
+        ChunkPos target = chunk.getPos();
+        WorldgenRandom worldgenrandom = new WorldgenRandom(
+                new LegacyRandomSource(RandomSupport.generateUniqueSeed()));
+        for (int j = -GRID_RADIUS; j <= GRID_RADIUS; j++) {
+            for (int k = -GRID_RADIUS; k <= GRID_RADIUS; k++) {
+                ChunkPos start = new ChunkPos(target.x() + j, target.z() + k);
+                // quart 用 fromSection，等于 start*4，而非 fromBlock(getMinBlockX())：
+                // getMinBlockX 被本 port 的饱和 @Overwrite 覆盖，边界 chunk 会错位
+                Holder<Biome> biome = gen.getBiomeSource().getNoiseBiome(
+                        QuartPos.fromSection(start.x()), 0, QuartPos.fromSection(start.z()),
+                        random.sampler());
+                // 26.1.2 把 ChunkGenerator.getBiomeGenerationSettings 标了 @Deprecated，而它对
+                // NoiseBasedChunkGenerator 的实现就是 biome.value().getGenerationSettings()
+                BiomeGenerationSettings biomeGen = biome.value().getGenerationSettings();
+                int l = 0;
+                for (Holder<ConfiguredWorldCarver<?>> holder : biomeGen.getCarvers()) {
+                    ConfiguredWorldCarver<?> carver = holder.value();
+                    worldgenrandom.setLargeFeatureSeed(level.getSeed() + l, start.x(), start.z());
+                    if (carver.isStartChunk(worldgenrandom)) {
+                        carver.carve(carvingContext, chunk, biomeAccessor, worldgenrandom,
+                                aquifer, start, carvingMask);
                     }
+                    l++;
                 }
             }
-        } finally {
-            TerrainFillerContext.clear();
         }
     }
 }

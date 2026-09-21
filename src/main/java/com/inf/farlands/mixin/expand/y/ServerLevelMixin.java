@@ -1,5 +1,16 @@
 package com.inf.farlands.mixin.expand.y;
 
+import com.inf.farlands.terrain.BiomeSystem;
+import com.inf.farlands.terrain.CarverSystem;
+import com.inf.farlands.terrain.LevelSystems;
+import com.inf.farlands.terrain.SurfaceSystem;
+import com.inf.farlands.terrain.TerrainSystem;
+import com.inf.farlands.terrain.system.biome.BiomeSystemFactory;
+import com.inf.farlands.terrain.system.carver.CarverSystemFactory;
+import com.inf.farlands.terrain.system.surface.SurfaceSystemFactory;
+import com.inf.farlands.terrain.system.terrain.TerrainSystemFactory;
+import com.inf.farlands.terrain.terrainFiller.TerrainFiller;
+import com.inf.farlands.terrain.terrainFiller.TerrainFillerFactory;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import it.unimi.dsi.fastutil.ints.IntArraySet;
@@ -24,15 +35,71 @@ import net.minecraft.world.level.material.FluidState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ServerLevel.class)
-public abstract class ServerLevelMixin {
+public abstract class ServerLevelMixin implements LevelSystems {
 
     @Shadow
     private List<ServerPlayer> players;
 
     @Shadow
     public abstract void tickPrecipitation(BlockPos blockPos);
+
+    // ---- 每 level 一套地形相关系统 ----
+
+    @Unique
+    private TerrainSystem farlandsTerrainSystem;
+    @Unique
+    private BiomeSystem farlandsBiomeSystem;
+    @Unique
+    private SurfaceSystem farlandsSurfaceSystem;
+    @Unique
+    private CarverSystem farlandsCarverSystem;
+    @Unique
+    private TerrainFiller farlandsTerrainFiller;
+
+    /**
+     * 构造末尾建系统。此处 dimension() 已可用（父类构造器里赋值），getChunkSource() 也已建，
+     * 因此工厂取维度配置、filler 取 generatorSettings 都成立。
+     */
+    @Inject(method = "<init>(Lnet/minecraft/server/MinecraftServer;Ljava/util/concurrent/Executor;Lnet/minecraft/world/level/storage/LevelStorageSource$LevelStorageAccess;Lnet/minecraft/world/level/storage/ServerLevelData;Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/world/level/dimension/LevelStem;ZJLjava/util/List;Z)V", at = @At("RETURN"))
+    private void farlands$createSystems(CallbackInfo ci) {
+        ServerLevel level = (ServerLevel) (Object) this;
+        this.farlandsTerrainSystem = TerrainSystemFactory.create(level.dimension());
+        this.farlandsBiomeSystem = BiomeSystemFactory.create(level.dimension());
+        this.farlandsSurfaceSystem = SurfaceSystemFactory.create(level.dimension());
+        this.farlandsCarverSystem = CarverSystemFactory.create(level.dimension());
+        this.farlandsTerrainFiller = TerrainFillerFactory.create(level);
+    }
+
+    @Override
+    public TerrainSystem terrainSystem() {
+        return this.farlandsTerrainSystem;
+    }
+
+    @Override
+    public BiomeSystem biomeSystem() {
+        return this.farlandsBiomeSystem;
+    }
+
+    @Override
+    public SurfaceSystem surfaceSystem() {
+        return this.farlandsSurfaceSystem;
+    }
+
+    @Override
+    public CarverSystem carverSystem() {
+        return this.farlandsCarverSystem;
+    }
+
+    @Override
+    public TerrainFiller terrainFiller() {
+        return this.farlandsTerrainFiller;
+    }
 
     @SuppressWarnings("resource")
     @Overwrite
