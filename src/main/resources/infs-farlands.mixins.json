@@ -62,6 +62,7 @@
     "terrain.surface.SurfaceSystemMixin",
     "terrain.surface.SurfaceRules$ContextInvoker",
     "terrain.surface.SurfaceRules$SurfaceRuleInvoker",
+    "fix.audio.ClientboundSoundPacketMixin",
     "fix.xz.AABBMixin",
     "fix.xz.BoundingBoxMixin",
     "fix.xz.ChunkGeneratorMixin",
