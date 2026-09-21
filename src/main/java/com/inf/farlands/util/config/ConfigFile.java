@@ -1,16 +1,17 @@
 package com.inf.farlands.util.config;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.internal.Streams;
+import com.google.gson.stream.JsonWriter;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.io.StringWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,7 +27,8 @@ import java.util.Map;
  * "note": { "<source>": "<text>", ... }, // 注释来源 -> 注释
  * "lastWriteBackTime": <unixSeconds>, // 最后回写时间戳
  * "settings": {
- * "<entryName>": { "note": { ... }, "value": <literal|keyword>, "default": <literal|keyword>,
+ * "<entryName>": { "note": { ... }, "value": <literal|keyword>, "default":
+ * <literal|keyword>,
  * "allow": { ... } },
  * ...
  * }
@@ -43,7 +45,8 @@ import java.util.Map;
  * }
  * }</pre>
  *
- * <p>{@code min} / {@code max} / {@code enums} / {@code keyword} 都是<b>信息字段</b>，供手改配置时
+ * <p>{@code min} / {@code max} / {@code enums} / {@code keyword}
+ * 都是<b>信息字段</b>，供手改配置时
  * 对照，读盘期不参与校验：真正的判定是边界生成的约束与 {@code Enum.valueOf}。一个子键都没有时
  * {@code allow} 整体不写。
  *
@@ -57,9 +60,8 @@ import java.util.Map;
  */
 public final class ConfigFile {
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting()
-            .disableHtmlEscaping()
-            .create();
+    /** 缩进用四个空格。 */
+    private static final String INDENT = "    ";
     private static final String NOTE = "note";
     private static final String LAST_WRITE_BACK_TIME = "lastWriteBackTime";
     private static final String SETTINGS = "settings";
@@ -78,7 +80,8 @@ public final class ConfigFile {
      * 加载配置文件，若不存在则生成默认；若存在则读值覆盖，漂移或缺键则回写。
      * 空文件 / 纯空白 / 字面量 null 视为无配置 -> 重新生成默认。
      *
-     * <p>结构不符则抛异常，不静默重置：JSON 语法错、根不是对象、settings 或条目不是对象、
+     * <p>
+     * 结构不符则抛异常，不静默重置：JSON 语法错、根不是对象、settings 或条目不是对象、
      * 条目缺 value、allow 及 allow.keyword / allow.enums 形状不符，都是这份文件不是本配置的情形。
      * 键缺失（settings、lastWriteBackTime、note、default、allow）与代码侧声明漂移则照旧补写。
      */
@@ -170,6 +173,18 @@ public final class ConfigFile {
         }
         if (dirty2[0]) {
             write(file, root, fileNotes, entries, root.get(LAST_WRITE_BACK_TIME).getAsLong());
+        } else {
+            // 内容没有漂移，但磁盘上的字节可能仍不是本 writer 会写出的形状，例如缩进被改过。
+            // 这份文件只有一个写入者，所以「格式规范」等价于「磁盘字节 == 现在会写出的字节」。
+            boolean same;
+            try {
+                same = Files.readString(file, StandardCharsets.UTF_8).equals(format(root));
+            } catch (IOException e) {
+                same = true; // 读不回来就不动它，交给下一次读盘
+            }
+            if (!same) {
+                write(file, root, fileNotes, entries, root.get(LAST_WRITE_BACK_TIME).getAsLong());
+            }
         }
     }
 
@@ -195,7 +210,8 @@ public final class ConfigFile {
     /**
      * 全量重写。
      *
-     * <p>{@code existingRoot} 是已解析的旧文件（文件不存在或损坏时传 null），只用于让 {@code note}
+     * <p>
+     * {@code existingRoot} 是已解析的旧文件（文件不存在或损坏时传 null），只用于让 {@code note}
      * 里的额外来源键活下来：写入是覆盖式的，声明键被更新，其余键原样保留。
      */
     private static void write(Path file, JsonObject existingRoot, Map<String, String> fileNotes,
@@ -228,11 +244,40 @@ public final class ConfigFile {
         try {
             Files.createDirectories(file.getParent());
             try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-                GSON.toJson(root, w);
+                JsonWriter jw = new JsonWriter(w);
+                jw.setIndent(INDENT);
+                jw.setHtmlSafe(false);
+                Streams.write(root, jw);
+                jw.close();
             }
         } catch (IOException ex) {
             throw new RuntimeException("Failed to write config %s: %s".formatted(file, ex.getMessage()), ex);
         }
+    }
+
+    /**
+     * 把一棵树渲染成落盘字节。{@link #write} 与漂移比较共用同一个渲染路径，
+     * 两者分头实现会让「格式已规范」这个判据失真。
+     *
+     * <p>
+     * 不用 {@code GsonBuilder.setPrettyPrinting()}：Gson 2.10.1 的缩进固定两个空格，
+     * 没有可定制的策略类。{@code toJson} 内部也只是 {@code Streams.write} 加一个 JsonWriter，
+     * 所以这里等价，只是缩进由 {@link #INDENT} 给。{@code setHtmlSafe(false)} 对应
+     * {@code disableHtmlEscaping}；不设 {@code setSerializeNulls} 即保持其默认的丢弃 null。
+     */
+    private static String format(JsonElement root) {
+        StringWriter sw = new StringWriter();
+        try {
+            JsonWriter jw = new JsonWriter(sw);
+            jw.setIndent(INDENT);
+            jw.setHtmlSafe(false);
+            Streams.write(root, jw);
+            jw.close();
+        } catch (IOException e) {
+            // StringWriter 不抛 IOException，此时只可能是树里出现了非法结构
+            throw new RuntimeException("Failed to render config JSON", e);
+        }
+        return sw.toString();
     }
 
     // 值序列化
@@ -265,7 +310,8 @@ public final class ConfigFile {
      * 组装该条目的 {@code allow}。没有子键时返回 null，调用方据此不写该键——
      * 写空对象会让 {@link #align} 每次都判漂移，文件永久重写。
      *
-     * <p>{@code oldObj} 是文件里的旧条目，只用于让关键字 note 的额外来源键活下来。
+     * <p>
+     * {@code oldObj} 是文件里的旧条目，只用于让关键字 note 的额外来源键活下来。
      */
     private static JsonObject allowJson(ConfigEntry<?> entry, JsonObject oldObj) {
         if (!hasAllow(entry)) {
