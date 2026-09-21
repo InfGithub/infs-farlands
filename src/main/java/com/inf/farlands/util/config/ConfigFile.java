@@ -16,7 +16,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.function.Supplier;
 
 /**
  * 配置文件读写。
@@ -27,23 +26,34 @@ import java.util.function.Supplier;
  * "note": { "<source>": "<text>", ... }, // 注释来源 -> 注释
  * "lastWriteBackTime": <unixSeconds>, // 最后回写时间戳
  * "settings": {
- * "<entryName>": { "note": { ... }, "value": <literal|"auto">, "default": <literal|"auto">,
- * "range": { "min": <lo>, "max": <hi> }, "enums": [ ... ] },
+ * "<entryName>": { "note": { ... }, "value": <literal|keyword>, "default": <literal|keyword>,
+ * "allow": { ... } },
  * ...
  * }
  * }
  * }</pre>
  *
- * <p>{@code "enums"} 只出现在枚举条目上，列出该枚举当前的全部取值；{@code "range"} 只出现在
- * 声明了范围的条目上，列出该范围。两者都是<b>信息字段</b>，供手改配置时对照，读盘期不参与校验。
+ * <p>{@code allow} 承载该条目值域与替代取值的全部声明，子键各自可选：
+ * <pre>{@code
+ * "allow": {
+ * "min": <lo>, // 只声明下界时仅此键
+ * "max": <hi>, // 只声明上界时仅此键
+ * "enums": [ ... ], // 只出现在枚举条目上，列出该枚举当前的全部取值
+ * "keyword": [ { "value": <关键字>, "note": { ... } } ] // 该条目声明的全部关键字
+ * }
+ * }</pre>
  *
- * <p>{@code "value"} 与 {@code "default"} 除字面量外还接受保留字面量 {@code "auto"}；写 {@code "auto"}
- * 时由该条目的 auto 取值器在读盘期求值一次。没有取值器却写 {@code "auto"} 会抛异常。
+ * <p>{@code min} / {@code max} / {@code enums} / {@code keyword} 都是<b>信息字段</b>，供手改配置时
+ * 对照，读盘期不参与校验：真正的判定是边界生成的约束与 {@code Enum.valueOf}。一个子键都没有时
+ * {@code allow} 整体不写。
+ *
+ * <p>{@code "value"} 与 {@code "default"} 除字面量外还接受该条目已声明的关键字名；命中时由该
+ * 关键字的取值器在读盘期求值一次。没声明过的字符串不会被当作关键字。
  *
  * <p>回写一致性：`load` 会把下列漂移都标脏并触发一次全量重写——{@code default} 与代码声明不符、
- * {@code enums}/{@code range} 与代码声明不符、文件里残留了代码侧已不存在的 {@code enums}/{@code range}
- * 键、以及 {@code note} 里由 {@code comment(...)} 声明的来源键与声明不符。{@code note} 的额外键
- * （代码没声明的来源）不参与比较，也不会被删：重写时是覆盖式写入声明键。
+ * {@code allow} 与代码声明不符、以及条目层与关键字层 {@code note} 里由 {@code comment(...)} 声明的
+ * 来源键与声明不符。{@code note} 的额外键（代码没声明的来源）不参与比较，也不会被删：
+ * 重写时是覆盖式写入声明键。
  */
 public final class ConfigFile {
 
@@ -55,15 +65,22 @@ public final class ConfigFile {
     private static final String SETTINGS = "settings";
     private static final String VALUE = "value";
     private static final String DEFAULT = "default";
+    private static final String ALLOW = "allow";
+    private static final String MIN = "min";
+    private static final String MAX = "max";
     private static final String ENUMS = "enums";
-    private static final String RANGE = "range";
+    private static final String KEYWORD = "keyword";
 
     private ConfigFile() {
     }
 
     /**
      * 加载配置文件，若不存在则生成默认；若存在则读值覆盖，漂移或缺键则回写。
-     * 空文件 / 纯空白视为无配置 -> 重新生成默认。
+     * 空文件 / 纯空白 / 字面量 null 视为无配置 -> 重新生成默认。
+     *
+     * <p>结构不符则抛异常，不静默重置：JSON 语法错、根不是对象、settings 或条目不是对象、
+     * 条目缺 value、allow 及 allow.keyword / allow.enums 形状不符，都是这份文件不是本配置的情形。
+     * 键缺失（settings、lastWriteBackTime、note、default、allow）与代码侧声明漂移则照旧补写。
      */
     public static void load(Path file, Map<String, String> fileNotes,
             Map<String, ConfigEntry<?>> entries) {
@@ -72,17 +89,25 @@ public final class ConfigFile {
             write(file, null, fileNotes, entries, System.currentTimeMillis() / 1000L);
             return;
         }
-        JsonObject root;
+        JsonElement parsed;
         try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-            root = JsonParser.parseReader(r).getAsJsonObject();
+            parsed = JsonParser.parseReader(r);
         } catch (com.google.gson.JsonParseException e) {
-            // 空文件 / 非法 JSON：视为无配置，重新生成默认。非空但损坏的 JSON 也走这里重置。
-            applyDefaults(entries);
-            write(file, null, fileNotes, entries, System.currentTimeMillis() / 1000L);
-            return;
+            // 非法 JSON 语法即结构错，不重置：静默重置会把用户手改的全部内容丢掉
+            throw new RuntimeException("Malformed JSON in config %s: %s".formatted(file, e.getMessage()), e);
         } catch (IOException e) {
             throw new RuntimeException("Failed to read config %s: %s".formatted(file, e.getMessage()), e);
         }
+        if (parsed.isJsonNull()) {
+            applyDefaults(entries);
+            write(file, null, fileNotes, entries, System.currentTimeMillis() / 1000L);
+            return;
+        }
+        if (!parsed.isJsonObject()) {
+            throw new RuntimeException(
+                    "Config %s: root must be a JSON object, got %s".formatted(file, parsed));
+        }
+        JsonObject root = parsed.getAsJsonObject();
 
         boolean[] dirty = { false };
         JsonObject settings = ensureSettings(root, file, dirty);
@@ -91,13 +116,19 @@ public final class ConfigFile {
             return; // 结构缺失重建后直接落盘，避免重复写
         }
 
-        // 读每个注册项：存在->校验类型与范围并覆盖，同时对齐 default/enums/range/note；缺失->补默认
+        // 读每个注册项：存在->校验类型与值域并覆盖，同时对齐 default/allow/note；缺失->补默认
         boolean[] dirty2 = { false };
         for (Map.Entry<String, ConfigEntry<?>> e : entries.entrySet()) {
             String name = e.getKey();
             ConfigEntry<?> entry = e.getValue();
             if (settings.has(name)) {
+                if (!settings.get(name).isJsonObject()) {
+                    throw new RuntimeException(
+                            "Config %s entry '%s': must be a JSON object, got %s"
+                                    .formatted(file, name, settings.get(name)));
+                }
                 JsonObject obj = settings.getAsJsonObject(name);
+                validateAllowShape(obj, name, file);
                 if (!obj.has(VALUE)) {
                     throw new RuntimeException("Config entry '%s' missing 'value' in %s".formatted(name, file));
                 }
@@ -106,38 +137,32 @@ public final class ConfigFile {
                 if (align(obj, DEFAULT, defaultValueJson(entry))) {
                     dirty2[0] = true;
                 }
-                if (entry.type().isEnum()) {
-                    if (align(obj, ENUMS, enumArray(entry.type()))) {
+                // allow 整体替换：代码侧已不存在的子键随之消失，不需要逐个清残留
+                if (hasAllow(entry)) {
+                    if (align(obj, ALLOW, allowJson(entry, obj))) {
                         dirty2[0] = true;
                     }
-                } else if (obj.has(ENUMS)) {
-                    obj.remove(ENUMS); // 代码侧已不是枚举，残留键要清掉
+                } else if (obj.has(ALLOW)) {
+                    obj.remove(ALLOW); // 代码侧已无任何值域声明，残留键要清掉
                     dirty2[0] = true;
                 }
-                if (entry.range() != null) {
-                    if (align(obj, RANGE, rangeObject(entry.range()))) {
-                        dirty2[0] = true;
-                    }
-                } else if (obj.has(RANGE)) {
-                    obj.remove(RANGE); // 代码侧已无范围，残留键要清掉
-                    dirty2[0] = true;
-                }
-                if (noteDrift(obj, entry)) {
+                if (noteDrift(obj, entry.notes())) {
                     mergeNotesInto(obj, entry.notes());
+                    dirty2[0] = true;
+                }
+                if (keywordNoteDrift(obj, entry)) {
                     dirty2[0] = true;
                 }
             } else {
                 JsonObject obj = new JsonObject();
                 obj.add(NOTE, toNotesJson(entry.notes()));
-                // 新条目的值就是它的默认值；默认即 auto 时在这里求值一次
+                // 新条目的值就是它的默认值；默认是关键字时取值器已在声明处求过值
                 applyDefault(entry);
                 obj.add(VALUE, valueJson(entry));
                 obj.add(DEFAULT, defaultValueJson(entry));
-                if (entry.type().isEnum()) {
-                    obj.add(ENUMS, enumArray(entry.type()));
-                }
-                if (entry.range() != null) {
-                    obj.add(RANGE, rangeObject(entry.range()));
+                JsonObject allow = allowJson(entry, null);
+                if (allow != null) {
+                    obj.add(ALLOW, allow);
                 }
                 settings.add(name, obj);
                 dirty2[0] = true;
@@ -148,15 +173,19 @@ public final class ConfigFile {
         }
     }
 
-    /** settings/lastWriteBackTime 键存在校验；缺失则补并标记。 */
+    /** settings/lastWriteBackTime 键存在校验；缺失则补并标记。存在但类型不符是结构错。 */
     private static JsonObject ensureSettings(JsonObject root, Path file, boolean[] dirty) {
         if (!root.has(LAST_WRITE_BACK_TIME)) {
             root.addProperty(LAST_WRITE_BACK_TIME, System.currentTimeMillis() / 1000L);
             dirty[0] = true;
         }
-        if (!root.has(SETTINGS) || !root.get(SETTINGS).isJsonObject()) {
+        if (!root.has(SETTINGS)) {
             root.add(SETTINGS, new JsonObject());
             dirty[0] = true;
+        } else if (!root.get(SETTINGS).isJsonObject()) {
+            throw new RuntimeException(
+                    "Config %s: \"%s\" must be a JSON object, got %s"
+                            .formatted(file, SETTINGS, root.get(SETTINGS)));
         }
         return root.getAsJsonObject(SETTINGS);
     }
@@ -186,14 +215,12 @@ public final class ConfigFile {
             JsonObject obj = new JsonObject();
             obj.add(NOTE, mergeNotes(oldObj == null ? null : oldObj.get(NOTE), entry.notes()));
             // 这里写当前值而不是默认值：触发的回填重写不能把用户改过的值冲掉；
-            // 但当前值读自 auto 时必须写回 "auto"，否则第一次重写就把 auto 冻结成数字
+            // 当前值命中关键字时必须写回关键字名，否则第一次重写就把关键字冻结成数字
             obj.add(VALUE, valueJson(entry));
             obj.add(DEFAULT, defaultValueJson(entry));
-            if (entry.type().isEnum()) {
-                obj.add(ENUMS, enumArray(entry.type()));
-            }
-            if (entry.range() != null) {
-                obj.add(RANGE, rangeObject(entry.range()));
+            JsonObject allow = allowJson(entry, oldObj);
+            if (allow != null) {
+                obj.add(ALLOW, allow);
             }
             settings.add(e.getKey(), obj);
         }
@@ -210,23 +237,144 @@ public final class ConfigFile {
 
     // 值序列化
 
-    /** 当前值的 JSON：读自 auto 则写保留字面量，否则写字面值。 */
+    /** 当前值的 JSON：命中关键字则写关键字名，否则写字面值。 */
     private static JsonElement valueJson(ConfigEntry<?> entry) {
-        if (entry.isAuto()) {
-            return new JsonPrimitive(Config.AUTO);
+        if (entry.isKeyword()) {
+            return new JsonPrimitive(entry.keyword());
         }
         return toValueJson(entry.get(), entry.type());
     }
 
-    /** 默认值的 JSON：默认即 auto 则写保留字面量，否则写字面值。 */
+    /** 默认值的 JSON：默认是关键字则写关键字名，否则写字面值。 */
     private static JsonElement defaultValueJson(ConfigEntry<?> entry) {
-        if (entry.isDefaultAuto()) {
-            return new JsonPrimitive(Config.AUTO);
+        if (entry.isDefaultKeyword()) {
+            return new JsonPrimitive(entry.defaultKeyword());
         }
         return toValueJson(entry.defaultValue(), entry.type());
     }
 
+    // allow 序列化
+
+    /** 该条目是否有任何 allow 子键。 */
+    private static boolean hasAllow(ConfigEntry<?> entry) {
+        return entry.min() != null || entry.max() != null
+                || entry.type().isEnum() || !entry.keywords().isEmpty();
+    }
+
+    /**
+     * 组装该条目的 {@code allow}。没有子键时返回 null，调用方据此不写该键——
+     * 写空对象会让 {@link #align} 每次都判漂移，文件永久重写。
+     *
+     * <p>{@code oldObj} 是文件里的旧条目，只用于让关键字 note 的额外来源键活下来。
+     */
+    private static JsonObject allowJson(ConfigEntry<?> entry, JsonObject oldObj) {
+        if (!hasAllow(entry)) {
+            return null;
+        }
+        JsonObject allow = new JsonObject();
+        // min / max 各自独立：只声明一侧就只写一侧，另一侧不出现
+        if (entry.min() != null) {
+            allow.add(MIN, new JsonPrimitive((Number) entry.min()));
+        }
+        if (entry.max() != null) {
+            allow.add(MAX, new JsonPrimitive((Number) entry.max()));
+        }
+        if (entry.type().isEnum()) {
+            allow.add(ENUMS, enumArray(entry.type()));
+        }
+        if (!entry.keywords().isEmpty()) {
+            allow.add(KEYWORD, keywordArray(entry, oldObj));
+        }
+        return allow;
+    }
+
+    private static JsonArray enumArray(Class<?> type) {
+        JsonArray arr = new JsonArray();
+        for (Object constant : type.getEnumConstants()) {
+            arr.add(((Enum<?>) constant).name());
+        }
+        return arr;
+    }
+
+    @SuppressWarnings("rawtypes")
+    private static JsonArray keywordArray(ConfigEntry<?> entry, JsonObject oldObj) {
+        JsonArray arr = new JsonArray();
+        // 通配符捕获无法写进 Map.Entry 的形参，只能按 raw 迭代
+        for (Map.Entry e : entry.keywords().entrySet()) {
+            String kwd = (String) e.getKey();
+            ConfigEntry.Keyword<?> spec = (ConfigEntry.Keyword<?>) e.getValue();
+            JsonObject el = new JsonObject();
+            el.addProperty(VALUE, kwd);
+            el.add(NOTE, mergeNotes(keywordNoteIn(oldObj, kwd), spec.notes()));
+            arr.add(el);
+        }
+        return arr;
+    }
+
+    /** 取旧文件里某个关键字元素的 note，没有则 null。 */
+    private static JsonElement keywordNoteIn(JsonObject oldObj, String kwd) {
+        if (oldObj == null || !oldObj.has(ALLOW) || !oldObj.get(ALLOW).isJsonObject()) {
+            return null;
+        }
+        JsonElement kw = oldObj.getAsJsonObject(ALLOW).get(KEYWORD);
+        if (kw == null || !kw.isJsonArray()) {
+            return null;
+        }
+        for (JsonElement el : kw.getAsJsonArray()) {
+            if (el.isJsonObject()) {
+                JsonObject o = el.getAsJsonObject();
+                JsonElement v = o.get(VALUE);
+                if (v != null && v.isJsonPrimitive() && kwd.equals(v.getAsString())) {
+                    return o.get(NOTE);
+                }
+            }
+        }
+        return null;
+    }
+
     // notes 序列化
+
+    /**
+     * allow 及其子键的形状检查。这些位置只承载本 mod 生成的声明，形状不符说明文件不是本配置写的，
+     * 不能猜着修。
+     */
+    private static void validateAllowShape(JsonObject entryObj, String name, Path file) {
+        if (!entryObj.has(ALLOW)) {
+            return;
+        }
+        JsonElement allow = entryObj.get(ALLOW);
+        if (!allow.isJsonObject()) {
+            throw new RuntimeException("Config %s entry '%s': \"%s\" must be a JSON object, got %s"
+                    .formatted(file, name, ALLOW, allow));
+        }
+        JsonObject allowObj = allow.getAsJsonObject();
+        JsonElement enums = allowObj.get(ENUMS);
+        if (enums != null && !enums.isJsonArray()) {
+            throw new RuntimeException("Config %s entry '%s': \"%s.%s\" must be a JSON array, got %s"
+                    .formatted(file, name, ALLOW, ENUMS, enums));
+        }
+        JsonElement keyword = allowObj.get(KEYWORD);
+        if (keyword == null) {
+            return;
+        }
+        if (!keyword.isJsonArray()) {
+            throw new RuntimeException("Config %s entry '%s': \"%s.%s\" must be a JSON array, got %s"
+                    .formatted(file, name, ALLOW, KEYWORD, keyword));
+        }
+        for (JsonElement el : keyword.getAsJsonArray()) {
+            if (!el.isJsonObject()) {
+                throw new RuntimeException(
+                        "Config %s entry '%s': each \"%s.%s\" element must be a JSON object, got %s"
+                                .formatted(file, name, ALLOW, KEYWORD, el));
+            }
+            JsonElement v = el.getAsJsonObject().get(VALUE);
+            if (v == null || !v.isJsonPrimitive() || !v.getAsJsonPrimitive().isString()) {
+                throw new RuntimeException(
+                        "Config %s entry '%s': each \"%s.%s\" element needs a string \"%s\", got %s"
+                                .formatted(file, name, ALLOW, KEYWORD, VALUE, v));
+            }
+        }
+    }
 
     private static JsonObject toNotesJson(Map<String, String> notes) {
         JsonObject o = new JsonObject();
@@ -250,10 +398,10 @@ public final class ConfigFile {
     }
 
     /** 声明过的来源键是否与文件里的不符。额外键不参与比较。 */
-    private static boolean noteDrift(JsonObject entryObj, ConfigEntry<?> entry) {
-        JsonElement el = entryObj.get(NOTE);
+    private static boolean noteDrift(JsonObject noteHolder, Map<String, String> declared) {
+        JsonElement el = noteHolder.get(NOTE);
         JsonObject have = el != null && el.isJsonObject() ? el.getAsJsonObject() : null;
-        for (Map.Entry<String, String> e : entry.notes().entrySet()) {
+        for (Map.Entry<String, String> e : declared.entrySet()) {
             JsonElement v = have == null ? null : have.get(e.getKey());
             if (v == null || !v.isJsonPrimitive() || !v.getAsString().equals(e.getValue())) {
                 return true;
@@ -262,21 +410,27 @@ public final class ConfigFile {
         return false;
     }
 
-    // enums / range 序列化
-
-    private static JsonArray enumArray(Class<?> type) {
-        JsonArray arr = new JsonArray();
-        for (Object constant : type.getEnumConstants()) {
-            arr.add(((Enum<?>) constant).name());
+    /** 关键字层的 note 漂移：声明过的来源键与文件里该关键字元素不符即算漂移。 */
+    @SuppressWarnings("rawtypes")
+    private static boolean keywordNoteDrift(JsonObject entryObj, ConfigEntry<?> entry) {
+        if (entry.keywords().isEmpty() || !entryObj.has(ALLOW)) {
+            return !entry.keywords().isEmpty();
         }
-        return arr;
-    }
-
-    private static JsonObject rangeObject(ConfigEntry.Range range) {
-        JsonObject o = new JsonObject();
-        o.add("min", new JsonPrimitive(range.min()));
-        o.add("max", new JsonPrimitive(range.max()));
-        return o;
+        JsonElement kw = entryObj.getAsJsonObject(ALLOW).get(KEYWORD);
+        if (kw == null || !kw.isJsonArray()) {
+            return true;
+        }
+        // 通配符捕获无法写进 Map.Entry 的形参，只能按 raw 迭代
+        for (Map.Entry e : entry.keywords().entrySet()) {
+            String kwd = (String) e.getKey();
+            ConfigEntry.Keyword<?> spec = (ConfigEntry.Keyword<?>) e.getValue();
+            JsonObject holder = new JsonObject();
+            holder.add(NOTE, keywordNoteIn(entryObj, kwd));
+            if (noteDrift(holder, spec.notes())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 把 obj 的 key 对齐到 want：缺失或不符都替换，返回是否发生了替换。 */
@@ -325,28 +479,31 @@ public final class ConfigFile {
         throw new IllegalArgumentException("Unsupported config type: %s".formatted(type));
     }
 
-    // value 反序列化：auto 保留字面量 -> 取值器；否则类型分派 + 严格校验 + 范围约束
+    // value 反序列化：关键字名 -> 取值器；否则类型分派 + 严格校验 + 值域约束
 
     private static Object readValue(JsonElement el, ConfigEntry<?> entry, Path file) {
-        if (isAutoToken(el)) {
-            Supplier<?> supplier = entry.autoValue();
-            if (supplier == null) {
-                throw new RuntimeException("Config %s entry '%s': value \"%s\" but no auto supplier is declared"
-                        .formatted(file, entry.name(), Config.AUTO));
-            }
-            entry.setAuto(true);
-            return supplier.get(); // auto 派生结果不过范围约束：它不是用户输入
+        String kwd = keywordToken(el, entry);
+        if (kwd != null) {
+            entry.setKeyword(kwd);
+            // 关键字派生结果不过值域约束：它由代码算出，不是用户输入
+            return entry.keywords().get(kwd).supplier().get();
         }
-        entry.setAuto(false);
+        entry.setKeyword(null);
         Object v = readTyped(el, entry, file);
         checkConstraint(entry, v, file);
         return v;
     }
 
-    /** 保留字面量严格匹配：{@code "AUTO"}、{@code "Auto"} 都不是它。 */
-    private static boolean isAutoToken(JsonElement el) {
-        return el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()
-                && Config.AUTO.equals(el.getAsString());
+    /**
+     * 该位置的值是否命中本条目声明的某个关键字，是则返回其名。
+     * 判据是「在该条目的 {@code allow.keyword} 里」，没声明过的字符串不会被截走。
+     */
+    private static String keywordToken(JsonElement el, ConfigEntry<?> entry) {
+        if (el == null || !el.isJsonPrimitive() || !el.getAsJsonPrimitive().isString()) {
+            return null;
+        }
+        String s = el.getAsString();
+        return entry.keywords().containsKey(s) ? s : null;
     }
 
     private static Object readTyped(JsonElement el, ConfigEntry<?> entry, Path file) {
@@ -411,7 +568,7 @@ public final class ConfigFile {
         throw new IllegalArgumentException("Unsupported config type: %s".formatted(type));
     }
 
-    /** 范围约束。异构注册表只能走 raw 桥接，与 {@link #setValue} 同形。 */
+    /** 值域约束。异构注册表只能走 raw 桥接，与 {@link #setValue} 同形。 */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private static void checkConstraint(ConfigEntry entry, Object v, Path file) {
         ConfigEntry.Constraint c = entry.constraint();
@@ -460,7 +617,7 @@ public final class ConfigFile {
     // 泛型桥接：写回 entry.value
 
     /**
-     * 生成与重置路径：把默认值落进每个条目。必须走这一步——auto 默认值的条目在构造时
+     * 生成与重置路径：把默认值落进每个条目。必须走这一步——关键字默认值的条目在构造时
      * {@code value} 是 null，直接落盘会写出没有 {@code value} 键的文件，而消费方读到的也是 null。
      */
     private static void applyDefaults(Map<String, ConfigEntry<?>> entries) {
@@ -469,16 +626,11 @@ public final class ConfigFile {
         }
     }
 
-    /** 无 auto 默认时置为字面默认值；有则求值一次并把来源标成 auto。auto 结果不过范围约束。 */
+    /** 把默认值与其来源落进条目。关键字默认值的结果不过值域约束。 */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private static void applyDefault(ConfigEntry entry) {
-        if (entry.isDefaultAuto()) {
-            entry.setAuto(true);
-            entry.set(entry.autoValue().get());
-        } else {
-            entry.setAuto(false);
-            entry.set(entry.defaultValue());
-        }
+        entry.set(entry.defaultValue());
+        entry.setKeyword(entry.defaultKeyword());
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })

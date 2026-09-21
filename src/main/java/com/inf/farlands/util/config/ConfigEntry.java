@@ -8,13 +8,14 @@ import java.util.function.Supplier;
  *
  * <p>值类型由 {@link #type()} 给出：int/long/short/byte/float/double/String/Enum/Boolean。
  *
- * <p>除值本身外还承载三项由 builder 声明、读盘期使用的元数据：
+ * <p>除值本身外还承载由 builder 声明、读盘期使用的三类元数据：
  * <ul>
  * <li>{@link Constraint}：值约束。只校验配置文件里<b>显式声明</b>的值；
- *     <b>不</b>校验 {@code "auto"} 派生出来的结果——后者是运行时算出的，不是用户输入。
- *     把两者混在一起，{@code range} 就既不是护栏也不是文档，还会制造用户无法修复的启动失败。
- * <li>{@link Range}：约束的 JSON 表示，只供落盘给手改配置的人对照。
- * <li>{@code autoValue}：{@code "auto"} 的取值器，由声明处传入，读盘期只求值一次。
+ *     <b>不</b>校验关键字派生出来的结果——后者是运行时算出的，不是用户输入。
+ *     把两者混在一起，值域就既不是护栏也不是文档，还会制造用户无法修复的启动失败。
+ * <li>{@code min} / {@code max}：约束的 JSON 表示，两侧各自独立、可缺一侧，
+ *     只供落盘给手改配置的人对照。
+ * <li>{@code keywords}：关键字名字到取值器与注释的映射，由声明处传入，读盘期按名反查。
  * </ul>
  *
  * @param <T> 值类型
@@ -26,8 +27,8 @@ public final class ConfigEntry<T> {
         void check(T value);
     }
 
-    /** 约束的 JSON 表示，落盘为 {@code {"min": …, "max": …}}；声明侧没范围时为 null。 */
-    public record Range(Number min, Number max) {
+    /** 一份关键字声明：取值器与它自己的注释。 */
+    public record Keyword<T>(Supplier<T> supplier, Map<String, String> notes) {
     }
 
     /** 配置项名：仅允许 a-zA-Z0-9_-。 */
@@ -47,20 +48,23 @@ public final class ConfigEntry<T> {
     private final Map<String, String> notes; // 注释来源 -> 注释
     private final Class<?> type; // 值类型，枚举用 Enum 类
     private final T defaultValue;
-    private final Range range;
+    private final Map<String, Keyword<T>> keywords;
+    /** 默认值命中关键字时记其名字，否则 null。 */
+    private final String defaultKeyword;
+    private final T min;
+    private final T max;
     private final Constraint<T> constraint;
-    private final Supplier<T> autoValue;
-    private final boolean defaultAuto;
     private T value;
 
     /**
-     * 当前值是否读自 {@code "auto"} 字面量。回写时据此决定写 {@code "auto"} 还是写解析后的值——
-     * 少了这个状态，任何一次回填重写都会把 {@code "auto"} 静默冻结成数字。
+     * 当前值命中的关键字名。回写时据此写回关键字名而不是解析后的值——
+     * 少了这个状态，任何一次回填重写都会把关键字静默冻结成数字。
      */
-    private boolean auto;
+    private String valueKeyword;
 
     public ConfigEntry(String name, Map<String, String> notes, Class<?> type, T defaultValue,
-            Range range, Constraint<T> constraint, Supplier<T> autoValue, boolean defaultAuto) {
+            String defaultKeyword, Map<String, Keyword<T>> keywords, T min, T max,
+            Constraint<T> constraint) {
         if (!isValidName(name)) {
             throw new IllegalArgumentException("Invalid config entry name: %s".formatted(name));
         }
@@ -68,10 +72,11 @@ public final class ConfigEntry<T> {
         this.notes = Map.copyOf(notes);
         this.type = type;
         this.defaultValue = defaultValue;
-        this.range = range;
+        this.defaultKeyword = defaultKeyword;
+        this.keywords = Map.copyOf(keywords);
+        this.min = min;
+        this.max = max;
         this.constraint = constraint;
-        this.autoValue = autoValue;
-        this.defaultAuto = defaultAuto;
         this.value = defaultValue;
     }
 
@@ -91,22 +96,33 @@ public final class ConfigEntry<T> {
         return defaultValue;
     }
 
-    /** 默认值是否为 auto。为 true 时 {@link #defaultValue()} 为 null。 */
-    public boolean isDefaultAuto() {
-        return defaultAuto;
+    /** 默认值是否为关键字。是则 {@link #defaultKeyword()} 给出其名。 */
+    public boolean isDefaultKeyword() {
+        return defaultKeyword != null;
     }
 
-    public Range range() {
-        return range;
+    /** 默认值命中的关键字名；不是关键字时为 null。 */
+    public String defaultKeyword() {
+        return defaultKeyword;
+    }
+
+    /** 该条目声明的全部关键字。无声明时为空 map。 */
+    public Map<String, Keyword<T>> keywords() {
+        return keywords;
+    }
+
+    /** 下界声明，未声明为 null。 */
+    public T min() {
+        return min;
+    }
+
+    /** 上界声明，未声明为 null。 */
+    public T max() {
+        return max;
     }
 
     public Constraint<T> constraint() {
         return constraint;
-    }
-
-    /** {@code "auto"} 的取值器；未声明时为 null。 */
-    public Supplier<T> autoValue() {
-        return autoValue;
     }
 
     public T get() {
@@ -117,11 +133,15 @@ public final class ConfigEntry<T> {
         this.value = v;
     }
 
-    public boolean isAuto() {
-        return auto;
+    public boolean isKeyword() {
+        return valueKeyword != null;
     }
 
-    public void setAuto(boolean v) {
-        this.auto = v;
+    public String keyword() {
+        return valueKeyword;
+    }
+
+    public void setKeyword(String kwd) {
+        this.valueKeyword = kwd;
     }
 }
