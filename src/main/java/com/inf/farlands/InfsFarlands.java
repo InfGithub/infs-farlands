@@ -19,8 +19,6 @@ public class InfsFarlands implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
-		// * Minecraft: Story Mode
-		LOGGER.info("Nothing built can last forever, and every legend, no matter how great, fades with time.");
 		FarlandsRegister.register();
 	}
 
