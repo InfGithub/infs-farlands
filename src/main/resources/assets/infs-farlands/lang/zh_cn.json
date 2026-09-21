@@ -6,6 +6,8 @@
   "advancements.infs-farlands.root.description": "世间万物并无永恒，任何伟大的传说终将随着时间逝去。",
   "advancements.infs-farlands.int-block-pos.title": "return new IntBlockPos(2026, 7, 17);",
   "advancements.infs-farlands.int-block-pos.description": "Swapped BlockUtil.lookup.",
+  "advancements.infs-farlands.new-vanilla-noise-system.title": "new VanillaNoiseSystem();",
+  "advancements.infs-farlands.new-vanilla-noise-system.description": "你好，主世界（噪声）。",
   "commands.infs-farlands.section.light.dump": "Section 光照数据已写入服务端日志。",
   "commands.infs-farlands.client.section.light.dump": "Section 光照数据已写入客户端日志。",
   "commands.infs-farlands.section.biome.dump": "Section 生物群系数据已写入服务端日志。",

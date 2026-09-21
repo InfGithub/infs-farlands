@@ -3,6 +3,8 @@ package com.inf.farlands;
 import com.inf.farlands.light.FarLandsLightEngine;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
+import com.inf.farlands.terrain.LevelSystems;
+import com.inf.farlands.terrain.system.terrain.noise.overworld.Vanilla.VanillaNoiseSystem;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.util.maps.AquiferUtil;
 import com.inf.farlands.util.maps.BlockUtil;
@@ -62,9 +64,35 @@ public class FarlandsTick {
         InfsFarlands.LOGGER.info("Trimmed AquiferUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
     }
 
+    /**
+     * 该维度出现 vanilla 噪声系统时，给还在世上的玩家补发进度与经验。
+     *
+     * <p>不能在 VanillaNoiseSystem 构造时发：它跑在 createLevels 里，那时玩家还没进世界，
+     * 专用服务器上第一个玩家可能在播种之后很久才登录。这里每 tick 检查、用 award 的返回值
+     * 兜住「只发一次」，因此不需要记「发过没」的状态：
+     * award 对已解锁玩家返回 false，自然就不重复给经验。
+     */
+    private static void awardNewVanillaNoiseSystem(MinecraftServer server) {
+        AdvancementHolder holder = server.getAdvancements().get(InfsFarlands.id("new-vanilla-noise-system"));
+        if (holder == null) {
+            return;
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            if (!(((LevelSystems) level).terrainSystem() instanceof VanillaNoiseSystem)) {
+                continue;
+            }
+            for (ServerPlayer player : level.players()) {
+                if (player.getAdvancements().award(holder, "impossible")) {
+                    player.giveExperiencePoints(64);
+                }
+            }
+        }
+    }
+
     /** 服务端 tick 末尾统一入口。 */
     public static void atEnd(MinecraftServer server, int tickCount) {
         now = tickCount;
+        awardNewVanillaNoiseSystem(server);
         if (tickCount % INTERVAL == 0) {
             swapBlockLookup(server, tickCount);
             trimSectionLookup(tickCount);

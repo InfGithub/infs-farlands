@@ -1,0 +1,28 @@
+{
+  "parent": "infs-farlands:root",
+  "criteria": {
+    "impossible": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "description": {
+      "translate": "advancements.infs-farlands.new-vanilla-noise-system.description"
+    },
+    "hidden": true,
+    "icon": {
+      "id": "minecraft:stone"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancements.infs-farlands.new-vanilla-noise-system.title"
+    }
+  },
+  "requirements": [
+    [
+      "impossible"
+    ]
+  ],
+  "sends_telemetry_event": false
+}
