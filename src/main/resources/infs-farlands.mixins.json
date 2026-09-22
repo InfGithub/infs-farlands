@@ -73,6 +73,7 @@
     "fix.xz.MineshaftPieces$MineShaftPieceMixin",
     "fix.xz.MineshaftStructureMixin",
     "fix.xz.NoiseBasedChunkGeneratorMixin",
+    "fix.xz.PathNavigationMixin",
     "fix.xz.ScatteredFeaturePieceMixin",
     "fix.xz.VoxelShapeMixin",
     "fix.xz.WalkNodeEvaluatorMixin",
