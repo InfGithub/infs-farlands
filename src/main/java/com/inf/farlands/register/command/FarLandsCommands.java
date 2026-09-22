@@ -1,7 +1,5 @@
 package com.inf.farlands.register.command;
 
-import java.util.TreeMap;
-
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.command.CommandRegistrationEvent;
 import com.inf.farlands.serialize.SectionStage;
@@ -15,7 +13,6 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
@@ -123,26 +120,22 @@ public class FarLandsCommands {
         return 1;
     }
 
-    /** dump 玩家当前 chunk 的 per-section 生成状态，即 PLSTATE。 */
+    /** dump 玩家当前 section 的生成状态，即 PLSTATE。 */
     private static int dumpPipelineState(CommandSourceStack source) {
         try {
             ServerPlayer player = source.getPlayerOrException();
             ServerLevel level = (ServerLevel) player.level();
-            BlockPos pos = player.blockPosition();
-            ChunkPos cp = new ChunkPos(SectionPos.blockToSectionCoord(pos.getX()),
-                    SectionPos.blockToSectionCoord(pos.getZ()));
-            InfsFarlands.LOGGER.info("PLSTATE chunk={},{}", cp.x(), cp.z());
-            ChunkAccess ca = level.getChunk(cp.x(), cp.z(), ChunkStatus.FULL, false);
+            SectionPos sec = SectionPos.of(player.blockPosition());
+            ChunkAccess ca = level.getChunk(sec.x(), sec.z(), ChunkStatus.FULL, false);
             if (ca instanceof LevelChunk lc) {
-                // 上一版本是 FarLandsGenState.forEachStage；本仓库用 SectionStage 单点读，
-                // 所以自行遍历。排序只为让日志可逐次比对，语义与逐点读取一致。
-                for (Integer sy : new TreeMap<>(((WindowedChunk) lc).windowedAllSections()).keySet()) {
-                    InfsFarlands.LOGGER.info("PLSTATE   secY={} stage={}", sy, SectionStage.getStage(lc, sy));
-                }
+                int stage = SectionStage.getStage(lc, sec.y());
+                InfsFarlands.LOGGER.info("PLSTATE secY={} stage={}", sec.y(), stage);
+                source.sendSuccess(() -> Component.translatable("commands.infs-farlands.section.pipeline.state"), false);
+                source.sendSuccess(() -> Component.literal("stage=" + stage), false);
             } else {
-                InfsFarlands.LOGGER.info("PLSTATE   chunk null");
+                InfsFarlands.LOGGER.info("PLSTATE secY={} chunk null", sec.y());
+                source.sendSuccess(() -> Component.translatable("commands.infs-farlands.section.pipeline.state"), false);
             }
-            source.sendSuccess(() -> Component.translatable("commands.infs-farlands.section.pipeline.state"), false);
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("PLSTATE err", e);
         }
