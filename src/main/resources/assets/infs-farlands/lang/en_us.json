@@ -14,5 +14,6 @@
   "commands.infs-farlands.section.pipeline.state": "Section pipeline state written to server log.",
   "commands.infs-farlands.section.block.dump": "Section block data dump written to server log.",
   "commands.infs-farlands.client.section.block.dump": "Section block data dump written to client log.",
-  "commands.infs-farlands.client.section.biome.dump": "Section biome dump written to client log."
+  "commands.infs-farlands.client.section.biome.dump": "Section biome dump written to client log.",
+  "commands.infs-farlands.client.section.render.dump": "Section render state written to client log."
 }
