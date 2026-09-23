@@ -47,8 +47,4 @@ public final class VoidNoiseSystem implements NoiseSystem {
             }
         };
     }
-
-    @Override
-    public void onLevelLoad(long seed) {
-    }
 }

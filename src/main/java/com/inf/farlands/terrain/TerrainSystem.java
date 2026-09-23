@@ -14,7 +14,7 @@ import net.minecraft.world.level.levelgen.PositionalRandomFactory;
  * 两个互斥子接口，一个实现类只实现其一，分派点 instanceof BlockSystem 优先：
  * NoiseSystem 走密度链，BlockSystem 走逐块几何。
  *
- * 线程模型：onLevelLoad 在主线程世界加载时调用；createFluidPicker 与 createAquifer 在
+ * 线程模型：createFluidPicker 与 createAquifer 在
  * NoiseChunk 构造时调用，跑 genPool 或主线程。onChunkFillStart 当前无调用方，默认空实现。
  */
 public interface TerrainSystem {
@@ -35,9 +35,6 @@ public interface TerrainSystem {
             PositionalRandomFactory random, int minY, int height, Aquifer.FluidPicker picker) {
         return null;
     }
-
-    /** 主世界加载时按 seed 初始化系统噪声。 */
-    void onLevelLoad(long seed);
 
     /** 每次 fill 开始时的 chunk 上下文回调。当前无调用方。 */
     default void onChunkFillStart(ChunkAccess chunk) {

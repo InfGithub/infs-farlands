@@ -73,10 +73,6 @@ public final class HexNoiseSystem implements NoiseSystem {
         };
     }
 
-    @Override
-    public void onLevelLoad(long seed) {
-    }
-
     /**
      * 纯公式 f(x, y, z) = BASE + AMPLITUDE·sin(2πx/波长)·sin(2πz/波长) − y。
      * 输入是实数坐标，不含任何缩放。

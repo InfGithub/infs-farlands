@@ -88,10 +88,6 @@ public final class WeierstrassNoiseSystem implements NoiseSystem {
         };
     }
 
-    @Override
-    public void onLevelLoad(long seed) {
-    }
-
     /**
      * 纯公式，输入是实数坐标，不含缩放：h = BASE + AMPLITUDE·W(x)·W(z) − y。
      * 两个方向各取一条 Weierstrass 和的积，每一层都是肋乘肋，自相似沿两轴同时嵌套。
