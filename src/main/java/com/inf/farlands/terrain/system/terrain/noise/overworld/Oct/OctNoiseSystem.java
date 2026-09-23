@@ -1,85 +1,99 @@
 package com.inf.farlands.terrain.system.terrain.noise.overworld.Oct;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import com.inf.farlands.terrain.NoiseSystem;
+import com.inf.farlands.terrain.system.common.overworld.Oct.OctNoiseHarvest;
+import com.inf.farlands.terrain.system.common.overworld.Oct.OctNoiseSource;
+import com.inf.farlands.terrain.system.common.overworld.Oct.OctOverworldDensity;
+import com.inf.farlands.terrain.system.common.overworld.Oct.OctScale;
 
-import net.minecraft.core.Holder;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.Aquifer;
 import net.minecraft.world.level.levelgen.DensityFunction;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.NoiseRouter;
 import net.minecraft.world.level.levelgen.PositionalRandomFactory;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
-import net.minecraft.world.level.levelgen.synth.BlendedNoise;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
 
 /**
- * 主世界 Oct 噪声系统：finalDensity 的节点结构原样保留，其中的噪声用构造时传入的 seed 重建。
+ * 主世界 Oct 噪声系统：不复用 vanilla 的密度节点，用 Oct 包下的自研链重建整条 router，三轴坐标按 scale 缩放。
  *
- * <p>重建走公开 API，不碰任何私有字段：seed 派生 PositionalRandomFactory，再按噪声名取随机源，
- * 与 RandomState 接线 vanilla 噪声的方式一致。重建后的噪声归本类所有，后续修改不必再依赖原实例。
+ * <p>噪声参数从传入的 vanilla router 采集，噪声实例用构造时的 seed 自行派生，全程公开 API。
+ * 链只复刻默认变体，采集不全时整条回退 vanilla。vanilla router 每个 level 只有一份实例，
+ * 本系统实例也是 per-level，所以重建结果按 vanilla router 身份缓存，每个 chunk 不会重算。
  */
 public final class OctNoiseSystem implements NoiseSystem {
 
-    /** BlendedNoise 随机源的哈希名。 */
-    private static final Identifier TERRAIN = Identifier.withDefaultNamespace("terrain");
-
-    private final long seed;
-
-    /** 缩放倍率，当前未参与计算。 */
-    private final double scaleX;
-    private final double scaleY;
-    private final double scaleZ;
-
-    /** seed 派生的按名取随机源工厂，构造期建好，之后跨线程只读。 */
+    private final OctScale scale;
     private final PositionalRandomFactory root;
 
-    /** 重建后的 NormalNoise，按噪声数据缓存，同一 key 只建一次。 */
-    private final Map<Holder<NormalNoise.NoiseParameters>, NormalNoise> noises = new ConcurrentHashMap<>();
-
-    /** 重建后的主 3D 噪声。withNewRandom 会重建三个 PerlinNoise，不能每个 NoiseChunk 都做。 */
-    private volatile BlendedNoise cachedBlendedNoise;
+    /** 重建结果与其对应的 vanilla router，写序先结果后键，读序先键后结果。 */
+    private volatile NoiseRouter cachedRouter;
+    private volatile NoiseRouter cachedVanilla;
 
     public OctNoiseSystem() {
         this(0L, 1.0, 1.0, 1.0);
     }
 
     public OctNoiseSystem(long seed, double scaleX, double scaleY, double scaleZ) {
-        this.seed = seed;
-        this.scaleX = scaleX;
-        this.scaleY = scaleY;
-        this.scaleZ = scaleZ;
-        this.root = WorldgenRandom.Algorithm.XOROSHIRO.newInstance(this.seed).forkPositional();
+        this.scale = new OctScale(scaleX, scaleY, scaleZ);
+        this.root = WorldgenRandom.Algorithm.XOROSHIRO.newInstance(seed).forkPositional();
     }
 
     @Override
     public DensityFunction createFinalDensity(NoiseRouter router) {
-        return router.finalDensity().mapAll(new DensityFunction.Visitor() {
-
-            @Override
-            public DensityFunction apply(DensityFunction function) {
-                return function instanceof BlendedNoise blended ? blendedNoiseFromSeed(blended) : function;
-            }
-
-            @Override
-            public DensityFunction.NoiseHolder visitNoise(DensityFunction.NoiseHolder noise) {
-                Holder<NormalNoise.NoiseParameters> data = noise.noiseData();
-                NormalNoise rebuilt = noises.computeIfAbsent(data,
-                        key -> NormalNoise.create(root.fromHashOf(key.unwrapKey().orElseThrow().identifier()),
-                                key.value()));
-                return new DensityFunction.NoiseHolder(data, rebuilt);
-            }
-        });
+        return createRouter(router).finalDensity();
     }
 
-    /** 复用原实例自己的缩放参数、只换随机源，参数因此不写死。 */
-    private BlendedNoise blendedNoiseFromSeed(BlendedNoise original) {
-        BlendedNoise cached = this.cachedBlendedNoise;
-        if (cached == null) {
-            cached = original.withNewRandom(root.fromHashOf(TERRAIN));
-            this.cachedBlendedNoise = cached;
+    @Override
+    public NoiseRouter createRouter(NoiseRouter vanilla) {
+        NoiseRouter cached = this.cachedRouter;
+        if (cached != null && this.cachedVanilla == vanilla) {
+            return cached;
         }
-        return cached;
+        Map<ResourceKey<NormalNoise.NoiseParameters>, DensityFunction.NoiseHolder> table = OctNoiseHarvest
+                .harvest(vanilla);
+        OctNoiseSource source = new OctNoiseSource(scale, root, table);
+        OctOverworldDensity density;
+        try {
+            density = new OctOverworldDensity(scale, source);
+        } catch (RuntimeException e) {
+            if (source.missing()) {
+                return vanilla; // 采集不全，即非默认预设，整条回退
+            }
+            throw e;
+        }
+        NoiseRouter built = new NoiseRouter(
+                density.barrierNoise(),
+                density.fluidLevelFloodednessNoise(),
+                density.fluidLevelSpreadNoise(),
+                density.lavaNoise(),
+                density.temperature(),
+                density.vegetation(),
+                density.continents(),
+                density.erosion(),
+                density.depth(),
+                density.ridges(),
+                density.preliminarySurfaceLevel(),
+                density.finalDensity(),
+                density.veinToggle(),
+                density.veinRidged(),
+                density.veinGap());
+        this.cachedRouter = built;
+        this.cachedVanilla = vanilla;
+        return built;
+    }
+
+    /** 液面按 scaleY 抬升，与高度场同步。 */
+    @Override
+    public Aquifer.FluidPicker createFluidPicker(NoiseGeneratorSettings settings) {
+        int lavaLevel = (int) Math.floor(-54.0 * scale.y());
+        int seaLevel = (int) Math.floor(settings.seaLevel() * scale.y());
+        Aquifer.FluidStatus lava = new Aquifer.FluidStatus(lavaLevel, Blocks.LAVA.defaultBlockState());
+        Aquifer.FluidStatus water = new Aquifer.FluidStatus(seaLevel, settings.defaultFluid());
+        return (x, y, z) -> y < Math.min(lavaLevel, seaLevel) ? lava : water;
     }
 }

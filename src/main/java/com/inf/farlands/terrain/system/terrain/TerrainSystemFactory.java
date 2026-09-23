@@ -29,7 +29,7 @@ public final class TerrainSystemFactory {
             case VANILLA_OVERWORLD -> new VanillaNoiseSystem();
             case HEX -> new HexNoiseSystem(114.0, 10086.0, 514.0);
             case WEIERSTRASS -> new WeierstrassNoiseSystem(40.0, 80.0, 160.0);
-            case OCT -> new OctNoiseSystem();
+            case OCT -> new OctNoiseSystem(0L, 16.0, 16.0, 16.0);
         };
     }
 

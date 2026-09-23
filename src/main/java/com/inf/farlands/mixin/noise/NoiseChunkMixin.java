@@ -6,34 +6,38 @@ import com.inf.farlands.terrain.terrainFiller.TerrainSystemContext;
 
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.Aquifer;
-import net.minecraft.world.level.levelgen.DensityFunction;
-import net.minecraft.world.level.levelgen.DensityFunctions;
 import net.minecraft.world.level.levelgen.NoiseChunk;
 import net.minecraft.world.level.levelgen.NoiseRouter;
 import net.minecraft.world.level.levelgen.PositionalRandomFactory;
+import net.minecraft.world.level.levelgen.RandomState;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * 把 NoiseChunk 构造时的 finalDensity 与 aquifer 换成构造点的地形系统提供。
+ * 把 NoiseChunk 构造时取的整条噪声路由换成构造点的地形系统提供。
  *
  * <p>系统由 TerrainSystemContext 侧信道给出：NoiseChunk 的构造器既没有 level 也没有
  * ChunkAccess，而它的构造过程要走这里，所以只能由构造点在构造前 set、构造后 clear。
  *
- * <p>两处 handler 都保持 static：Aquifer.create 是 invokestatic，Mixin 要求静态目标的
- * handler 同为 static，因此这里不持有实例字段。
+ * <p>拦 RandomState.router 而不是逐个拦 NoiseRouter 的字段读取：构造器里有五处读它派生出的
+ * wrappedRouter，即 preliminarySurfaceLevel、finalDensity 与三个矿脉门，拦这一处全部覆盖，
+ * 含水层拿到的 router 实参也随之变成系统的。
+ *
+ * <p>两处 handler 都保持 static：RandomState.router 是实例方法，Aquifer.create 是 invokestatic，
+ * Mixin 的 handler 以静态形式接收 receiver，因此这里不持有实例字段。
  *
  * <p>两处调用点各只有 1 个，均用 javap 在运行时 jar 与编译期 jar 核实过。
  */
 @Mixin(NoiseChunk.class)
 public abstract class NoiseChunkMixin {
 
-    @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/levelgen/NoiseRouter;finalDensity()Lnet/minecraft/world/level/levelgen/DensityFunction;"))
-    private static DensityFunction farlands$replaceFinalDensity(NoiseRouter router) {
+    @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/levelgen/RandomState;router()Lnet/minecraft/world/level/levelgen/NoiseRouter;"))
+    private static NoiseRouter farlands$replaceRouter(RandomState randomState) {
+        NoiseRouter vanilla = randomState.router();
         TerrainSystem sys = TerrainSystemContext.get();
-        return sys instanceof NoiseSystem n ? n.createFinalDensity(router) : DensityFunctions.zero();
+        return sys instanceof NoiseSystem n ? n.createRouter(vanilla) : vanilla;
     }
 
     /**

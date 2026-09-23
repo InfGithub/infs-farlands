@@ -3,6 +3,7 @@ package com.inf.farlands.terrain.system.biome;
 import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.terrain.BiomeSystem;
 import com.inf.farlands.terrain.system.biome.misc.Void.VoidBiomeSystem;
+import com.inf.farlands.terrain.system.biome.overworld.Oct.OctBiomeSystem;
 import com.inf.farlands.terrain.system.biome.overworld.Vanilla.VanillaBiomeSystem;
 
 import net.minecraft.resources.ResourceKey;
@@ -21,6 +22,7 @@ public final class BiomeSystemFactory {
         return switch (typeFor(dimension)) {
             case VOID -> new VoidBiomeSystem();
             case VANILLA_OVERWORLD -> new VanillaBiomeSystem();
+            case OCT -> new OctBiomeSystem(0L, 16.0, 16.0, 16.0);
         };
     }
 
