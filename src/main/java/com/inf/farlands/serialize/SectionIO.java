@@ -105,7 +105,22 @@ public final class SectionIO {
 
     /** s.{regionX}.{yBlock}.{regionZ}.fsa，yb 是绝对 sectionY 右移 5。 */
     public static Path filePath(ServerLevel level, int cx, int cz, int sy) {
-        return dimensionDir(level).resolve("s." + (cx >> 5) + "." + (sy >> 5) + "." + (cz >> 5) + ".fsa");
+        return dimensionDir(level).resolve(fileName(cx << 4, sy << 4, cz << 4));
+    }
+
+    /**
+     * fsa 文件名 s.{regionX}.{yBlock}.{regionZ}.fsa，形参依次是 x、y、z，且都是方块坐标。
+     *
+     * <p>
+     * 三段与 filePath 写出的完全一致：regionX = chunkX 右移 5、yBlock = sectionY 右移 5、
+     * regionZ = chunkZ 右移 5。以方块坐标作入参，三段就是同一入参各右移 9，不在调用点做 chunk 与
+     * section 的混搭换算。filePath 手上的 chunk 坐标左移 4 即方块坐标。
+     *
+     * <p>
+     * 纯字符串、不依赖 ServerLevel，客户端侧的诊断行也能算出同一个名字。
+     */
+    public static String fileName(int x, int y, int z) {
+        return "s." + (x >> 9) + "." + (y >> 9) + "." + (z >> 9) + ".fsa";
     }
 
     // ---- 主线程：文件缓存 ----
