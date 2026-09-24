@@ -7,7 +7,7 @@ import net.minecraft.world.level.chunk.ChunkAccess;
  * 地表系统，决定 chunk 的地表规则来源与应用方式。
  *
  * surface 是独立阶段，TERRAIN 之后、光照之前，依赖 fill 产出的高度图。
- * 由 SurfaceSystemFactory 按 level 的维度在 ServerLevel 实例化时建一份，实例随 level 走，当前只有 VOID。
+ * 由 ServerLevel 构造末尾按 id 在 SystemRegistries 里新建，实例随 level 走。
  * 实现必须无状态且纯方法，applySurface 跑 genPool 多线程，实例被多个 surface 任务共享。
  */
 public interface SurfaceSystem {

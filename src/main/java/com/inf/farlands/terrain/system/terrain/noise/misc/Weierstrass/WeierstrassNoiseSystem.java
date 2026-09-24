@@ -3,6 +3,7 @@ package com.inf.farlands.terrain.system.terrain.noise.misc.Weierstrass;
 import com.mojang.serialization.MapCodec;
 import com.inf.farlands.FarlandsConstant;
 import com.inf.farlands.terrain.NoiseSystem;
+import com.inf.farlands.terrain.registry.SystemArgs;
 
 import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.world.level.ChunkPos;
@@ -46,14 +47,10 @@ public final class WeierstrassNoiseSystem implements NoiseSystem {
     private final double scaleY;
     private final double scaleZ;
 
-    public WeierstrassNoiseSystem() {
-        this(1.0, 1.0, 1.0);
-    }
-
-    public WeierstrassNoiseSystem(double scaleX, double scaleY, double scaleZ) {
-        this.scaleX = scaleX;
-        this.scaleY = scaleY;
-        this.scaleZ = scaleZ;
+    public WeierstrassNoiseSystem(SystemArgs args) {
+        this.scaleX = args.getDouble("scaleX");
+        this.scaleY = args.getDouble("scaleY");
+        this.scaleZ = args.getDouble("scaleZ");
     }
 
     @Override

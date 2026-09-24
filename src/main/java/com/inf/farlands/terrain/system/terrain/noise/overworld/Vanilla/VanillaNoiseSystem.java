@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.inf.farlands.terrain.NoiseSystem;
+import com.inf.farlands.terrain.registry.SystemArgs;
 
 import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
@@ -36,12 +37,8 @@ public final class VanillaNoiseSystem implements NoiseSystem {
     /** 重建后的主 3D 噪声。withNewRandom 会重建三个 PerlinNoise，不能每个 NoiseChunk 都做。 */
     private volatile BlendedNoise cachedBlendedNoise;
 
-    public VanillaNoiseSystem() {
-        this(0L);
-    }
-
-    public VanillaNoiseSystem(long seed) {
-        this.seed = seed;
+    public VanillaNoiseSystem(SystemArgs args) {
+        this.seed = args.getLong("seed");
         this.root = WorldgenRandom.Algorithm.XOROSHIRO.newInstance(this.seed).forkPositional();
     }
 

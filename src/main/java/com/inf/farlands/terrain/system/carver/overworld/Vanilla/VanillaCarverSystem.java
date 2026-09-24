@@ -2,6 +2,7 @@ package com.inf.farlands.terrain.system.carver.overworld.Vanilla;
 
 import com.inf.farlands.terrain.CarverSystem;
 import com.inf.farlands.terrain.CarvingMaskStorage;
+import com.inf.farlands.terrain.registry.SystemArgs;
 import com.inf.farlands.terrain.terrainFiller.AbstractTerrainFiller;
 
 import java.util.function.Function;
@@ -49,7 +50,8 @@ public final class VanillaCarverSystem implements CarverSystem {
     /** 起点网格半径，vanilla applyCarvers 硬编码 8。 */
     private static final int GRID_RADIUS = 8;
 
-    public VanillaCarverSystem() {
+    /** 统一构造签名，本系统不读任何参数。 */
+    public VanillaCarverSystem(SystemArgs args) {
     }
 
     @Override

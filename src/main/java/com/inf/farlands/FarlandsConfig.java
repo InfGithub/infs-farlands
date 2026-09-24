@@ -1,9 +1,5 @@
 package com.inf.farlands;
 
-import com.inf.farlands.terrain.system.biome.BiomeSystemType;
-import com.inf.farlands.terrain.system.carver.CarverSystemType;
-import com.inf.farlands.terrain.system.surface.SurfaceSystemType;
-import com.inf.farlands.terrain.system.terrain.TerrainSystemType;
 import com.inf.farlands.util.config.Config;
 import com.inf.farlands.util.config.ConfigEntry;
 
@@ -90,104 +86,6 @@ public class FarlandsConfig {
                         .build();
         public static final long fsaPersistInterval;
 
-        // 地形系统
-
-        public static final ConfigEntry<TerrainSystemType> OVERWORLD_TERRAIN_SYSTEM = Config
-                        .setEnum("overworldTerrainSystem", TerrainSystemType.class)
-                        .comment("en_us", "Terrain system for overworld generation")
-                        .comment("zh_cn", "主世界地形系统")
-                        .define(TerrainSystemType.VOID)
-                        .build();
-        public static final TerrainSystemType overworldTerrainSystem;
-
-        public static final ConfigEntry<TerrainSystemType> NETHER_TERRAIN_SYSTEM = Config
-                        .setEnum("theNetherTerrainSystem", TerrainSystemType.class)
-                        .comment("en_us", "Terrain system for the nether generation")
-                        .comment("zh_cn", "下界地形系统")
-                        .define(TerrainSystemType.VOID)
-                        .build();
-        public static final TerrainSystemType netherTerrainSystem;
-
-        public static final ConfigEntry<TerrainSystemType> END_TERRAIN_SYSTEM = Config
-                        .setEnum("theEndTerrainSystem", TerrainSystemType.class)
-                        .comment("en_us", "Terrain system for the end generation")
-                        .comment("zh_cn", "末地地形系统")
-                        .define(TerrainSystemType.VOID)
-                        .build();
-        public static final TerrainSystemType endTerrainSystem;
-
-        public static final ConfigEntry<BiomeSystemType> OVERWORLD_BIOME_SYSTEM = Config
-                        .setEnum("overworldBiomeSystem", BiomeSystemType.class)
-                        .comment("en_us", "Biome system for overworld biomes")
-                        .comment("zh_cn", "主世界群系系统")
-                        .define(BiomeSystemType.VOID)
-                        .build();
-        public static final BiomeSystemType overworldBiomeSystem;
-
-        public static final ConfigEntry<BiomeSystemType> NETHER_BIOME_SYSTEM = Config
-                        .setEnum("theNetherBiomeSystem", BiomeSystemType.class)
-                        .comment("en_us", "Biome system for the nether biomes")
-                        .comment("zh_cn", "下界群系系统")
-                        .define(BiomeSystemType.VOID)
-                        .build();
-        public static final BiomeSystemType netherBiomeSystem;
-
-        public static final ConfigEntry<BiomeSystemType> END_BIOME_SYSTEM = Config
-                        .setEnum("theEndBiomeSystem", BiomeSystemType.class)
-                        .comment("en_us", "Biome system for the end biomes")
-                        .comment("zh_cn", "末地群系系统")
-                        .define(BiomeSystemType.VOID)
-                        .build();
-        public static final BiomeSystemType endBiomeSystem;
-
-        public static final ConfigEntry<SurfaceSystemType> OVERWORLD_SURFACE_SYSTEM = Config
-                        .setEnum("overworldSurfaceSystem", SurfaceSystemType.class)
-                        .comment("en_us", "Surface system for overworld terrain")
-                        .comment("zh_cn", "主世界地表系统")
-                        .define(SurfaceSystemType.VOID)
-                        .build();
-        public static final SurfaceSystemType overworldSurfaceSystem;
-
-        public static final ConfigEntry<SurfaceSystemType> NETHER_SURFACE_SYSTEM = Config
-                        .setEnum("theNetherSurfaceSystem", SurfaceSystemType.class)
-                        .comment("en_us", "Surface system for the nether terrain")
-                        .comment("zh_cn", "下界地表系统")
-                        .define(SurfaceSystemType.VOID)
-                        .build();
-        public static final SurfaceSystemType netherSurfaceSystem;
-
-        public static final ConfigEntry<SurfaceSystemType> END_SURFACE_SYSTEM = Config
-                        .setEnum("theEndSurfaceSystem", SurfaceSystemType.class)
-                        .comment("en_us", "Surface system for the end terrain")
-                        .comment("zh_cn", "末地地表系统")
-                        .define(SurfaceSystemType.VOID)
-                        .build();
-        public static final SurfaceSystemType endSurfaceSystem;
-
-        public static final ConfigEntry<CarverSystemType> OVERWORLD_CARVER_SYSTEM = Config
-                        .setEnum("overworldCarverSystem", CarverSystemType.class)
-                        .comment("en_us", "Carver system for overworld terrain")
-                        .comment("zh_cn", "主世界雕刻系统")
-                        .define(CarverSystemType.VOID)
-                        .build();
-        public static final CarverSystemType overworldCarverSystem;
-
-        public static final ConfigEntry<CarverSystemType> NETHER_CARVER_SYSTEM = Config
-                        .setEnum("theNetherCarverSystem", CarverSystemType.class)
-                        .comment("en_us", "Carver system for the nether terrain")
-                        .comment("zh_cn", "下界雕刻系统")
-                        .define(CarverSystemType.VOID)
-                        .build();
-        public static final CarverSystemType netherCarverSystem;
-
-        public static final ConfigEntry<CarverSystemType> END_CARVER_SYSTEM = Config
-                        .setEnum("theEndCarverSystem", CarverSystemType.class)
-                        .comment("en_us", "Carver system for the end terrain")
-                        .comment("zh_cn", "末地雕刻系统")
-                        .define(CarverSystemType.VOID)
-                        .build();
-        public static final CarverSystemType endCarverSystem;
-
         // 地形管线
 
         public static final ConfigEntry<Integer> MAX_GEN_TASKS_PER_TICK = Config.setInt("maxGenTasksPerTick")
@@ -257,18 +155,6 @@ public class FarlandsConfig {
                 fsaCleanupMargin = FSA_CLEANUP_MARGIN.get();
                 fsaCacheLimit = FSA_CACHE_LIMIT.get();
                 fsaPersistInterval = FSA_PERSIST_INTERVAL.get();
-                overworldTerrainSystem = OVERWORLD_TERRAIN_SYSTEM.get();
-                netherTerrainSystem = NETHER_TERRAIN_SYSTEM.get();
-                endTerrainSystem = END_TERRAIN_SYSTEM.get();
-                overworldBiomeSystem = OVERWORLD_BIOME_SYSTEM.get();
-                netherBiomeSystem = NETHER_BIOME_SYSTEM.get();
-                endBiomeSystem = END_BIOME_SYSTEM.get();
-                overworldSurfaceSystem = OVERWORLD_SURFACE_SYSTEM.get();
-                netherSurfaceSystem = NETHER_SURFACE_SYSTEM.get();
-                endSurfaceSystem = END_SURFACE_SYSTEM.get();
-                overworldCarverSystem = OVERWORLD_CARVER_SYSTEM.get();
-                netherCarverSystem = NETHER_CARVER_SYSTEM.get();
-                endCarverSystem = END_CARVER_SYSTEM.get();
                 maxGenTasksPerTick = MAX_GEN_TASKS_PER_TICK.get();
                 genWorkerThreads = GEN_WORKER_THREADS.get();
                 parallelLightThreads = PARALLEL_LIGHT_THREADS.get();

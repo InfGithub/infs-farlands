@@ -3,6 +3,7 @@ package com.inf.farlands.terrain.system.terrain.noise.overworld.Oct;
 import java.util.Map;
 
 import com.inf.farlands.terrain.NoiseSystem;
+import com.inf.farlands.terrain.registry.SystemArgs;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctNoiseHarvest;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctNoiseSource;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctOverworldDensity;
@@ -21,7 +22,8 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
 /**
  * 主世界 Oct 噪声系统：不复用 vanilla 的密度节点，用 Oct 包下的自研链重建整条 router，三轴坐标按 scale 缩放。
  *
- * <p>噪声参数从传入的 vanilla router 采集，噪声实例用构造时的 seed 自行派生，全程公开 API。
+ * <p>
+ * 噪声参数从传入的 vanilla router 采集，噪声实例用构造时的 seed 自行派生，全程公开 API。
  * 链只复刻默认变体，采集不全时整条回退 vanilla。vanilla router 每个 level 只有一份实例，
  * 本系统实例也是 per-level，所以重建结果按 vanilla router 身份缓存，每个 chunk 不会重算。
  */
@@ -34,13 +36,9 @@ public final class OctNoiseSystem implements NoiseSystem {
     private volatile NoiseRouter cachedRouter;
     private volatile NoiseRouter cachedVanilla;
 
-    public OctNoiseSystem() {
-        this(0L, 1.0, 1.0, 1.0);
-    }
-
-    public OctNoiseSystem(long seed, double scaleX, double scaleY, double scaleZ) {
-        this.scale = new OctScale(scaleX, scaleY, scaleZ);
-        this.root = WorldgenRandom.Algorithm.XOROSHIRO.newInstance(seed).forkPositional();
+    public OctNoiseSystem(SystemArgs args) {
+        this.scale = new OctScale(args.getDouble("scaleX"), args.getDouble("scaleY"), args.getDouble("scaleZ"));
+        this.root = WorldgenRandom.Algorithm.XOROSHIRO.newInstance(args.getLong("seed")).forkPositional();
     }
 
     @Override

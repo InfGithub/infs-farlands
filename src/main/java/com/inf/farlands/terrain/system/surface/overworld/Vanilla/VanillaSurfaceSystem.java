@@ -1,6 +1,7 @@
 package com.inf.farlands.terrain.system.surface.overworld.Vanilla;
 
 import com.inf.farlands.terrain.SurfaceSystem;
+import com.inf.farlands.terrain.registry.SystemArgs;
 import com.inf.farlands.terrain.terrainFiller.AbstractTerrainFiller;
 import com.inf.farlands.util.window.WindowedChunk;
 
@@ -37,7 +38,8 @@ import net.minecraft.world.level.levelgen.WorldGenerationContext;
  */
 public final class VanillaSurfaceSystem implements SurfaceSystem {
 
-    public VanillaSurfaceSystem() {
+    /** 统一构造签名，本系统不读任何参数。 */
+    public VanillaSurfaceSystem(SystemArgs args) {
     }
 
     @Override

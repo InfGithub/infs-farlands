@@ -3,6 +3,7 @@ package com.inf.farlands.terrain.system.biome.overworld.Oct;
 import java.util.List;
 
 import com.inf.farlands.terrain.BiomeSystem;
+import com.inf.farlands.terrain.registry.SystemArgs;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctNoiseHarvest;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctNoiseSource;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctOverworldDensity;
@@ -35,13 +36,9 @@ public final class OctBiomeSystem implements BiomeSystem {
     private volatile Climate.Sampler cachedSampler;
     private volatile NoiseRouter cachedVanilla;
 
-    public OctBiomeSystem() {
-        this(0L, 1.0, 1.0, 1.0);
-    }
-
-    public OctBiomeSystem(long seed, double scaleX, double scaleY, double scaleZ) {
-        this.seed = seed;
-        this.scale = new OctScale(scaleX, scaleY, scaleZ);
+    public OctBiomeSystem(SystemArgs args) {
+        this.seed = args.getLong("seed");
+        this.scale = new OctScale(args.getDouble("scaleX"), args.getDouble("scaleY"), args.getDouble("scaleZ"));
     }
 
     @Override

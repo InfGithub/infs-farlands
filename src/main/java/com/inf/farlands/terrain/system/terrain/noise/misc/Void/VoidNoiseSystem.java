@@ -1,6 +1,7 @@
 package com.inf.farlands.terrain.system.terrain.noise.misc.Void;
 
 import com.inf.farlands.terrain.NoiseSystem;
+import com.inf.farlands.terrain.registry.SystemArgs;
 
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
@@ -16,7 +17,8 @@ import net.minecraft.world.level.levelgen.PositionalRandomFactory;
 /** VOID 噪声系统：纯空气，什么都不生成。 */
 public final class VoidNoiseSystem implements NoiseSystem {
 
-    public VoidNoiseSystem() {
+    /** 统一构造签名，本系统不读任何参数。 */
+    public VoidNoiseSystem(SystemArgs args) {
     }
 
     @Override

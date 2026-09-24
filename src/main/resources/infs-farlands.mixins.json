@@ -57,6 +57,7 @@
     "noise.NoiseChunkInvoker",
     "noise.NoiseChunkMixin",
     "noise.HeightmapInvoker",
+    "terrain.ServerLevelMixin",
     "terrain.carver.WorldCarverMixin",
     "terrain.pipeline.GenerationChunkHolderMixin",
     "terrain.surface.SurfaceSystemMixin",

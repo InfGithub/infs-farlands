@@ -1,6 +1,7 @@
 package com.inf.farlands.terrain.system.biome.overworld.Vanilla;
 
 import com.inf.farlands.terrain.BiomeSystem;
+import com.inf.farlands.terrain.registry.SystemArgs;
 
 import net.minecraft.core.QuartPos;
 import net.minecraft.server.level.ServerLevel;
@@ -24,7 +25,8 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
  */
 public final class VanillaBiomeSystem implements BiomeSystem {
 
-    public VanillaBiomeSystem() {
+    /** 统一构造签名，本系统不读任何参数。 */
+    public VanillaBiomeSystem(SystemArgs args) {
     }
 
     @Override
