@@ -15,5 +15,7 @@
   "commands.infs-farlands.section.block.dump": "Section 方块数据已写入服务端日志。",
   "commands.infs-farlands.client.section.block.dump": "Section 方块数据已写入客户端日志。",
   "commands.infs-farlands.client.section.biome.dump": "Section 生物群系数据已写入客户端日志。",
-  "commands.infs-farlands.client.section.render.dump": "Section 渲染状态已写入客户端日志。"
+  "commands.infs-farlands.client.section.render.dump": "Section 渲染状态已写入客户端日志。",
+  "createWorld.tab.infs-farlands.title": "边境之地",
+  "createWorld.tab.infs-farlands.button": "无"
 }

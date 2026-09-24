@@ -15,5 +15,7 @@
   "commands.infs-farlands.section.block.dump": "Section block data dump written to server log.",
   "commands.infs-farlands.client.section.block.dump": "Section block data dump written to client log.",
   "commands.infs-farlands.client.section.biome.dump": "Section biome dump written to client log.",
-  "commands.infs-farlands.client.section.render.dump": "Section render state written to client log."
+  "commands.infs-farlands.client.section.render.dump": "Section render state written to client log.",
+  "createWorld.tab.infs-farlands.title": "Farlands",
+  "createWorld.tab.infs-farlands.button": "None"
 }
