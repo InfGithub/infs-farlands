@@ -30,14 +30,12 @@ public final class SystemRegistry<T> {
             throw new IllegalArgumentException(
                     "System %s does not implement %s".formatted(id, this.familyType.getName()));
         }
-        int total;
         synchronized (this.entries) {
             if (this.entries.putIfAbsent(id, type) != null) {
                 throw new IllegalStateException("Duplicate system id: " + id);
             }
-            total = this.entries.size();
         }
-        InfsFarlands.LOGGER.info("Registered system {} -> {} ({} total)", id, type.getName(), total);
+        InfsFarlands.LOGGER.info("Registered system {} -> {}", id, type.getName());
     }
 
     /** 按 id 取实现类。未注册抛 IllegalStateException。 */
