@@ -14,7 +14,8 @@ import net.minecraft.world.level.levelgen.synth.PerlinNoise;
 /**
  * 与 vanilla BlendedNoise 同式，差别是 X 与 Z 各用一个乘数。
  *
- * <p>vanilla 的 xzMultiplier 由 X、Z 共用，独立缩放表达不出来，所以整份 compute 照抄后拆成两个乘数。
+ * <p>
+ * vanilla 的 xzMultiplier 由 X、Z 共用，独立缩放表达不出来，所以整份 compute 照抄后拆成两个乘数。
  * scale 为 1 时与 vanilla 逐位一致。三个 PerlinNoise 必须由同一个 RandomSource 依次创建，
  * 与 vanilla 构造器一致，否则噪声不同源。
  */
@@ -53,6 +54,7 @@ public final class OctBlendedNoise implements DensityFunction.SimpleFunction {
      * 按 vanilla 的八度范围建三个 PerlinNoise：min/max 是 -15..0，main 是 -7..0。
      * random 三次依次传入同一个实例，消费同一随机流，与 vanilla 构造器同序。
      */
+    @SuppressWarnings("deprecation")
     public static OctBlendedNoise create(RandomSource random, double xzScale, double yScale,
             double xzFactor, double yFactor, double smearScaleMultiplier, OctScale scale) {
         return new OctBlendedNoise(
@@ -62,6 +64,7 @@ public final class OctBlendedNoise implements DensityFunction.SimpleFunction {
                 xzScale, yScale, xzFactor, yFactor, smearScaleMultiplier, scale);
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public double compute(DensityFunction.FunctionContext context) {
         double limitX = context.blockX() * this.xzMultiplierX;
