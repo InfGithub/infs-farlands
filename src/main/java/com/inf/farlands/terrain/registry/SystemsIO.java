@@ -91,8 +91,9 @@ public final class SystemsIO {
     }
 
     /**
-     * 内置默认：四族一律 VOID。维度取注册表里的全部 LevelStem，新世界因此不会因为数据包加了维度
-     * 而缺条目。只在该世界还没有配置文件时生效，已有配置文件的世界一律以文件为准。
+     * 内置默认：地形用 vanilla 噪声系统且 seed 为 0，其余三族走各自的 VOID。维度取注册表里的全部
+     * LevelStem，新世界因此不会因为数据包加了维度而缺条目。只在该世界还没有配置文件时生效，已有配置
+     * 文件的世界一律以文件为准。
      */
     public static SystemsData defaultFor(MinecraftServer server) {
         Map<Identifier, LevelSelection> levels = new LinkedHashMap<>();
@@ -105,7 +106,8 @@ public final class SystemsIO {
 
     private static LevelSelection defaultSelection() {
         return new LevelSelection(
-                new SystemSelection(SystemRegistries.TERRAIN_VOID_NOISE_SYSTEM.value(), Map.of()),
+                new SystemSelection(SystemRegistries.TERRAIN_VANILLA_NOISE_SYSTEM.value(),
+                        Map.of("seed", Arg.ofLong(0L))),
                 new SystemSelection(SystemRegistries.BIOME_VOID_BIOME_SYSTEM.value(), Map.of()),
                 new SystemSelection(SystemRegistries.SURFACE_VOID_SURFACE_SYSTEM.value(), Map.of()),
                 new SystemSelection(SystemRegistries.CARVER_VOID_CARVER_SYSTEM.value(), Map.of()));

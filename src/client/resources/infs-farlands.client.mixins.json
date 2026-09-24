@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_25",
   "client": [
     "debug.DebugEntryPositionMixin",
+    "debug.DebugScreenEntriesMixin",
     "debug.renderer.ChunkBorderRendererMixin",
     "debug.tool.clamp.EntityPickMixin",
     "debug.tool.clamp.KeyboardHandlerMixin",

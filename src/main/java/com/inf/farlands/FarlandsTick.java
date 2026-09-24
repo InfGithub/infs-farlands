@@ -10,6 +10,7 @@ import com.inf.farlands.util.maps.AquiferUtil;
 import com.inf.farlands.util.maps.BlockUtil;
 import com.inf.farlands.util.maps.SectionUtil;
 import com.inf.farlands.util.network.ChunkDataSender;
+import com.inf.farlands.util.network.SystemsSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
 
 import net.minecraft.advancements.AdvancementHolder;
@@ -107,6 +108,8 @@ public class FarlandsTick {
         }
         // §5 窗口差量 + 限量发包；返回值同时驱动 fsa 的窗口清理判定。
         boolean windowChanged = ChunkDataSender.tick(server);
+        // 世界系统选择下发：玩家进服或换维度后补一次，客户端据此显示当前 level 用哪四族系统。
+        SystemsSender.tick(server);
         // P2 动态优先级：任一玩家跨 chunk 移动时，地形与光照队列按当前距离重排。
         if (ChunkDataSender.consumePlayersMoved()) {
             GenQueue.rebuildQueue();

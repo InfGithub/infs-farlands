@@ -24,6 +24,7 @@ public class FarlandsRegister {
         ClampTogglePacketRegister.registerType();
         LightUpdatePacketRegister.registerType();
         SectionBlocksUpdatePacketRegister.registerType();
+        SystemsPacketRegister.registerType();
         registerSystems();
     }
 
