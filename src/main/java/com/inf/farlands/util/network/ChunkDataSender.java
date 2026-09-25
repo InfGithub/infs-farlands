@@ -2,7 +2,9 @@ package com.inf.farlands.util.network;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -19,9 +21,6 @@ import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import io.netty.buffer.Unpooled;
-import it.unimi.dsi.fastutil.ints.IntArraySet;
-import it.unimi.dsi.fastutil.ints.IntIterator;
-import it.unimi.dsi.fastutil.ints.IntSet;
 
 import net.minecraft.core.SectionPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -54,8 +53,9 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
  * 是否发送由接收端按包内绝对 sectionY 与 chunk 当前状态决定。
  *
  * <p>
- * 状态全部主线程，故队列用普通集合即可；但 {@link #enqueueSectionSend}
- * 可能被生成线程调用，故 pendingQueues 用 ConcurrentHashMap。
+ * 内容变化由 {@link #markChunkChanged} 只记 chunk，给谁由每 tick 在 flush 之前按玩家当前窗口物化
+ * 决定，因此事件发生时没有玩家在范围内也不会漏发。标记会被生成线程调用，而 flush 在主线程迭代
+ * 同一批集合，故外层 map 用 ConcurrentHashMap、内层集合用并发集合，两边都不需要额外加锁。
  */
 public final class ChunkDataSender {
 
@@ -80,7 +80,10 @@ public final class ChunkDataSender {
     private static final Map<UUID, PlayerWindowState> WINDOW_STATES = new ConcurrentHashMap<>();
 
     /** §4.2 队列：UUID -> (chunkPos -> 新进入 sectionY 集合)。已发送即出队，队列无历史状态机。 */
-    private static final Map<UUID, Map<Long, IntSet>> PENDING_QUEUES = new ConcurrentHashMap<>();
+    private static final Map<UUID, Map<Long, Set<Integer>>> PENDING_QUEUES = new ConcurrentHashMap<>();
+
+    /** 内容变化过的 chunk，按维度分桶。给谁由每 tick 物化决定，见 {@link #markChunkChanged}。 */
+    private static final Map<ResourceKey<Level>, Set<Long>> CHANGED_CHUNKS = new ConcurrentHashMap<>();
 
     /** 玩家退出清理，防状态随会话永存。 */
     public static void onPlayerLogout(UUID id) {
@@ -106,10 +109,14 @@ public final class ChunkDataSender {
         List<ServerPlayer> players = server.getPlayerList().getPlayers();
         boolean windowChanged = false;
         playersMoved = false;
+        Map<ResourceKey<Level>, Set<Long>> changed = takeChangedChunks();
         for (ServerPlayer player : players) {
             if (updatePlayerWindow(player)) {
                 windowChanged = true;
             }
+        }
+        for (ServerPlayer player : players) {
+            materializeChanged(player, changed);
         }
         for (ServerPlayer player : players) {
             flushPendingSections(player);
@@ -185,7 +192,7 @@ public final class ChunkDataSender {
         player.getChunkTrackingView().forEach(cp -> {
             PENDING_QUEUES
                     .computeIfAbsent(player.getUUID(), k -> new ConcurrentHashMap<>())
-                    .computeIfAbsent(cp.pack(), k -> new IntArraySet())
+                    .computeIfAbsent(cp.pack(), k -> ConcurrentHashMap.newKeySet())
                     .add(s);
             ChunkAccess ca = level.getChunk(cp.x(), cp.z(), ChunkStatus.FULL, false);
             if (ca instanceof LevelChunk lc) {
@@ -200,36 +207,85 @@ public final class ChunkDataSender {
     }
 
     /**
-     * fill 完成后主动入队该 section，复用窗口差量发送链，flush 限量。
-     * fill 直接写 section 不走 Level.setBlock -> 无 vanilla 广播；此处对 tracking 玩家
-     * 补入发送队列，下 tick flush 发 §5 包。生成线程可调，故用 CHM。
+     * 标记该 chunk 的内容已变，需要补发。fill 完成、fsa 读回完成、以及 chunk 包发出时为空三种情形
+     * 都调它。
      *
      * <p>
-     * 距离判定不依赖 tracking view，其每 tick 更新，fill 完成时新加载 chunk 可能
-     * 不在 tracking -> §5 漏发 -> 客户端空壳空缺/双端不同步。
+     * 只记 chunk，不记玩家：给谁由每 tick 在 flush 之前按玩家当前窗口物化，所以事件发生时没有玩家
+     * 在范围内也不会漏发。写入与 {@link #takeChangedChunks} 的换出都走同一个 key 的 compute，由 CHM
+     * 逐桶串行，晚到的标记要么落进本 tick 的批次，要么落进换出的新集合等下一 tick。
+     *
+     * <p>
+     * 生成线程与主线程都会调，故标记集合用并发集合。
      */
-    public static void enqueueSectionSend(LevelChunk chunk, int sectionY) {
+    public static void markChunkChanged(LevelChunk chunk) {
         if (!(chunk.getLevel() instanceof ServerLevel level)) {
             return;
         }
-        ChunkPos cp = chunk.getPos();
-        long chunkKey = cp.pack();
-        for (ServerPlayer player : level.players()) {
-            ChunkTrackingView view = player.getChunkTrackingView();
-            int viewDistance = view instanceof ChunkTrackingView.Positioned pos ? pos.viewDistance() : 8;
-            if (ChunkTrackingView.isWithinDistance(
-                    player.chunkPosition().x(), player.chunkPosition().z(), viewDistance,
-                    cp.x(), cp.z(), true)) {
-                PENDING_QUEUES.computeIfAbsent(player.getUUID(), k -> new ConcurrentHashMap<>())
-                        .computeIfAbsent(chunkKey, k -> new IntArraySet())
-                        .add(sectionY);
+        long chunkKey = chunk.getPos().pack();
+        CHANGED_CHUNKS.compute(level.dimension(), (dimension, marked) -> {
+            Set<Long> target = marked == null ? ConcurrentHashMap.newKeySet() : marked;
+            target.add(chunkKey);
+            return target;
+        });
+    }
+
+    /** 换出本 tick 的标记批次，每个维度换成新集合。 */
+    private static Map<ResourceKey<Level>, Set<Long>> takeChangedChunks() {
+        Map<ResourceKey<Level>, Set<Long>> batch = new HashMap<>();
+        for (ResourceKey<Level> dimension : new ArrayList<>(CHANGED_CHUNKS.keySet())) {
+            CHANGED_CHUNKS.computeIfPresent(dimension, (key, marked) -> {
+                batch.put(key, marked);
+                return ConcurrentHashMap.newKeySet();
+            });
+        }
+        return batch;
+    }
+
+    /**
+     * 把本 tick 的内容变化按该玩家的当前窗口物化成 per-player 条目。
+     *
+     * <p>
+     * 只按段的键取，不读段内容：内容判定留在 flush 的 {@code isChunkBusy} 门之后，生成线程正在写
+     * section 时读 {@code hasOnlyAir} 会撞 vanilla 的 PalettedContainer 多线程检测。
+     */
+    private static void materializeChanged(ServerPlayer player, Map<ResourceKey<Level>, Set<Long>> batch) {
+        Set<Long> marked = batch.get(player.level().dimension());
+        if (marked == null || marked.isEmpty()) {
+            return;
+        }
+        ServerLevel level = (ServerLevel) player.level();
+        ChunkPos playerChunk = player.chunkPosition();
+        ChunkTrackingView view = player.getChunkTrackingView();
+        int viewDistance = view instanceof ChunkTrackingView.Positioned pos ? pos.viewDistance() : 8;
+        int centerY = Mth.floorDiv(player.getBlockY(), 16);
+        int windowMinY = centerY - FarlandsConfig.verticalSimulationDistance;
+        int windowMaxY = centerY + FarlandsConfig.verticalSimulationDistance;
+        for (long chunkKey : marked) {
+            int cx = ChunkPos.getX(chunkKey);
+            int cz = ChunkPos.getZ(chunkKey);
+            if (!ChunkTrackingView.isWithinDistance(playerChunk.x(), playerChunk.z(), viewDistance, cx, cz, true)) {
+                continue;
+            }
+            ChunkAccess chunk = level.getChunk(cx, cz, ChunkStatus.FULL, false);
+            if (!(chunk instanceof LevelChunk lc)) {
+                // 未加载：到此为止，重载时 fsa 读回、新生成或空包会重新标记
+                continue;
+            }
+            Set<Integer> sections = PENDING_QUEUES
+                    .computeIfAbsent(player.getUUID(), k -> new ConcurrentHashMap<>())
+                    .computeIfAbsent(chunkKey, k -> ConcurrentHashMap.newKeySet());
+            for (Integer sy : ((WindowedChunk) lc).windowedAllSections().keySet()) {
+                if (sy >= windowMinY && sy <= windowMaxY) {
+                    sections.add(sy);
+                }
             }
         }
     }
 
     /** 限量发送：按距离排序出队，累计 ≤ sectionSendBytesPerTick，打包为一个 §5 包。 */
     private static void flushPendingSections(ServerPlayer player) {
-        Map<Long, IntSet> queue = PENDING_QUEUES.get(player.getUUID());
+        Map<Long, Set<Integer>> queue = PENDING_QUEUES.get(player.getUUID());
         if (queue == null || queue.isEmpty()) {
             return;
         }
@@ -238,16 +294,17 @@ public final class ChunkDataSender {
         int budget = FarlandsConfig.sectionSendBytesPerTick;
         int windowMinY = Mth.floorDiv(player.getBlockY(), 16) - FarlandsConfig.verticalSimulationDistance;
 
-        List<Map.Entry<Long, IntSet>> sorted = new ArrayList<>(queue.entrySet());
+        List<Map.Entry<Long, Set<Integer>>> sorted = new ArrayList<>(queue.entrySet());
         sorted.sort(Comparator.comparingLong(e -> distSq(e.getKey(), playerChunk)));
 
         List<ChunkDataPacket.SectionEntry> batch = new ArrayList<>();
         int used = 0;
-        outer: for (Map.Entry<Long, IntSet> e : sorted) {
+        outer: for (Map.Entry<Long, Set<Integer>> e : sorted) {
             int cx = ChunkPos.getX(e.getKey());
             int cz = ChunkPos.getZ(e.getKey());
             ChunkAccess chunk = level.getChunk(cx, cz, ChunkStatus.FULL, false);
             if (!(chunk instanceof LevelChunk lc)) {
+                queue.remove(e.getKey()); // 未加载：剪掉，重载时标记或 chunk 包会补
                 continue;
             }
             if (GenQueue.isChunkBusy(lc)) {
@@ -255,9 +312,9 @@ public final class ChunkDataSender {
                 // 序列化会撞 vanilla 的 PalettedContainer 多线程检测，直接 CTD。
                 continue;
             }
-            IntIterator it = e.getValue().iterator();
+            Iterator<Integer> it = e.getValue().iterator();
             while (it.hasNext()) {
-                int sy = it.nextInt();
+                int sy = it.next();
                 LevelChunkSection section = ((WindowedChunk) lc).windowedAllSections().get(sy);
                 if (section == null || section.hasOnlyAir()) {
                     it.remove(); // 空 section 无需发送

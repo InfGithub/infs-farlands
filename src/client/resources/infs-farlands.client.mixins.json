@@ -38,6 +38,7 @@
     "render.SectionCopyMixin",
     "render.OctreeMixin",
     "render.SectionOcclusionGraphMixin",
+    "render.RenderRegionCacheMixin",
     "worldselection.CreateWorldScreenMixin",
     "worldselection.WorldOpenFlowsMixin",
     "outside.GuiMixin",

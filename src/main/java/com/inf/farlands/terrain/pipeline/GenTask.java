@@ -117,12 +117,11 @@ public final class GenTask {
             // 光照触发条件是 carvers 完成，carvers 是光照前最后一个阶段。
             if (carved.length > 0) {
                 GenQueue.notifyGenerated(chunk);
-                for (int sy : carved) {
-                    // fill、surface、carvers 直接写 section，没有 vanilla 广播，这里补入发送队列，
-                    // 下 tick flush 发 section 包。放在 notifyGenerated 之后，flush 时检查
-                    // LIGHT_IN_FLIGHT 必为真，于是留队列等光照完成，方块与光照同到。
-                    ChunkDataSender.enqueueSectionSend(chunk, sy);
-                }
+                // fill、surface、carvers 直接写 section，没有 vanilla 广播；这里只标记该 chunk
+                // 内容已变，由 ChunkDataSender 每 tick 按玩家当前窗口物化后再发 §5 包。
+                // 放在 notifyGenerated 之后，flush 时 LIGHT_IN_FLIGHT 必为真，于是留队列等光照
+                // 完成，方块与光照同到。
+                ChunkDataSender.markChunkChanged(chunk);
             }
         } finally {
             // fill 异常也清理，清在途并释放 ticket。异常路径若不清理会让标志残留，chunk 永不卸载。

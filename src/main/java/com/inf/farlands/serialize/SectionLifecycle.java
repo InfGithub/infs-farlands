@@ -623,8 +623,8 @@ public final class SectionLifecycle {
     }
 
     /**
-     * 读回结果应用，主线程。写入数据与光照，恢复 stage，并补发 section 包。读回不标脏，
-     * 因为磁盘上已经有了。
+     * 读回结果应用，主线程。写入数据与光照，恢复 stage，并标记该 chunk 需要补发 section 包。
+     * 读回不标脏，因为磁盘上已经有了。
      */
     private static void applyDecoded(LevelChunk lc, int sy, SectionSerializer.DecodedSection decoded) {
         WindowedChunk wc = (WindowedChunk) lc;
@@ -642,7 +642,7 @@ public final class SectionLifecycle {
             }
         }
         SectionStage.setStage(lc, sy, decoded.stage());
-        ChunkDataSender.enqueueSectionSend(lc, sy);
+        ChunkDataSender.markChunkChanged(lc);
     }
 
     // ---- 工具 ----
