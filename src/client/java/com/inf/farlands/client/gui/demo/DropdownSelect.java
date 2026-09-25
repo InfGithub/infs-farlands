@@ -171,8 +171,8 @@ public final class DropdownSelect extends AbstractWidget {
             } else {
                 this.open = true;
                 this.highlight = this.selected;
-                // 每次展开都从第 0 项开始显示，不把选中项滚进可见区。代价是选中项靠后时展开看不到高亮。
-                this.offset = 0;
+                // 展开时把选中项滚进可见区，展开即可看到当前选的是哪个。
+                this.offset = Mth.clamp(this.selected, 0, this.maxOffset());
                 this.layer.setOpen(this);
                 this.revealer.reveal(this.getY() + this.getHeight() + this.visibleRows() * ROW_HEIGHT);
             }
