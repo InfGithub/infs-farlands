@@ -39,12 +39,15 @@ public final class WindowSendState {
     }
 
     /**
-     * 窗口内非空 section 列表，按绝对 sectionY 升序。calculateChunkSize 与 extractChunkData 必须
-     * 共用同一过滤，否则 buffer 尺寸与实际写入不匹配，26.1.2 会在写满断言上抛异常。
+     * 窗口内 section 列表，按绝对 sectionY 升序。calculateChunkSize 与 extractChunkData 必须共用
+     * 同一入口，否则 buffer 尺寸与实际写入不匹配，26.1.2 会在写满断言上抛异常。
+     *
+     * 纯空气段照发：群系存在段里，段不发客户端就没有那份群系，读到的会是工厂默认群系。空气段的
+     * 段体只是空方块容器加群系容器，各几字节，窗口最多 2 * verticalSimulationDistance + 1 段。
      *
      * fill 或光照在途即 GenQueue.isChunkBusy 的 chunk 返回空列表：genPool 并发写 section 时，
      * 两次遍历之间的 section 集合与内容会不一致；过滤后 section 稳定才打包。空出来的数据由
-     * fill 完成后的 §5 section 包补齐。
+     * fill 完成后的段包补齐。
      */
     public static List<Map.Entry<Integer, LevelChunkSection>> sendableSections(LevelChunk chunk) {
         if (GenQueue.isChunkBusy(chunk)) {
@@ -56,7 +59,7 @@ public final class WindowSendState {
         for (Map.Entry<Integer, LevelChunkSection> e : ((WindowedChunk) chunk).windowedAllSections().entrySet()) {
             int sy = e.getKey();
             LevelChunkSection s = e.getValue();
-            if (sy >= minY && sy <= maxY && s != null && !s.hasOnlyAir()) {
+            if (sy >= minY && sy <= maxY && s != null) {
                 out.add(e);
             }
         }

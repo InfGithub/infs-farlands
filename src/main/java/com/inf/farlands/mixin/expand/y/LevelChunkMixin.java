@@ -132,10 +132,19 @@ public abstract class LevelChunkMixin {
         reporter.close();
     }
 
+    /**
+     * biomes 包按绝对 sectionY 落位，与写侧的段数加 sectionY 格式配套。
+     *
+     * 不能按 getSections() 的顺序解：那是窗口视图，客户端窗口跟着相机滑动，与服务端发送时的
+     * 段集不一致。落位走 getSection，越出窗口数组的索引也会写进 allSections 的正确 sy。
+     */
     @Overwrite
     public void replaceBiomes(FriendlyByteBuf buffer) {
         ChunkAccess ca = (ChunkAccess) (Object) this;
-        for (LevelChunkSection s : ca.getSections()) {
+        int sectionCount = buffer.readVarInt();
+        for (int i = 0; i < sectionCount; i++) {
+            int sectionY = buffer.readVarInt();
+            LevelChunkSection s = ca.getSection(ca.getSectionIndexFromSectionY(sectionY));
             if (s != null) {
                 s.readBiomes(buffer);
             }

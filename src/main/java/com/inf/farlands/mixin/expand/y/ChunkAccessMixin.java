@@ -23,7 +23,6 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.CrashReport;
 import net.minecraft.CrashReportCategory;
 import net.minecraft.ReportedException;
-import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.biome.Biome;
@@ -391,21 +390,19 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
         return max;
     }
 
+    /**
+     * 群系按原始 quart Y 定位段，不 clamp 到维度范围。
+     *
+     * clamp 是 vanilla 为直接索引 sections 数组而设，越界即抛；本 port 走 getSection，任意索引
+     * 都成立，clamp 只剩把范围外 Y 折到边界段的副作用。段内偏移一直用的是未 clamp 的 y & 3，
+     * 去掉 clamp 后索引与偏移同源。范围外缺失的段由 getSection 按需建出，是干净段，窗口外由
+     * fsa 清理回收，不写盘。
+     */
     @Overwrite
     public Holder<Biome> getNoiseBiome(int x, int y, int z) {
         try {
-            int j = _sectIdx(QuartPos.toBlock(Mth.clamp(y,
-                    QuartPos.fromBlock(this.levelHeightAccessor.getMinY()),
-                    QuartPos.fromBlock(this.levelHeightAccessor.getMinY())
-                            + QuartPos.fromBlock(this.levelHeightAccessor.getHeight()) - 1)));
-            LevelChunkSection s = this.getSection(j);
-            Holder<Biome> result;
-            if (s != null) {
-                result = s.getNoiseBiome(x & 3, y & 3, z & 3);
-            } else {
-                result = this.containerFactory.defaultBiome();
-            }
-            return result;
+            LevelChunkSection s = this.getSection(_sectIdx(QuartPos.toBlock(y)));
+            return s.getNoiseBiome(x & 3, y & 3, z & 3);
         } catch (Throwable throwable) {
             CrashReport crashreport = CrashReport.forThrowable(throwable, "Getting biome");
             CrashReportCategory crashreportcategory = crashreport.addCategory("Biome being got");

@@ -316,10 +316,11 @@ public final class ChunkDataSender {
             while (it.hasNext()) {
                 int sy = it.next();
                 LevelChunkSection section = ((WindowedChunk) lc).windowedAllSections().get(sy);
-                if (section == null || section.hasOnlyAir()) {
-                    it.remove(); // 空 section 无需发送
+                if (section == null) {
+                    it.remove(); // 段不存在：剪掉
                     continue;
                 }
+                // 纯空气段照发：群系存在段里，不发客户端就没有那份群系，读到的是工厂默认群系
                 if (GenQueue.isLightInFlight(lc) && ((WindowedChunk) lc).isSectionDirty(sy)) {
                     // 生成 fill 的 section 光照播种未完成，留队列等光照。读回的 section 未脏，放行发送。
                     continue;
