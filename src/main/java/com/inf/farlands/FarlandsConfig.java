@@ -28,6 +28,13 @@ public class FarlandsConfig {
                         .build();
         public static final int borderAbsoluteMax;
 
+        public static final ConfigEntry<Boolean> OUTSIDE = Config.setBoolean("outside")
+                        .comment("en_us", "Allow entities to leave the world, disabling the six-sided boundary")
+                        .comment("zh_cn", "允许实体离开世界，关闭六面边界")
+                        .define(false)
+                        .build();
+        public static final boolean outside;
+
         public static final ConfigEntry<Integer> WORLD_GEN_MIN_Y = Config.setInt("worldGenMinY")
                         .comment("en_us", "Minimum absolute Y for world generation")
                         .comment("zh_cn", "世界生成的绝对最小 Y")
@@ -148,6 +155,7 @@ public class FarlandsConfig {
                 // 唯一读盘点：读一次、解析一次、约束一次。本类初始化由首个引用它的类触发。
                 Config.init();
                 borderAbsoluteMax = BORDER_ABSOLUTE_MAX.get();
+                outside = OUTSIDE.get();
                 worldGenMinY = WORLD_GEN_MIN_Y.get();
                 worldGenMaxY = WORLD_GEN_MAX_Y.get();
                 maxCapIter = MAX_CAP_ITER.get();

@@ -91,7 +91,10 @@
     "light.ChunkSkyLightSourcesMixin",
     "light.LevelChunkSectionMixin",
     "light.ClientboundLevelChunkWithLightPacketMixin",
-    "tick.MinecraftServerMixin"
+    "tick.MinecraftServerMixin",
+    "outside.LivingEntityMixin",
+    "outside.WorldBorder$StaticBorderExtentMixin",
+    "outside.WorldBorderMixin"
   ],
   "injectors": {
     "defaultRequire": 1
