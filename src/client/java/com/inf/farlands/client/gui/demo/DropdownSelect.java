@@ -78,6 +78,11 @@ public final class DropdownSelect extends AbstractWidget {
         this.onSelect = onSelect;
     }
 
+    /** 当前选中项在选项列表里的下标。 */
+    public int selectedIndex() {
+        return this.selected;
+    }
+
     private Font font() {
         return Minecraft.getInstance().font;
     }

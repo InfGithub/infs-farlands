@@ -36,7 +36,8 @@
     "render.SectionCopyMixin",
     "render.OctreeMixin",
     "render.SectionOcclusionGraphMixin",
-    "worldselection.CreateWorldScreenMixin"
+    "worldselection.CreateWorldScreenMixin",
+    "worldselection.WorldOpenFlowsMixin"
   ],
   "injectors": {
     "defaultRequire": 1

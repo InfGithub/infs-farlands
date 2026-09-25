@@ -25,6 +25,8 @@
   "createWorld.tab.infs-farlands.family.terrain": "Terrain system",
   "createWorld.tab.infs-farlands.family.surface": "Surface system",
   "createWorld.tab.infs-farlands.family.carver": "Carver system",
+  "createWorld.tab.infs-farlands.error.read.title": "Failed to read the system config",
+  "createWorld.tab.infs-farlands.error.read.message": "Defaults are used instead: %s",
   "createWorld.tab.infs-farlands.param.free": "Free-form parameters",
   "createWorld.tab.infs-farlands.param.free.example": "Example:\n%s",
   "createWorld.tab.infs-farlands.param.line": "\"%1$s\": %2$s",

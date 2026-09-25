@@ -3,9 +3,12 @@ package com.inf.farlands.client.gui.demo;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
+import com.inf.farlands.client.gui.CreatingWorldSystemsConfig;
 import com.inf.farlands.terrain.registry.SystemParamSpec;
 import com.inf.farlands.terrain.registry.SystemParams;
 
@@ -57,6 +60,10 @@ public final class ParamGroup extends AbstractContainerWidget {
                     + "{\"type\":\"enum\",\"value\":\"TYPE1\",\"enumClass\":\"com.example.Mode\"}";
 
     private final List<AbstractWidget> children = new ArrayList<>();
+    /** 参数名到它的框，含自由框那个专用键。切换系统前用它把当前文本整体刷一遍。 */
+    private final Map<String, EditBox> texts = new LinkedHashMap<>();
+    /** 参数名到它的采集回调，reload 时按当前文本重放一遍。 */
+    private final Map<String, BiConsumer<String, String>> reporters = new LinkedHashMap<>();
     private final int groupWidth;
     private int labelWidth = MIN_LABEL_WIDTH;
     private boolean free;
@@ -67,9 +74,24 @@ public final class ParamGroup extends AbstractContainerWidget {
         this.groupWidth = width;
     }
 
-    /** 按声明重建。params 为 null 表示没有声明，退化成单个自由文本框。 */
+    /** 按声明重建，不接文本变更。 */
     public void setParams(SystemParams params) {
+        this.setParams(params, Map.of(), null);
+    }
+
+    /**
+     * 按声明重建。params 为 null 表示没有声明，退化成单个自由文本框。
+     *
+     * <p>saved 是该项上次留下的文本，键与 onText 收到的键一致，自由框用专用的那个键。有则预填，
+     * 没有就用声明给的默认文本。onText 为 null 表示不采集。
+     *
+     * <p>顺序固定为先 setValue 再 setResponder：setResponder 只写字段，而 setValue 会走
+     * onValueChange 回调 responder，先挂上会把预填也报一遍。
+     */
+    public void setParams(SystemParams params, Map<String, String> saved, BiConsumer<String, String> onText) {
         this.children.clear();
+        this.texts.clear();
+        this.reporters.clear();
         this.free = params == null;
         Font font = Minecraft.getInstance().font;
         if (this.free) {
@@ -77,9 +99,14 @@ public final class ParamGroup extends AbstractContainerWidget {
             EditBox box = new EditBox(font, this.groupWidth, BOX_HEIGHT,
                     Component.translatable("createWorld.tab.infs-farlands.param.free"));
             box.setMaxLength(MAX_TEXT_LENGTH);
-            box.setValue(FREE_TEXT);
+            box.setValue(saved.getOrDefault(CreatingWorldSystemsConfig.FREE_KEY, FREE_TEXT));
             box.setTooltip(Tooltip.create(Component.translatable(
                     "createWorld.tab.infs-farlands.param.free.example", FREE_GRAMMAR)));
+            if (onText != null) {
+                box.setResponder(value -> onText.accept(CreatingWorldSystemsConfig.FREE_KEY, value));
+                this.reporters.put(CreatingWorldSystemsConfig.FREE_KEY, onText);
+            }
+            this.texts.put(CreatingWorldSystemsConfig.FREE_KEY, box);
             this.children.add(box);
         } else {
             this.labelWidth = this.labelWidth(font, params);
@@ -90,10 +117,15 @@ public final class ParamGroup extends AbstractContainerWidget {
                 box.setMaxLength(MAX_TEXT_LENGTH);
                 box.setHint(Component.literal(spec.type().id()));
                 box.setTooltip(Tooltip.create(this.tooltip(spec)));
-                String text = spec.defaultText();
+                String text = saved.getOrDefault(spec.key(), spec.defaultText());
                 if (text != null) {
                     box.setValue(text);
                 }
+                if (onText != null) {
+                    box.setResponder(value -> onText.accept(spec.key(), value));
+                    this.reporters.put(spec.key(), onText);
+                }
+                this.texts.put(spec.key(), box);
                 this.children.add(label);
                 this.children.add(box);
             }
@@ -165,6 +197,19 @@ public final class ParamGroup extends AbstractContainerWidget {
             this.children.get(i).setPosition(x, y + LABEL_TOP);
             this.children.get(i + 1).setPosition(x + this.labelWidth, y);
             y += ROW_HEIGHT;
+        }
+    }
+
+    /**
+     * 把当前每个框的文本报一遍给采集回调，用于切换系统前把本组填的内容落到暂存处。EditBox 不暴露
+     * 已设的 responder，所以这里自己留一份回调，按框的当前文本逐条上报。
+     */
+    public void reload() {
+        for (Map.Entry<String, EditBox> entry : this.texts.entrySet()) {
+            BiConsumer<String, String> report = this.reporters.get(entry.getKey());
+            if (report != null) {
+                report.accept(entry.getKey(), entry.getValue().getValue());
+            }
         }
     }
 

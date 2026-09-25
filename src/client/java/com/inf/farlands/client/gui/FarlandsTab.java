@@ -9,6 +9,7 @@ import com.inf.farlands.client.gui.demo.DropdownSelect;
 import com.inf.farlands.client.gui.demo.ParamGroup;
 import com.inf.farlands.terrain.registry.BiomeDefaultSystem;
 import com.inf.farlands.terrain.registry.CarverDefaultSystem;
+import com.inf.farlands.terrain.registry.FamilyKind;
 import com.inf.farlands.terrain.registry.FamilyPage;
 import com.inf.farlands.terrain.registry.SurfaceDefaultSystem;
 import com.inf.farlands.terrain.registry.SystemId;
@@ -130,31 +131,40 @@ public class FarlandsTab implements Tab {
 
         LinearLayout body = LinearLayout.vertical().spacing(8);
         body.addChild(this.familyBlock(font, Component.translatable("createWorld.tab.infs-farlands.family.biome"),
-                biomeIds, BiomeDefaultSystem.defaultFor(page), SystemRegistries::biomeClassOf, layer,
-                revealer, width));
+                biomeIds, page, FamilyKind.BIOME, BiomeDefaultSystem.defaultFor(page), SystemRegistries::biomeClassOf,
+                layer, revealer, width));
         body.addChild(this.familyBlock(font, Component.translatable("createWorld.tab.infs-farlands.family.terrain"),
-                terrainIds, TerrainDefaultSystem.defaultFor(page), SystemRegistries::terrainClassOf, layer,
-                revealer, width));
+                terrainIds, page, FamilyKind.TERRAIN, TerrainDefaultSystem.defaultFor(page),
+                SystemRegistries::terrainClassOf, layer, revealer, width));
         body.addChild(this.familyBlock(font, Component.translatable("createWorld.tab.infs-farlands.family.surface"),
-                surfaceIds, SurfaceDefaultSystem.defaultFor(page), SystemRegistries::surfaceClassOf, layer,
-                revealer, width));
+                surfaceIds, page, FamilyKind.SURFACE, SurfaceDefaultSystem.defaultFor(page),
+                SystemRegistries::surfaceClassOf, layer, revealer, width));
         body.addChild(this.familyBlock(font, Component.translatable("createWorld.tab.infs-farlands.family.carver"),
-                carverIds, CarverDefaultSystem.defaultFor(page), SystemRegistries::carverClassOf, layer,
-                revealer, width));
+                carverIds, page, FamilyKind.CARVER, CarverDefaultSystem.defaultFor(page),
+                SystemRegistries::carverClassOf, layer, revealer, width));
         body.addChild(SpacerElement.height(POPUP_ROOM));
         return body;
     }
 
-    /** 一个族块：标题在上，下面是下拉与它对应的参数组。defaultId 是下拉的初始选中项。 */
-    private Layout familyBlock(Font font, Component title, List<SystemId> ids, SystemId defaultId,
-            Function<SystemId, Class<?>> classOf, DropdownSelect.Layer layer, DropdownSelect.Revealer revealer,
-            int width) {
-        int index = defaultIndex(ids, defaultId);
+    /**
+     * 一个族块：标题在上，下面是下拉与它对应的参数组。初始选中先取暂存的选择，没有才用该族的默认表；
+     * 下拉变更写回暂存，参数文本由参数组直接写回。
+     */
+    private Layout familyBlock(Font font, Component title, List<SystemId> ids, FamilyPage page, FamilyKind kind,
+            SystemId defaultId, Function<SystemId, Class<?>> classOf, DropdownSelect.Layer layer,
+            DropdownSelect.Revealer revealer, int width) {
+        SystemId saved = CreatingWorldSystemsConfig.system(page, kind);
+        int index = defaultIndex(ids, saved != null ? saved : defaultId);
         ParamGroup group = new ParamGroup(width);
-        this.applySelection(group, classOf, ids.get(index));
+        this.applySelection(group, classOf, page, kind, ids.get(index));
         LinearLayout control = LinearLayout.vertical().spacing(4);
         control.addChild(new DropdownSelect(layer, revealer, width, FIELD_HEIGHT, this.idOptions(ids), index,
-                i -> this.applySelection(group, classOf, ids.get(i))));
+                i -> {
+                    SystemId chosen = ids.get(i);
+                    group.reload();
+                    CreatingWorldSystemsConfig.select(page, kind, chosen);
+                    this.applySelection(group, classOf, page, kind, chosen);
+                }));
         control.addChild(group);
         return CommonLayouts.labeledElement(font, control, title);
     }
@@ -164,8 +174,12 @@ public class FarlandsTab implements Tab {
         return Math.max(0, ids.indexOf(defaultId));
     }
 
-    private void applySelection(ParamGroup group, Function<SystemId, Class<?>> classOf, SystemId id) {
-        group.setParams(SystemParams.declaredBy(classOf.apply(id)));
+    /** 应用选中项：按声明建参数组，预填该项已存的文本，并把后续编辑写回暂存处。 */
+    private void applySelection(ParamGroup group, Function<SystemId, Class<?>> classOf, FamilyPage page,
+            FamilyKind kind, SystemId id) {
+        group.setParams(SystemParams.declaredBy(classOf.apply(id)),
+                CreatingWorldSystemsConfig.text(page, kind, id),
+                (key, value) -> CreatingWorldSystemsConfig.putText(page, kind, id, key, value));
         this.relayout();
     }
 

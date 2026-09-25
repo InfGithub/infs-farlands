@@ -25,6 +25,8 @@
   "createWorld.tab.infs-farlands.family.terrain": "地形系统",
   "createWorld.tab.infs-farlands.family.surface": "地表系统",
   "createWorld.tab.infs-farlands.family.carver": "雕刻系统",
+  "createWorld.tab.infs-farlands.error.read.title": "系统配置读取失败",
+  "createWorld.tab.infs-farlands.error.read.message": "已改用默认值：%s",
   "createWorld.tab.infs-farlands.param.free": "自由参数",
   "createWorld.tab.infs-farlands.param.free.example": "示例：\n%s",
   "createWorld.tab.infs-farlands.param.line": "\"%1$s\": %2$s",

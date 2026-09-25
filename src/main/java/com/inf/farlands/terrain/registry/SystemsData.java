@@ -56,7 +56,8 @@ public final class SystemsData extends SavedData {
         this.levels = Collections.unmodifiableMap(new LinkedHashMap<>(levels));
     }
 
-    private Map<Identifier, LevelSelection> levels() {
+    /** 全部维度到其选择。codec 写侧要用，客户端按维度预填创建世界页签也要用。 */
+    public Map<Identifier, LevelSelection> levels() {
         return this.levels;
     }
 
