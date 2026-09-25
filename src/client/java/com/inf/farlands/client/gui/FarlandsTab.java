@@ -7,15 +7,11 @@ import java.util.function.Function;
 
 import com.inf.farlands.client.gui.demo.DropdownSelect;
 import com.inf.farlands.client.gui.demo.ParamGroup;
-import com.inf.farlands.terrain.registry.BiomeDefaultSystem;
-import com.inf.farlands.terrain.registry.CarverDefaultSystem;
 import com.inf.farlands.terrain.registry.FamilyKind;
-import com.inf.farlands.terrain.registry.FamilyPage;
-import com.inf.farlands.terrain.registry.SurfaceDefaultSystem;
 import com.inf.farlands.terrain.registry.SystemId;
 import com.inf.farlands.terrain.registry.SystemRegistries;
 import com.inf.farlands.terrain.registry.SystemParams;
-import com.inf.farlands.terrain.registry.TerrainDefaultSystem;
+import com.inf.farlands.terrain.registry.SystemsIO;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -25,6 +21,7 @@ import net.minecraft.client.gui.components.ScrollableLayout;
 import net.minecraft.client.gui.components.TabButton;
 import net.minecraft.client.gui.components.tabs.Tab;
 import net.minecraft.client.gui.components.tabs.TabManager;
+import net.minecraft.client.gui.layouts.AbstractLayout;
 import net.minecraft.client.gui.layouts.CommonLayouts;
 import net.minecraft.client.gui.layouts.FrameLayout;
 import net.minecraft.client.gui.layouts.GridLayout;
@@ -34,39 +31,41 @@ import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.layouts.SpacerElement;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 
 /**
- * 创建世界页的附加页签。页签行是原版样式 B 的分页，即 TabButton 排成的一行；主世界页里逐族放一个
+ * 创建世界页的附加页签。页签行是原版样式 B 的分页，即 TabButton 排成的一行；每页里逐族放一个
  * 样式 D 的下拉框，选项是注册表里该族系统的 id，下拉下面按该系统的声明生成一组参数文本框。
+ *
+ * <p>维度不写死：页列表由创建流程喂入，一页对应世界实际拥有的一个维度。系统与维度没有绑定关系，
+ * 每页的四族下拉列的都是该族全部系统，任何维度可选任何一个。页标题优先取本模组语言文件里的
+ * {@code createWorld.tab.infs-farlands.page.<path>}，没有该键时退回维度 id 本身，所以不认得的
+ * 维度显示的是可读的 id，而不是未翻译的键名。
  *
  * <p>原版 TabNavigationBar 在这里用不了：它的 arrangeElements 把内部布局钉在屏幕 y 等于 0 的位置，
  * 而它不是 AbstractWidget，装不进页签的子控件列表。这里用同一套 TabButton 自排一行，贴图、选中时
  * 下移三像素、焦点下划线都与原版一致，只少了页签行左右两段分隔线。原版 TabButton 自己不响应点击，
  * 选中由 TabNavigationBar 设置焦点时驱动，所以这里补上点击即切换。
  *
- * <p>三页的内容都放进同一个 FrameLayout，随本页一次性挂上屏幕，切换页只改各页叶子的 visible，不动
+ * <p>各页的内容都放进同一个 FrameLayout，随本页一次性挂上屏幕，切换页只改各页叶子的 visible，不动
  * 屏幕的控件列表。整块内容装在 ScrollableLayout 里，靠页签区域的左上摆放，高 GUI 缩放下可滚动。
  *
  * <p>下拉的浮层画在 FrameLayout 的最后一位：那一层由 DropdownSelect.Layer 承担，因此它的绘制在
  * 各页内容之后，展开的列表盖在参数框之上。
  *
- * <p>下拉宽度按选项文字自动算，四个框共用全部选项里最宽的那个加内边距。主世界页正文最后留出
- * POPUP_ROOM 的空白，滚动容器的高度才装得下最后一条展开的列表；可视区不够时由 Revealer 滚上来。
+ * <p>下拉宽度按选项文字自动算，四个框共用全部选项里最宽的那个加内边距。正文最后留出 POPUP_ROOM
+ * 的空白，滚动容器的高度才装得下最后一条展开的列表；可视区不够时由 Revealer 滚上来。
  * 选中项变化会改变参数框行数，所以那时要重跑一次布局。
  */
 public class FarlandsTab implements Tab {
 
-    private static final Component TITLE = Component.translatable("createWorld.tab.infs-farlands.title");
-    private static final Component OVERWORLD_TITLE = Component
-            .translatable("createWorld.tab.infs-farlands.page.overworld");
-    private static final Component NETHER_TITLE = Component
-            .translatable("createWorld.tab.infs-farlands.page.the_nether");
-    private static final Component END_TITLE = Component.translatable("createWorld.tab.infs-farlands.page.the_end");
+    private static final String PAGE_KEY_PREFIX = "createWorld.tab.infs-farlands.page.";
     private static final int MARGIN = 16;
-    private static final int TAB_WIDTH = 68;
     private static final int TAB_HEIGHT = 24;
+    private static final int TAB_PADDING = 16;
     private static final int FIELD_HEIGHT = 20;
     private static final int FIELD_PADDING = 8;
     private static final int MIN_FIELD_WIDTH = 120;
@@ -82,15 +81,19 @@ public class FarlandsTab implements Tab {
 
     private final ScrollableLayout scroll;
     private final AbstractScrollArea viewport;
+    /** 页签行。多行换行由它自己按可用宽度排，见 {@link TabStrip}。 */
+    private final TabStrip strip;
     private ScreenRectangle lastArea;
 
-    public FarlandsTab() {
+    public FarlandsTab(List<Identifier> dimensions) {
         Minecraft minecraft = Minecraft.getInstance();
         Font font = minecraft.font;
         DropdownSelect.Layer layer = new DropdownSelect.Layer();
         DropdownSelect.Revealer revealer = this::reveal;
 
-        LinearLayout strip = LinearLayout.horizontal().spacing(2);
+        // 暂存与界面读同一份维度列表：界面上改了而落盘不含它，或反过来，都会静默丢配置。
+        CreatingWorldSystemsConfig.setDimensions(dimensions);
+
         TabManager manager = new TabManager(widget -> {
         }, widget -> {
         }, page -> ((DemoPage) page).show(), page -> {
@@ -99,29 +102,69 @@ public class FarlandsTab implements Tab {
             }
         });
 
-        List<DemoPage> pages = List.of(
-                new DemoPage(OVERWORLD_TITLE, this.familyBody(font, FamilyPage.OVERWORLD, layer, revealer)),
-                new DemoPage(NETHER_TITLE, this.familyBody(font, FamilyPage.THE_NETHER, layer, revealer)),
-                new DemoPage(END_TITLE, this.familyBody(font, FamilyPage.THE_END, layer, revealer)));
+        List<DemoPage> pages = new ArrayList<>(dimensions.size());
+        for (Identifier dimension : dimensions) {
+            pages.add(new DemoPage(pageTitle(dimension),
+                    this.familyBody(font, dimension, layer, revealer)));
+        }
+
+        int[] tabWidths = new int[dimensions.size()];
+        for (int i = 0; i < dimensions.size(); i++) {
+            tabWidths[i] = this.measureTabWidth(font, dimensions.get(i));
+        }
+        this.strip = new TabStrip(tabWidths, TAB_HEIGHT);
 
         FrameLayout bodies = new FrameLayout();
-        for (DemoPage page : pages) {
+        for (int i = 0; i < pages.size(); i++) {
+            DemoPage page = pages.get(i);
             page.hide();
-            strip.addChild(new DemoTabButton(manager, page, TAB_WIDTH));
+            this.strip.addTab(new DemoTabButton(manager, page, tabWidths[i]));
             bodies.addChild(page.root());
         }
         bodies.addChild(layer);
 
         GridLayout content = new GridLayout().rowSpacing(8);
-        content.addChild(strip, 0, 0);
+        content.addChild(this.strip, 0, 0);
         content.addChild(bodies, 1, 0);
         this.scroll = new ScrollableLayout(minecraft, content, 0);
         this.viewport = this.findViewport();
-        manager.setCurrentTab(pages.get(0), false);
+        if (!pages.isEmpty()) {
+            manager.setCurrentTab(pages.get(0), false);
+        }
     }
 
-    /** 一个页：四族系统各一块，块内是标题、下拉、以及按声明生成的参数框。默认项按 page 从各族表取。 */
-    private LinearLayout familyBody(Font font, FamilyPage page, DropdownSelect.Layer layer,
+    /**
+     * 页标题，两级回退。
+     *
+     * <p>第一级是本模组私有键 {@code createWorld.tab.infs-farlands.page.<path>}，本模组自己或专门为
+     * 本页签适配的人可以覆盖得更细。第二级是维度自身的键 {@code dimension.<namespace>.<path>}，也就是
+     * 注册模组给它自己的维度用的那一个，任何模组按惯例写它就能让本页签本地化，不需要知道本模组存在。
+     * 两者都没有时退回完整维度 id。
+     *
+     * <p>第二级不靠 fallback 串委托：{@code TranslatableContents} 的 fallback 是 String，塞进去会被当
+     * 字面量原样渲染，别的模组给 {@code dimension.*} 写的翻译就不会被解析。所以这里先问语言表有没有第
+     * 一级，没有才换成第二级。语言表按 {@code Language.has} 判存在，判据在渲染前成立。
+     */
+    private static Component pageTitle(Identifier dimension) {
+        String own = PAGE_KEY_PREFIX + dimension.getPath();
+        if (Language.getInstance().has(own)) {
+            return Component.translatable(own);
+        }
+        return Component.translatableWithFallback(dimensionKey(dimension), dimension.toString());
+    }
+
+    /** 维度自身的语言键，与注册模组的惯例一致：{@code dimension.<namespace>.<path>}。 */
+    private static String dimensionKey(Identifier dimension) {
+        return "dimension." + dimension.getNamespace() + "." + dimension.getPath();
+    }
+
+    /** 单格页签宽度：这一格的标题宽加内边距。每格按自己的内容定宽，不设上限。 */
+    private int measureTabWidth(Font font, Identifier dimension) {
+        return Math.max(1, font.width(pageTitle(dimension)) + TAB_PADDING);
+    }
+
+    /** 一个页：四族系统各一块，块内是标题、下拉、以及按声明生成的参数框。默认项是该族的 VOID。 */
+    private LinearLayout familyBody(Font font, Identifier page, DropdownSelect.Layer layer,
             DropdownSelect.Revealer revealer) {
         List<SystemId> biomeIds = SystemRegistries.biomeIds();
         List<SystemId> terrainIds = SystemRegistries.terrainIds();
@@ -131,30 +174,33 @@ public class FarlandsTab implements Tab {
 
         LinearLayout body = LinearLayout.vertical().spacing(8);
         body.addChild(this.familyBlock(font, Component.translatable("createWorld.tab.infs-farlands.family.biome"),
-                biomeIds, page, FamilyKind.BIOME, BiomeDefaultSystem.defaultFor(page), SystemRegistries::biomeClassOf,
-                layer, revealer, width));
+                biomeIds, page, FamilyKind.BIOME, SystemRegistries.BIOME_MISC_VOID_BIOME_SYSTEM,
+                SystemRegistries::biomeClassOf, layer, revealer, width));
         body.addChild(this.familyBlock(font, Component.translatable("createWorld.tab.infs-farlands.family.terrain"),
-                terrainIds, page, FamilyKind.TERRAIN, TerrainDefaultSystem.defaultFor(page),
+                terrainIds, page, FamilyKind.TERRAIN, SystemRegistries.TERRAIN_MISC_VOID_NOISE_SYSTEM,
                 SystemRegistries::terrainClassOf, layer, revealer, width));
         body.addChild(this.familyBlock(font, Component.translatable("createWorld.tab.infs-farlands.family.surface"),
-                surfaceIds, page, FamilyKind.SURFACE, SurfaceDefaultSystem.defaultFor(page),
+                surfaceIds, page, FamilyKind.SURFACE, SystemRegistries.SURFACE_MISC_VOID_SURFACE_SYSTEM,
                 SystemRegistries::surfaceClassOf, layer, revealer, width));
         body.addChild(this.familyBlock(font, Component.translatable("createWorld.tab.infs-farlands.family.carver"),
-                carverIds, page, FamilyKind.CARVER, CarverDefaultSystem.defaultFor(page),
+                carverIds, page, FamilyKind.CARVER, SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM,
                 SystemRegistries::carverClassOf, layer, revealer, width));
         body.addChild(SpacerElement.height(POPUP_ROOM));
         return body;
     }
 
     /**
-     * 一个族块：标题在上，下面是下拉与它对应的参数组。初始选中先取暂存的选择，没有才用该族的默认表；
+     * 一个族块：标题在上，下面是下拉与它对应的参数组。初始选中先取暂存的选择，没有才用默认项；
      * 下拉变更写回暂存，参数文本由参数组直接写回。
      */
-    private Layout familyBlock(Font font, Component title, List<SystemId> ids, FamilyPage page, FamilyKind kind,
+    private Layout familyBlock(Font font, Component title, List<SystemId> ids, Identifier page, FamilyKind kind,
             SystemId defaultId, Function<SystemId, Class<?>> classOf, DropdownSelect.Layer layer,
             DropdownSelect.Revealer revealer, int width) {
         SystemId saved = CreatingWorldSystemsConfig.system(page, kind);
-        int index = defaultIndex(ids, saved != null ? saved : defaultId);
+        if (saved == null) {
+            saved = defaultSystem(page, kind, defaultId);
+        }
+        int index = defaultIndex(ids, saved);
         ParamGroup group = new ParamGroup(width);
         this.applySelection(group, classOf, page, kind, ids.get(index));
         LinearLayout control = LinearLayout.vertical().spacing(4);
@@ -169,14 +215,25 @@ public class FarlandsTab implements Tab {
         return CommonLayouts.labeledElement(font, control, title);
     }
 
+    /**
+     * 没选过时的默认项，与 {@code CreatingWorldSystemsConfig} 落盘用的默认同源。地形族按维度分派：
+     * 原版三维度取主世界 vanilla 噪声系统，其余维度退 VOID；另三族不分维度。
+     */
+    private static SystemId defaultSystem(Identifier page, FamilyKind kind, SystemId fallback) {
+        if (kind == FamilyKind.TERRAIN && SystemsIO.isVanillaDimension(page)) {
+            return SystemRegistries.TERRAIN_OVERWORLD_VANILLA_NOISE_SYSTEM;
+        }
+        return fallback;
+    }
+
     /** 默认项在该族列表里的下标。列表里没有它时退回第一项。 */
     private static int defaultIndex(List<SystemId> ids, SystemId defaultId) {
         return Math.max(0, ids.indexOf(defaultId));
     }
 
     /** 应用选中项：按声明建参数组，预填该项已存的文本，并把后续编辑写回暂存处。 */
-    private void applySelection(ParamGroup group, Function<SystemId, Class<?>> classOf, FamilyPage page,
-            FamilyKind kind, SystemId id) {
+    private void applySelection(ParamGroup group, Function<SystemId, Class<?>> classOf,
+            Identifier page, FamilyKind kind, SystemId id) {
         group.setParams(SystemParams.declaredBy(classOf.apply(id)),
                 CreatingWorldSystemsConfig.text(page, kind, id),
                 (key, value) -> CreatingWorldSystemsConfig.putText(page, kind, id, key, value));
@@ -205,7 +262,7 @@ public class FarlandsTab implements Tab {
         return Mth.clamp(widest + FIELD_PADDING, MIN_FIELD_WIDTH, MAX_FIELD_WIDTH);
     }
 
-    /** 选项文字取 SystemId.toString，即带命名空间的完整 id，例如 infs-farlands:void_noise_system。 */
+    /** 选项文字取 SystemId.toString，即带命名空间的完整 id。 */
     private List<Component> idOptions(List<SystemId> ids) {
         List<Component> options = new ArrayList<>(ids.size());
         for (SystemId id : ids) {
@@ -239,7 +296,7 @@ public class FarlandsTab implements Tab {
 
     @Override
     public Component getTabTitle() {
-        return TITLE;
+        return Component.translatable("createWorld.tab.infs-farlands.title");
     }
 
     @Override
@@ -255,15 +312,126 @@ public class FarlandsTab implements Tab {
     /**
      * 整块内容靠页签区域的左上摆放，上下左右各留 MARGIN 像素。滚动区的最小宽度撑到可用宽度，否则
      * 容器宽度贴着内容，滚动条会画在内容右边而不是页面右边。
+     *
+     * <p>页签行在这里按可用宽度重排：宽度信息只有布局时才有，所以构造期先用上限宽排一次，首个布局
+     * 之后才是最终宽度。首次布局因此有一次跳变，属预期。
      */
     @Override
     public void doLayout(ScreenRectangle screenRectangle) {
         this.lastArea = screenRectangle;
         int available = Math.max(0, screenRectangle.width() - MARGIN * 2);
+        this.strip.setAvailable(available);
         this.scroll.setMinWidth(Math.max(0, available - SCROLLBAR_RESERVE));
         this.scroll.arrangeElements();
         this.scroll.setMaxHeight(Math.max(0, screenRectangle.height() - MARGIN * 2));
         this.scroll.setPosition(screenRectangle.left() + MARGIN, screenRectangle.top() + MARGIN);
+    }
+
+    /**
+     * 页签行：每格按自身内容定宽，多行换行。
+     *
+     * <p>不复用 {@code GridLayout.RowHelper}：它的行列在 {@code addChild} 时写死，而这里换行位置要按
+     * 可用宽度与每格实测宽现算；并且 ScrollableLayout 的容器在构造那一刻就把内容里的控件抄进了私有
+     * 列表，之后重建布局对象不会被采集。所以这里直接持按钮、在 {@code arrangeElements} 里逐格定位。
+     *
+     * <p>换行是贪心：从行首累加，放不下就换行。首格宽于整行时独占一行并按可用宽度封顶，否则贪心不前进。
+     */
+    private static final class TabStrip extends AbstractLayout {
+
+        private static final int SPACING = 2;
+
+        private final List<AbstractWidget> tabs = new ArrayList<>();
+        /** 每格按自己内容量出的宽度，与 tabs 同序。 */
+        private final List<Integer> widths = new ArrayList<>();
+        private final int tabHeight;
+        /** 可用宽度，由布局喂入；决定换行位置与超宽单格的封顶。 */
+        private int available;
+
+        private TabStrip(int[] tabWidths, int tabHeight) {
+            super(0, 0, 0, 0);
+            this.tabHeight = tabHeight;
+            for (int width : tabWidths) {
+                this.widths.add(width);
+            }
+        }
+
+        private void addTab(AbstractWidget tab) {
+            this.tabs.add(tab);
+        }
+
+        /** 布局时喂入可用宽度。宽度变化会改变换行位置，也会改变超宽单格的封顶值。 */
+        private void setAvailable(int available) {
+            this.available = available;
+            for (int i = 0; i < this.tabs.size(); i++) {
+                this.tabs.get(i).setWidth(this.clampWidth(i));
+            }
+        }
+
+        /**
+         * 单格实际宽度。比整行还宽的格独占一行并按可用宽度封顶，否则换行会不前进。
+         */
+        private int clampWidth(int index) {
+            if (this.available <= 0) {
+                return this.widths.get(index);
+            }
+            return Math.min(this.widths.get(index), this.available);
+        }
+
+        @Override
+        public void arrangeElements() {
+            int x = this.getX();
+            int y = this.getY();
+            int rowWidth = 0;
+            int row = 0;
+            for (int i = 0; i < this.tabs.size(); i++) {
+                int width = this.clampWidth(i);
+                if (rowWidth > 0 && rowWidth + SPACING + width > this.available) {
+                    row++;
+                    rowWidth = 0;
+                }
+                this.tabs.get(i).setWidth(width);
+                this.tabs.get(i).setPosition(x + rowWidth, y + row * (this.tabHeight + SPACING));
+                rowWidth += width + SPACING;
+            }
+        }
+
+        @Override
+        public void visitChildren(Consumer<LayoutElement> visitor) {
+            this.tabs.forEach(visitor);
+        }
+
+        @Override
+        public int getWidth() {
+            int widest = 0;
+            int rowWidth = 0;
+            for (int i = 0; i < this.tabs.size(); i++) {
+                int width = this.clampWidth(i);
+                if (rowWidth > 0 && rowWidth + SPACING + width > this.available) {
+                    widest = Math.max(widest, rowWidth - SPACING);
+                    rowWidth = 0;
+                }
+                rowWidth += width + SPACING;
+            }
+            return Math.max(widest, Math.max(0, rowWidth - SPACING));
+        }
+
+        @Override
+        public int getHeight() {
+            if (this.tabs.isEmpty()) {
+                return 0;
+            }
+            int rows = 1;
+            int rowWidth = 0;
+            for (int i = 0; i < this.tabs.size(); i++) {
+                int width = this.clampWidth(i);
+                if (rowWidth > 0 && rowWidth + SPACING + width > this.available) {
+                    rows++;
+                    rowWidth = 0;
+                }
+                rowWidth += width + SPACING;
+            }
+            return rows * this.tabHeight + (rows - 1) * SPACING;
+        }
     }
 
     /**

@@ -3,8 +3,10 @@ package com.inf.farlands.terrain.registry;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 import com.inf.farlands.terrain.BiomeSystem;
 import com.inf.farlands.terrain.CarverSystem;
@@ -24,6 +26,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.storage.LevelResource;
 
@@ -70,6 +73,27 @@ public final class SystemsIO {
         return data;
     }
 
+    /**
+     * 该 server 的系统配置，每个 server 实例解析一次。该 server 的第一个构造的 level 走到这里时
+     * {@code resolve} 尚未跑过，解析并记下；其余维度构造时直接命中。
+     *
+     * <p>用 server 实例做键而不是「主世界是否已构造」，后者依赖 level 的构造顺序，且在世界没有原版
+     * 主世界时判不出来。WeakHashMap 是零成本的兜底：server 正常关闭时本就该丢弃。
+     */
+    private static final Map<MinecraftServer, SystemsData> RESOLVED =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
+    public static SystemsData systemsFor(MinecraftServer server) {
+        synchronized (RESOLVED) {
+            SystemsData data = RESOLVED.get(server);
+            if (data == null) {
+                data = resolve(server);
+                RESOLVED.put(server, data);
+            }
+            return data;
+        }
+    }
+
     /** 解析该世界的配置：文件在则严格自读，不在则按新世界落默认并写回，其余情形抛。 */
     public static SystemsData resolve(MinecraftServer server) {
         Path file = file(server);
@@ -106,33 +130,57 @@ public final class SystemsIO {
         }
     }
 
-    /** 该维度的选择，缺失即抛。 */
+    /**
+     * 该维度的选择。缺失时补该族 VOID 并照常返回，不抛。
+     *
+     * <p>缺失是正常情形而非错误：世界维度由数据包与模组决定，配置文件写在某个时刻，之后维度集合
+     * 可能变。按既定语义，非原版维度的默认选择是 VOID，所以缺失等价于「没为它配过」，补上即可。
+     */
     public static LevelSelection selection(SystemsData data, Identifier dimension) {
         LevelSelection selection = data.selection(dimension);
-        if (selection == null) {
-            throw new IllegalStateException("farlands: 系统配置缺少维度 " + dimension);
-        }
-        return selection;
+        return selection != null ? selection : voidSelection();
     }
 
     /**
-     * 内置默认：地形用 vanilla 噪声系统且 seed 为 0，其余三族走各自的 VOID。维度取注册表里的全部
-     * LevelStem，新世界因此不会因为数据包加了维度而缺条目。只在该世界还没有配置文件时生效，已有配置
-     * 文件的世界一律以文件为准。
+     * 内置默认。原版三维度各自取 {@link #defaultSelection()}，其余维度取 {@link #voidSelection()}。
+     * 维度取注册表里的全部 LevelStem，新世界因此不会因为数据包加了维度而缺条目。只在该世界还没有
+     * 配置文件时生效，已有配置文件的世界一律以文件为准。
      */
     public static SystemsData defaultFor(MinecraftServer server) {
         Map<Identifier, LevelSelection> levels = new LinkedHashMap<>();
         for (Map.Entry<ResourceKey<LevelStem>, LevelStem> entry : server.registryAccess()
                 .lookupOrThrow(Registries.LEVEL_STEM).entrySet()) {
-            levels.put(entry.getKey().identifier(), defaultSelection());
+            Identifier dimension = entry.getKey().identifier();
+            levels.put(dimension, isVanillaDimension(dimension) ? defaultSelection() : voidSelection());
         }
         return new SystemsData(levels);
+    }
+
+    /**
+     * 原版三维度。这三个之外的维度没有专属默认，退 VOID。
+     *
+     * <p>公开是因为界面的初始默认也要按同一条判据分派，见 {@code CreatingWorldSystemsConfig}。新世界的
+     * 维度集合来自界面暂存，{@link #defaultFor} 那条路在新世界走不到，两处若各写一份判据就会分叉。
+     */
+    public static boolean isVanillaDimension(Identifier dimension) {
+        return Level.OVERWORLD.identifier().equals(dimension)
+                || Level.NETHER.identifier().equals(dimension)
+                || Level.END.identifier().equals(dimension);
     }
 
     private static LevelSelection defaultSelection() {
         return new LevelSelection(
                 new SystemSelection(SystemRegistries.TERRAIN_OVERWORLD_VANILLA_NOISE_SYSTEM.value(),
                         Map.of("seed", Arg.ofLong(0L))),
+                new SystemSelection(SystemRegistries.BIOME_MISC_VOID_BIOME_SYSTEM.value(), Map.of()),
+                new SystemSelection(SystemRegistries.SURFACE_MISC_VOID_SURFACE_SYSTEM.value(), Map.of()),
+                new SystemSelection(SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM.value(), Map.of()));
+    }
+
+    /** 非原版维度的默认：四族全 VOID。 */
+    private static LevelSelection voidSelection() {
+        return new LevelSelection(
+                new SystemSelection(SystemRegistries.TERRAIN_MISC_VOID_NOISE_SYSTEM.value(), Map.of()),
                 new SystemSelection(SystemRegistries.BIOME_MISC_VOID_BIOME_SYSTEM.value(), Map.of()),
                 new SystemSelection(SystemRegistries.SURFACE_MISC_VOID_SURFACE_SYSTEM.value(), Map.of()),
                 new SystemSelection(SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM.value(), Map.of()));

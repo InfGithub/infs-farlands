@@ -62,8 +62,11 @@ public final class VanillaCarverSystem implements CarverSystem {
 
     @Override
     public void applyCarvers(ServerLevel level, ChunkAccess chunk) {
+        // 与 VanillaSurfaceSystem 同规：本系统只服务噪声生成器的维度，非噪声维度直接返回，避免下游裸转。
+        if (!(level.getChunkSource().getGenerator() instanceof NoiseBasedChunkGenerator gen)) {
+            return;
+        }
         RandomState random = level.getChunkSource().randomState();
-        NoiseBasedChunkGenerator gen = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
         NoiseGeneratorSettings settings = gen.generatorSettings().value();
         // 维度全高 NoiseChunk，其 aquifer 网格覆盖 carver 带，fill 的窗口段 NoiseChunk 不覆盖
         NoiseChunk nc = chunk.getOrCreateNoiseChunk(

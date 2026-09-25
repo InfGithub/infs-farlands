@@ -1,5 +1,6 @@
 package com.inf.farlands.client.register.packet;
 
+import com.inf.farlands.client.mixin.render.LevelRendererAccessor;
 import com.inf.farlands.client.network.ClientPacketHandlers;
 import com.inf.farlands.network.expand.y.LightUpdatePacket;
 
@@ -42,7 +43,11 @@ public class LightUpdatePacketRegister {
         le.queueSectionData(layer, SectionPos.of(cx, e.sectionY(), cz),
                 LightUpdatePacket.decodeSectionLight(e.data()));
         Minecraft mc = Minecraft.getInstance();
-        if (mc.levelRenderer != null) {
+        // viewArea 必须判：LevelRenderer.setLevel(null) 在卸载关卡时把它置空并释放缓冲，而
+        // setSectionDirty 自己不判空。关服收尾在途的光照增量落到这里就会 NPE，实测发生在本世界四个
+        // 维度全部存档完成之后的一瞬。原版 ClientChunkCache.onLightUpdate 有同一个洞。
+        if (mc.levelRenderer != null
+                && ((LevelRendererAccessor) mc.levelRenderer).farlands$viewArea() != null) {
             mc.levelRenderer.setSectionDirty(cx, e.sectionY(), cz);
         }
     }

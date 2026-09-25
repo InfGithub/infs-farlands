@@ -50,8 +50,12 @@ public final class VanillaSurfaceSystem implements SurfaceSystem {
 
     @Override
     public void applySurface(ServerLevel level, ChunkAccess chunk) {
+        // 本系统只服务噪声生成器的维度。维度泛化后任何数据包或模组都能加维度，生成器类型不再只有
+        // NoiseBasedChunkGenerator；非噪声维度即使被选中这套也不该跑，直接返回，免得下游裸转抛异常。
+        if (!(level.getChunkSource().getGenerator() instanceof NoiseBasedChunkGenerator gen)) {
+            return;
+        }
         RandomState random = level.getChunkSource().randomState();
-        NoiseBasedChunkGenerator gen = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
         NoiseGeneratorSettings settings = gen.generatorSettings().value();
         // 维度全高 NoiseChunk，经 getOrCreateNoiseChunk 缓存到 vanilla 字段。SURFACE 只用
         // preliminarySurfaceLevel，但构造本身会走 NoiseChunkMixin 那两处 @Redirect

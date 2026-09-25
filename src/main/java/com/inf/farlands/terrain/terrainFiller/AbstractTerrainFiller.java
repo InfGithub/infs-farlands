@@ -73,9 +73,12 @@ public abstract class AbstractTerrainFiller implements TerrainFiller {
      * 调用方不必知道维度。
      */
     public static NoiseChunk createDimensionNoiseChunk(ServerLevel level, ChunkAccess chunk) {
+        // 只看噪声生成器的维度：本方法的两个调用方 VanillaSurfaceSystem 与 VanillaCarverSystem 都在
+        // 入口处先判了生成器类型，非噪声维度根本走不到这里。裸转留在这里，判据由调用方持有，因为
+        // 它们手上的生成器类型判据同时也决定「这一整套是否该跑」。
+        NoiseBasedChunkGenerator gen = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
         TerrainSystemContext.set(((LevelSystems) level).terrainSystem());
         try {
-            NoiseBasedChunkGenerator gen = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
             NoiseGeneratorSettings genSettings = gen.generatorSettings().value();
             NoiseSettings orig = genSettings.noiseSettings();
             RandomState randomState = level.getChunkSource().randomState();
@@ -95,8 +98,14 @@ public abstract class AbstractTerrainFiller implements TerrainFiller {
     /** 填一段 section 的地形，1 段对应 1 个 NoiseChunk。调用方保证同 chunk 串行。 */
     @Override
     public void fill(ServerLevel level, ChunkAccess chunk, int minSectionY, int maxSectionY) {
+        // 非噪声生成器的维度不归本管线。维度泛化之后任何数据包或模组都能加维度，生成器类型不再只有
+        // NoiseBasedChunkGenerator。硬转会在 fill 里抛，而 GenTask 的 catch 只记录再重抛，紧随其后的
+        // setStage(TERRAIN) 因此永不执行，completeTask 反复重新入队，形成自持的错误环，也就是实测里
+        // 那一千多万行 ClassCastException。这里直接返回：别人生成的维度交给别人，本管线不碰。
+        if (!(level.getChunkSource().getGenerator() instanceof NoiseBasedChunkGenerator gen)) {
+            return;
+        }
         TerrainSystem sys = ((LevelSystems) level).terrainSystem();
-        NoiseBasedChunkGenerator gen = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
         NoiseGeneratorSettings settings = gen.generatorSettings().value();
         Aquifer.FluidPicker defaultPicker = createFluidPicker(settings);
         RandomState randomState = level.getChunkSource().randomState();

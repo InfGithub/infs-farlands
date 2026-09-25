@@ -1,0 +1,11 @@
+{
+  "type": "infs-farlands:farlands_test",
+  "generator": {
+    "type": "minecraft:noise",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "minecraft:plains"
+    },
+    "settings": "infs-farlands:farlands_test"
+  }
+}

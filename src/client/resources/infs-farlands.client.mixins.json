@@ -32,6 +32,7 @@
     "command.ClientPacketListenerMixin",
     "light.ClientChunkCacheMixin",
     "render.ViewAreaMixin",
+    "render.LevelRendererAccessor",
     "render.LevelRendererMixin",
     "render.SectionRenderDispatcher$RenderSectionMixin",
     "render.SectionCopyMixin",
