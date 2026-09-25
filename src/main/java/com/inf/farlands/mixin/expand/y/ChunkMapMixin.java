@@ -39,7 +39,6 @@ public abstract class ChunkMapMixin {
     @Shadow
     public abstract List<ServerPlayer> getPlayers(ChunkPos chunkPos, boolean onlyPlayersWithChunkTracked);
 
-    @SuppressWarnings("null")
     @Overwrite
     public void resendBiomesForChunks(List<ChunkAccess> chunks) {
         Map<ServerPlayer, List<LevelChunk>> chunksForPlayers = new HashMap<>();

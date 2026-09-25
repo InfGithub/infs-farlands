@@ -1,7 +1,6 @@
 package com.inf.farlands.mixin.fix.xz;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
@@ -28,7 +27,8 @@ import org.spongepowered.asm.mixin.Shadow;
  * 两处都改成降级：取不到就返回中心 chunk，难度按 level 现算。
  *
  * <p>
- * {@code StaticCache2D.get} 对越界坐标抛 IllegalArgumentException，所以取 holder 时先试缓存，失败再问
+ * {@code StaticCache2D.get} 对越界坐标抛 IllegalArgumentException，所以取 holder
+ * 时先试缓存，失败再问
  * 可见 chunk 表；后者在 26.1.2 是 protected，走 {@link ChunkMapInvoker}。
  */
 @Mixin(WorldGenRegion.class)

@@ -71,7 +71,6 @@ public abstract class BiomeRegionFillMixin {
         throw new AbstractMethodError();
     }
 
-    @SuppressWarnings("null")
     @Overwrite
     public static Either<Integer, CommandSyntaxException> fill(ServerLevel level, BlockPos rawFrom, BlockPos rawTo,
             Holder<Biome> biome, Predicate<Holder<Biome>> filter, Consumer<Supplier<Component>> messageOutput) {
@@ -86,10 +85,10 @@ public abstract class BiomeRegionFillMixin {
         }
 
         List<ChunkAccess> chunks = new ArrayList<>();
-        for (int chunkZ = SectionPos.blockToSectionCoord(region.minZ());
-                chunkZ <= SectionPos.blockToSectionCoord(region.maxZ()); chunkZ++) {
-            for (int chunkX = SectionPos.blockToSectionCoord(region.minX());
-                    chunkX <= SectionPos.blockToSectionCoord(region.maxX()); chunkX++) {
+        for (int chunkZ = SectionPos.blockToSectionCoord(region.minZ()); chunkZ <= SectionPos
+                .blockToSectionCoord(region.maxZ()); chunkZ++) {
+            for (int chunkX = SectionPos.blockToSectionCoord(region.minX()); chunkX <= SectionPos
+                    .blockToSectionCoord(region.maxX()); chunkX++) {
                 ChunkAccess chunk = level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
                 if (chunk == null) {
                     return Either.right(ERROR_NOT_LOADED.create());
