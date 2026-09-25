@@ -1,6 +1,7 @@
 package com.inf.farlands.terrain.misc;
 
 import com.inf.farlands.mixin.noise.NoiseChunkInvoker;
+import com.inf.farlands.terrain.ChunkBeardifier;
 import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.terrain.terrainFiller.TerrainSystemContext;
 
@@ -37,7 +38,14 @@ public final class NoiseChunkFiller {
     private NoiseChunkFiller() {
     }
 
-    /** 窗口滑入 section 的按需填充。 */
+    /**
+     * 窗口滑入 section 的按需填充。
+     *
+     * <p>本方法当前不可达，生成金字塔被 GenerationChunkHolderMixin 短路，保留它是为复活时用。
+     * 复活时必须走 {@link ChunkBeardifier#getBeardifier()} 这一支；同文件的
+     * {@code doFillRange} 收的是形参 {@code structureManager}，那是 vanilla 生成金字塔的入口，
+     * 与我们的短路互斥，不要照抄。
+     */
     public static void fillWindowSections(ServerLevel level, ChunkAccess chunk, int minSection, int maxSection,
             NoiseGeneratorSettings settings, Supplier<Aquifer.FluidPicker> globalFluidPicker) {
         NoiseSettings orig = settings.noiseSettings();
@@ -55,11 +63,13 @@ public final class NoiseChunkFiller {
         NoiseSettings customNS = new NoiseSettings(minBlockY, height, noiseH, noiseV);
 
         RandomState randomState = level.getChunkSource().randomState();
-        Beardifier beardifier = Beardifier.forStructuresInChunk(level.structureManager(), chunk.getPos());
+        // 与 AbstractTerrainFiller 同规：Beardifier 必须从 chunk 读，不在这里现算。现算会经
+        // StructureManager 回到 ServerChunkCache 取 chunk，生成线程上即阻塞等主线程。
+        Beardifier beardifier = ((ChunkBeardifier) chunk).getBeardifier();
 
         int cellCountXZ = 16 / cellW;
         // NoiseChunk 构造会走 NoiseChunkMixin 的两处 @Redirect，构造点必须先 set 系统。
-        // 本类当前不可达（生成金字塔被 GenerationChunkHolderMixin 短路），此 set 是为复活时留的正确入口。
+        // 本类当前不可达，生成金字塔被 GenerationChunkHolderMixin 短路，此 set 是为复活时留的正确入口。
         TerrainSystemContext.set(((LevelSystems) level).terrainSystem());
         NoiseChunk nc;
         try {

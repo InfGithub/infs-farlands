@@ -3,6 +3,7 @@ package com.inf.farlands.mixin.terrain.pipeline;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
+import com.inf.farlands.terrain.ChunkBeardifier;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 
@@ -24,6 +25,7 @@ import net.minecraft.world.level.chunk.ImposterProtoChunk;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.levelgen.Beardifier;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -148,6 +150,15 @@ public abstract class GenerationChunkHolderMixin {
             for (ChunkStatus status : ChunkStatus.getStatusList()) {
                 farlandsCompleteFuture(status, levelchunk);
             }
+
+            // 结构性地形适配数据在这里算，不能在生成线程上算：Beardifier.forStructuresInChunk 会经
+            // StructureManager 走 ServerChunkCache 的取 chunk，非主线程上那条路把活踢回主线程并阻塞
+            // 等待，而主线程可能在关服时正等生成收尾，两边互为条件。此处已在主线程，且 chunk 的
+            // 结构表已就位：旧存档由 parse 线程在 SerializableChunkData 里填进 proto，
+            // LevelChunk 构造时经 setAllStarts/setAllReferences 拷入；新建世界为空，结果同 vanilla 的
+            // 空表分支。它是幂等的，重复写入无害。
+            ((ChunkBeardifier) levelchunk).setBeardifier(
+                    Beardifier.forStructuresInChunk(level.structureManager(), levelchunk.getPos()));
 
             // biome 阶段独立：后台按窗口并集填 biome 并升 BIOMES，完成后回主线程做 fsa 读回，
             // 读回完成再入生成队列。读回与入队必须回主线程，thenAccept 在后台线程执行。

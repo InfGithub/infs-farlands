@@ -2,6 +2,7 @@ package com.inf.farlands.terrain.terrainFiller;
 
 import com.inf.farlands.mixin.noise.NoiseChunkInvoker;
 import com.inf.farlands.terrain.BlockSystem;
+import com.inf.farlands.terrain.ChunkBeardifier;
 import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.terrain.NoiseSystem;
 import com.inf.farlands.terrain.TerrainSystem;
@@ -78,7 +79,7 @@ public abstract class AbstractTerrainFiller implements TerrainFiller {
             NoiseGeneratorSettings genSettings = gen.generatorSettings().value();
             NoiseSettings orig = genSettings.noiseSettings();
             RandomState randomState = level.getChunkSource().randomState();
-            Beardifier beardifier = Beardifier.forStructuresInChunk(level.structureManager(), chunk.getPos());
+            Beardifier beardifier = ((ChunkBeardifier) chunk).getBeardifier();
             int cellW = QuartPos.toBlock(orig.noiseSizeHorizontal());
             int cellCountXZ = 16 / cellW;
             return new NoiseChunk(
@@ -116,7 +117,7 @@ public abstract class AbstractTerrainFiller implements TerrainFiller {
             // 恰好覆盖该段 section 的 NoiseSettings，避免 NoiseSettings.create 的 MAX_Y 校验。
             NoiseSettings customNS = new NoiseSettings(minSectionY * 16, (maxSectionY - minSectionY + 1) * 16, noiseH, noiseV);
 
-            Beardifier beardifier = Beardifier.forStructuresInChunk(level.structureManager(), chunk.getPos());
+            Beardifier beardifier = ((ChunkBeardifier) chunk).getBeardifier();
 
             int cellCountXZ = 16 / cellW;
             // fluidPicker 按维度系统取，null 用本类默认。

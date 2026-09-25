@@ -1,6 +1,7 @@
 package com.inf.farlands.mixin.expand.y;
 
 import com.inf.farlands.terrain.CarvingMaskStorage;
+import com.inf.farlands.terrain.ChunkBeardifier;
 import com.inf.farlands.util.window.EntitySectionWindow;
 import com.inf.farlands.util.window.WindowedChunk;
 
@@ -34,6 +35,7 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.UpgradeData;
+import net.minecraft.world.level.levelgen.Beardifier;
 import net.minecraft.world.level.levelgen.blending.BlendingData;
 
 
@@ -51,7 +53,7 @@ import net.minecraft.world.level.chunk.ProtoChunk;
 import org.slf4j.Logger;
 
 @Mixin(ChunkAccess.class)
-public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStorage {
+public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStorage, ChunkBeardifier {
 
     @Unique
     private final Map<Integer, LevelChunkSection> allSections = new ConcurrentHashMap<>();
@@ -318,6 +320,28 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
     @Override
     public Map<Integer, LevelChunkSection> windowedAllSections() {
         return this.allSections;
+    }
+
+    /**
+     * 结构性地形适配数据。volatile：主线程在存在流程里写，farlands-gen 在生成任务里读，两者之间
+     * 只有 GenQueue 的 CHM 与 QUEUE 监视器提供 happens-before，标上以免将来入队路径改动时静默失效。
+     */
+    @Unique
+    private volatile Beardifier farlandsBeardifier;
+
+    @Override
+    public void setBeardifier(Beardifier beardifier) {
+        this.farlandsBeardifier = beardifier;
+    }
+
+    @Override
+    public Beardifier getBeardifier() {
+        Beardifier beardifier = this.farlandsBeardifier;
+        if (beardifier == null) {
+            throw new IllegalStateException(
+                    "farlands: chunk 的 Beardifier 未设置，存在流程漏了写入 " + ((ChunkAccess) (Object) this).getPos());
+        }
+        return beardifier;
     }
 
     @Overwrite
