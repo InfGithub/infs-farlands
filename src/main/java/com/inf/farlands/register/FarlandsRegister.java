@@ -15,6 +15,7 @@ import com.inf.farlands.terrain.system.terrain.block.overworld.Infdev.Infdev2010
 import com.inf.farlands.terrain.system.terrain.noise.misc.Hex.HexNoiseSystem;
 import com.inf.farlands.terrain.system.terrain.noise.misc.Void.VoidNoiseSystem;
 import com.inf.farlands.terrain.system.terrain.noise.misc.Weierstrass.WeierstrassNoiseSystem;
+import com.inf.farlands.terrain.system.terrain.noise.overworld.Beta173.Beta173NoiseSystem;
 import com.inf.farlands.terrain.system.terrain.noise.overworld.Oct.OctNoiseSystem;
 import com.inf.farlands.terrain.system.terrain.noise.overworld.Vanilla.VanillaNoiseSystem;
 
@@ -29,11 +30,13 @@ public class FarlandsRegister {
         registerSystems();
     }
 
-    /** 13 个内置系统按四族登记，id 与实现类的对应关系集中在此。 */
+    /** 14 个内置系统按四族登记，id 与实现类的对应关系集中在此。 */
     private static void registerSystems() {
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_VOID_NOISE_SYSTEM, VoidNoiseSystem.class);
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OVERWORLD_VANILLA_NOISE_SYSTEM,
                 VanillaNoiseSystem.class);
+        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OVERWORLD_BETA_1_7_3_NOISE_SYSTEM,
+                Beta173NoiseSystem.class);
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_HEX_NOISE_SYSTEM, HexNoiseSystem.class);
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_WEIERSTRASS_NOISE_SYSTEM,
                 WeierstrassNoiseSystem.class);
