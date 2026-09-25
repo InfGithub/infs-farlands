@@ -140,6 +140,14 @@ public final class DropdownSelect extends AbstractWidget {
                 && mouseY >= listY && mouseY < listY + this.visibleRows() * ROW_HEIGHT;
     }
 
+    /**
+     * 列表展开着且指针落在列表内。供外层滚动区的滚轮判定用：那层取不到本类，只在自己收到滚轮时会问
+     * 一遍 child，为真才把滚轮让给列表，见 {@code DropdownScrollWheelMixin}。
+     */
+    public boolean isOverOpenList(double mouseX, double mouseY) {
+        return this.open && this.isOverList(mouseX, mouseY);
+    }
+
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (!this.isActive()) {
@@ -163,7 +171,8 @@ public final class DropdownSelect extends AbstractWidget {
             } else {
                 this.open = true;
                 this.highlight = this.selected;
-                this.offset = Mth.clamp(this.selected, 0, this.maxOffset());
+                // 每次展开都从第 0 项开始显示，不把选中项滚进可见区。代价是选中项靠后时展开看不到高亮。
+                this.offset = 0;
                 this.layer.setOpen(this);
                 this.revealer.reveal(this.getY() + this.getHeight() + this.visibleRows() * ROW_HEIGHT);
             }

@@ -14,6 +14,7 @@
     "expand.y.LevelChunkMixin",
     "expand.y.ClientLevelMixin",
     "expand.y.ClientPacketListenerMixin",
+    "gui.DropdownScrollWheelMixin",
     "fix.audio.BeeSoundInstanceMixin",
     "fix.audio.ElytraOnPlayerSoundInstanceMixin",
     "fix.audio.GuardianAttackSoundInstanceMixin",
