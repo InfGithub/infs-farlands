@@ -41,6 +41,7 @@
     "render.RenderRegionCacheMixin",
     "worldselection.CreateWorldScreenMixin",
     "worldselection.WorldOpenFlowsMixin",
+    "tick.MinecraftMixin",
     "outside.GuiMixin",
     "outside.WorldBorderRendererMixin"
   ],

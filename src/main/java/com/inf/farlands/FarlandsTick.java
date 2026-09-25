@@ -26,6 +26,14 @@ public class FarlandsTick {
         return now;
     }
 
+    /**
+     * 单一时钟的写入点：服务端 tick 与分离 JVM 的客户端 tick 都从这里推进，侧信道打戳读的
+     * 就是这个值。
+     */
+    public static void setNow(int tickCount) {
+        now = tickCount;
+    }
+
     private static void swapBlockLookup(MinecraftServer server, int tickCount) {
         // size 必须在 swap 前取：swap 之后读到的是新的空表，恒为 0。
         int size = BlockUtil.size();
@@ -92,7 +100,7 @@ public class FarlandsTick {
 
     /** 服务端 tick 末尾统一入口。 */
     public static void atEnd(MinecraftServer server, int tickCount) {
-        now = tickCount;
+        setNow(tickCount);
         awardNewVanillaNoiseSystem(server);
         if (tickCount % INTERVAL == 0) {
             swapBlockLookup(server, tickCount);
