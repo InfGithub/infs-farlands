@@ -30,27 +30,27 @@ public class FarlandsRegister {
 
     /** 12 个内置系统按四族登记，id 与实现类的对应关系集中在此。 */
     private static void registerSystems() {
-        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_VOID_NOISE_SYSTEM, VoidNoiseSystem.class);
-        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_VANILLA_NOISE_SYSTEM,
+        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_VOID_NOISE_SYSTEM, VoidNoiseSystem.class);
+        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OVERWORLD_VANILLA_NOISE_SYSTEM,
                 VanillaNoiseSystem.class);
-        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_HEX_NOISE_SYSTEM, HexNoiseSystem.class);
-        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_WEIERSTRASS_NOISE_SYSTEM,
+        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_HEX_NOISE_SYSTEM, HexNoiseSystem.class);
+        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_WEIERSTRASS_NOISE_SYSTEM,
                 WeierstrassNoiseSystem.class);
-        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OCT_NOISE_SYSTEM, OctNoiseSystem.class);
+        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OVERWORLD_OCT_NOISE_SYSTEM, OctNoiseSystem.class);
 
-        SystemRegistries.registerBiome(SystemRegistries.BIOME_VOID_BIOME_SYSTEM, VoidBiomeSystem.class);
-        SystemRegistries.registerBiome(SystemRegistries.BIOME_VANILLA_BIOME_SYSTEM,
+        SystemRegistries.registerBiome(SystemRegistries.BIOME_MISC_VOID_BIOME_SYSTEM, VoidBiomeSystem.class);
+        SystemRegistries.registerBiome(SystemRegistries.BIOME_OVERWORLD_VANILLA_BIOME_SYSTEM,
                 VanillaBiomeSystem.class);
-        SystemRegistries.registerBiome(SystemRegistries.BIOME_OCT_BIOME_SYSTEM, OctBiomeSystem.class);
+        SystemRegistries.registerBiome(SystemRegistries.BIOME_OVERWORLD_OCT_BIOME_SYSTEM, OctBiomeSystem.class);
 
-        SystemRegistries.registerSurface(SystemRegistries.SURFACE_VOID_SURFACE_SYSTEM,
+        SystemRegistries.registerSurface(SystemRegistries.SURFACE_MISC_VOID_SURFACE_SYSTEM,
                 VoidSurfaceSystem.class);
-        SystemRegistries.registerSurface(SystemRegistries.SURFACE_VANILLA_SURFACE_SYSTEM,
+        SystemRegistries.registerSurface(SystemRegistries.SURFACE_OVERWORLD_VANILLA_SURFACE_SYSTEM,
                 VanillaSurfaceSystem.class);
 
-        SystemRegistries.registerCarver(SystemRegistries.CARVER_VOID_CARVER_SYSTEM,
+        SystemRegistries.registerCarver(SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM,
                 VoidCarverSystem.class);
-        SystemRegistries.registerCarver(SystemRegistries.CARVER_VANILLA_CARVER_SYSTEM,
+        SystemRegistries.registerCarver(SystemRegistries.CARVER_OVERWORLD_VANILLA_CARVER_SYSTEM,
                 VanillaCarverSystem.class);
     }
 

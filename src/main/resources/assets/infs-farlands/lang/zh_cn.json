@@ -17,5 +17,17 @@
   "commands.infs-farlands.client.section.biome.dump": "Section 生物群系数据已写入客户端日志。",
   "commands.infs-farlands.client.section.render.dump": "Section 渲染状态已写入客户端日志。",
   "createWorld.tab.infs-farlands.title": "边境之地",
-  "createWorld.tab.infs-farlands.button": "无"
+  "createWorld.tab.infs-farlands.button": "无",
+  "createWorld.tab.infs-farlands.page.overworld": "主世界",
+  "createWorld.tab.infs-farlands.page.the_nether": "下界",
+  "createWorld.tab.infs-farlands.page.the_end": "末地",
+  "createWorld.tab.infs-farlands.family.biome": "群系系统",
+  "createWorld.tab.infs-farlands.family.terrain": "地形系统",
+  "createWorld.tab.infs-farlands.family.surface": "地表系统",
+  "createWorld.tab.infs-farlands.family.carver": "雕刻系统",
+  "createWorld.tab.infs-farlands.param.free": "自由参数",
+  "createWorld.tab.infs-farlands.param.free.example": "示例：\n%s",
+  "createWorld.tab.infs-farlands.param.line": "\"%1$s\": %2$s",
+  "createWorld.tab.infs-farlands.param.type": "类型：%s",
+  "createWorld.tab.infs-farlands.param.seed.random": "每次随机生成种子"
 }

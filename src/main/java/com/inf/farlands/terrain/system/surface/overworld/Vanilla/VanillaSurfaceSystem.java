@@ -2,6 +2,8 @@ package com.inf.farlands.terrain.system.surface.overworld.Vanilla;
 
 import com.inf.farlands.terrain.SurfaceSystem;
 import com.inf.farlands.terrain.registry.SystemArgs;
+import com.inf.farlands.terrain.registry.SystemDefaultParams;
+import com.inf.farlands.terrain.registry.SystemParams;
 import com.inf.farlands.terrain.terrainFiller.AbstractTerrainFiller;
 import com.inf.farlands.util.window.WindowedChunk;
 
@@ -37,6 +39,10 @@ import net.minecraft.world.level.levelgen.WorldGenerationContext;
  * 无状态：全部局部构造，实例随 level 走、可跨线程共享。
  */
 public final class VanillaSurfaceSystem implements SurfaceSystem {
+
+    /** 声明：无参数，界面给 0 个框。 */
+    @SystemDefaultParams
+    public static final SystemParams DEFAULT_PARAMS = SystemParams.EMPTY;
 
     /** 统一构造签名，本系统不读任何参数。 */
     public VanillaSurfaceSystem(SystemArgs args) {

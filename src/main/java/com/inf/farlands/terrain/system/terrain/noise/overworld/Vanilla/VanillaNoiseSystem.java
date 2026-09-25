@@ -2,9 +2,14 @@ package com.inf.farlands.terrain.system.terrain.noise.overworld.Vanilla;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 import com.inf.farlands.terrain.NoiseSystem;
 import com.inf.farlands.terrain.registry.SystemArgs;
+import com.inf.farlands.terrain.registry.SystemDefaultParams;
+import com.inf.farlands.terrain.registry.SystemParamSpec;
+import com.inf.farlands.terrain.registry.SystemParams;
+import com.inf.farlands.terrain.registry.SystemsData.Arg;
 
 import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
@@ -22,6 +27,14 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
  * 与 RandomState 接线 vanilla 噪声的方式一致。重建后的噪声归本类所有，后续修改不必再依赖原实例。
  */
 public final class VanillaNoiseSystem implements NoiseSystem {
+
+    /** 声明：seed 只有一条映射，左端是空串，求值一次得到一个随机 long。 */
+    @SystemDefaultParams
+    public static final SystemParams DEFAULT_PARAMS = SystemParams.of(
+            SystemParamSpec.ofLong("seed")
+                    .keyword("", () -> Arg.ofLong(ThreadLocalRandom.current().nextLong()),
+                            "createWorld.tab.infs-farlands.param.seed.random")
+                    .build());
 
     /** BlendedNoise 随机源的哈希名。 */
     private static final Identifier TERRAIN = Identifier.withDefaultNamespace("terrain");

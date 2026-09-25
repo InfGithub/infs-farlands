@@ -30,10 +30,12 @@ import net.minecraft.world.level.storage.LevelResource;
 /**
  * 系统配置的读写与落地。
  *
- * <p>读自己来，不走 SavedDataStorage：它的读路径把解析失败记成日志后返回 null，上层
+ * <p>
+ * 读自己来，不走 SavedDataStorage：它的读路径把解析失败记成日志后返回 null，上层
  * computeIfAbsent 随即新建默认对象，损坏的配置因此不会失败，而这条路要的是一律抛出。
  *
- * <p>写借 SavedDataStorage：set 只标脏进缓存，由 MinecraftServer.saveAllChunks 按既有的保存节奏
+ * <p>
+ * 写借 SavedDataStorage：set 只标脏进缓存，由 MinecraftServer.saveAllChunks 按既有的保存节奏
  * 落盘，编码用同一份 Codec，两端格式不会走偏。配置文件在磁盘上不存在而世界又已初始化时即抛；
  * 只有新世界的首次解析才写默认值。
  */
@@ -106,11 +108,11 @@ public final class SystemsIO {
 
     private static LevelSelection defaultSelection() {
         return new LevelSelection(
-                new SystemSelection(SystemRegistries.TERRAIN_VANILLA_NOISE_SYSTEM.value(),
+                new SystemSelection(SystemRegistries.TERRAIN_OVERWORLD_VANILLA_NOISE_SYSTEM.value(),
                         Map.of("seed", Arg.ofLong(0L))),
-                new SystemSelection(SystemRegistries.BIOME_VOID_BIOME_SYSTEM.value(), Map.of()),
-                new SystemSelection(SystemRegistries.SURFACE_VOID_SURFACE_SYSTEM.value(), Map.of()),
-                new SystemSelection(SystemRegistries.CARVER_VOID_CARVER_SYSTEM.value(), Map.of()));
+                new SystemSelection(SystemRegistries.BIOME_MISC_VOID_BIOME_SYSTEM.value(), Map.of()),
+                new SystemSelection(SystemRegistries.SURFACE_MISC_VOID_SURFACE_SYSTEM.value(), Map.of()),
+                new SystemSelection(SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM.value(), Map.of()));
     }
 
     public static TerrainSystem terrain(LevelSelection selection) {

@@ -2,6 +2,8 @@ package com.inf.farlands.terrain.system.biome.overworld.Vanilla;
 
 import com.inf.farlands.terrain.BiomeSystem;
 import com.inf.farlands.terrain.registry.SystemArgs;
+import com.inf.farlands.terrain.registry.SystemDefaultParams;
+import com.inf.farlands.terrain.registry.SystemParams;
 
 import net.minecraft.core.QuartPos;
 import net.minecraft.server.level.ServerLevel;
@@ -24,6 +26,10 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
  * 无状态：sampler 与 biomeSource 每次 fill 现拿，防维度或世界切换陈旧，纯方法多线程安全。
  */
 public final class VanillaBiomeSystem implements BiomeSystem {
+
+    /** 声明：无参数，界面给 0 个框。 */
+    @SystemDefaultParams
+    public static final SystemParams DEFAULT_PARAMS = SystemParams.EMPTY;
 
     /** 统一构造签名，本系统不读任何参数。 */
     public VanillaBiomeSystem(SystemArgs args) {

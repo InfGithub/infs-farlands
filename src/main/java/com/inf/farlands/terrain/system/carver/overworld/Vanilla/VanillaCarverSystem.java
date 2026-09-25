@@ -3,6 +3,8 @@ package com.inf.farlands.terrain.system.carver.overworld.Vanilla;
 import com.inf.farlands.terrain.CarverSystem;
 import com.inf.farlands.terrain.CarvingMaskStorage;
 import com.inf.farlands.terrain.registry.SystemArgs;
+import com.inf.farlands.terrain.registry.SystemDefaultParams;
+import com.inf.farlands.terrain.registry.SystemParams;
 import com.inf.farlands.terrain.terrainFiller.AbstractTerrainFiller;
 
 import java.util.function.Function;
@@ -46,6 +48,10 @@ import net.minecraft.world.level.levelgen.carver.ConfiguredWorldCarver;
  * 构造期的 TerrainSystemContext 由 createDimensionNoiseChunk 自己收口。
  */
 public final class VanillaCarverSystem implements CarverSystem {
+
+    /** 声明：无参数，界面给 0 个框。 */
+    @SystemDefaultParams
+    public static final SystemParams DEFAULT_PARAMS = SystemParams.EMPTY;
 
     /** 起点网格半径，vanilla applyCarvers 硬编码 8。 */
     private static final int GRID_RADIUS = 8;

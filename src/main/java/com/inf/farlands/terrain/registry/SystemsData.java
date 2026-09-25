@@ -20,10 +20,12 @@ import net.minecraft.world.level.saveddata.SavedDataType;
 /**
  * 四族系统选择与传参，落盘为 {@code data/infs-farlands/systems.dat}。
  *
- * <p>维度为键。level.dat 与 SavedDataStorage 都是世界一份，三个维度共用同一个对象，所以这份数据
+ * <p>
+ * 维度为键。level.dat 与 SavedDataStorage 都是世界一份，三个维度共用同一个对象，所以这份数据
  * 只解析一次，由该世界第一个构造的 level 负责，取用入口见 {@link SystemsHolder}。
  *
- * <p>参数带显式的声明类型。NBT 的 boolean 与 byte 共用 ByteTag，原始类型 Codec 对超范围数值静默
+ * <p>
+ * 参数带显式的声明类型。NBT 的 boolean 与 byte 共用 ByteTag，原始类型 Codec 对超范围数值静默
  * 截断，两者都让"按 NBT 标签反推类型"不成立，所以类型写进数据，越界判定在取值时按声明类型做。
  */
 public final class SystemsData extends SavedData {
@@ -87,10 +89,12 @@ public final class SystemsData extends SavedData {
     /**
      * 一个构造参数：声明类型加原始 NBT 值。
      *
-     * <p>值经 Codec.PASSTHROUGH 原样带过，文件里保留它本来的标签类型，手改配置时读得懂；类型一致性
+     * <p>
+     * 值经 Codec.PASSTHROUGH 原样带过，文件里保留它本来的标签类型，手改配置时读得懂；类型一致性
      * 由 {@link ArgType} 在取值时判定，不靠标签反推。
      *
-     * <p>enum 另带类名。SystemArgs.getEnum 走 Class.cast，只有重建出真枚举实例才取得到。
+     * <p>
+     * enum 另带类名。SystemArgs.getEnum 走 Class.cast，只有重建出真枚举实例才取得到。
      */
     public record Arg(ArgType type, Dynamic<?> value, Optional<String> enumClass) {
 
@@ -100,14 +104,50 @@ public final class SystemsData extends SavedData {
                 Codec.STRING.optionalFieldOf("enumClass").forGetter(Arg::enumClass))
                 .apply(i, Arg::new));
 
+        public static Arg ofInt(int value) {
+            return new Arg(ArgType.INT, new Dynamic<>(NbtOps.INSTANCE, NbtOps.INSTANCE.createInt(value)),
+                    Optional.empty());
+        }
+
+        public static Arg ofShort(short value) {
+            return new Arg(ArgType.SHORT, new Dynamic<>(NbtOps.INSTANCE, NbtOps.INSTANCE.createShort(value)),
+                    Optional.empty());
+        }
+
+        public static Arg ofByte(byte value) {
+            return new Arg(ArgType.BYTE, new Dynamic<>(NbtOps.INSTANCE, NbtOps.INSTANCE.createByte(value)),
+                    Optional.empty());
+        }
+
         public static Arg ofLong(long value) {
             return new Arg(ArgType.LONG, new Dynamic<>(NbtOps.INSTANCE, NbtOps.INSTANCE.createLong(value)),
+                    Optional.empty());
+        }
+
+        public static Arg ofFloat(float value) {
+            return new Arg(ArgType.FLOAT, new Dynamic<>(NbtOps.INSTANCE, NbtOps.INSTANCE.createFloat(value)),
                     Optional.empty());
         }
 
         public static Arg ofDouble(double value) {
             return new Arg(ArgType.DOUBLE, new Dynamic<>(NbtOps.INSTANCE, NbtOps.INSTANCE.createDouble(value)),
                     Optional.empty());
+        }
+
+        public static Arg ofBoolean(boolean value) {
+            return new Arg(ArgType.BOOLEAN, new Dynamic<>(NbtOps.INSTANCE, NbtOps.INSTANCE.createBoolean(value)),
+                    Optional.empty());
+        }
+
+        public static Arg ofString(String value) {
+            return new Arg(ArgType.STRING, new Dynamic<>(NbtOps.INSTANCE, NbtOps.INSTANCE.createString(value)),
+                    Optional.empty());
+        }
+
+        /** 枚举值存常量名，类名进 enumClass：取值时要重建真枚举实例，光有名字取不出来。 */
+        public static <E extends Enum<E>> Arg ofEnum(E value) {
+            return new Arg(ArgType.ENUM, new Dynamic<>(NbtOps.INSTANCE, NbtOps.INSTANCE.createString(value.name())),
+                    Optional.of(value.getDeclaringClass().getName()));
         }
     }
 

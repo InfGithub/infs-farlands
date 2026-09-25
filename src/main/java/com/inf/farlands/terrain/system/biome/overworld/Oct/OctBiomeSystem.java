@@ -1,9 +1,14 @@
 package com.inf.farlands.terrain.system.biome.overworld.Oct;
 
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 import com.inf.farlands.terrain.BiomeSystem;
 import com.inf.farlands.terrain.registry.SystemArgs;
+import com.inf.farlands.terrain.registry.SystemDefaultParams;
+import com.inf.farlands.terrain.registry.SystemParamSpec;
+import com.inf.farlands.terrain.registry.SystemParams;
+import com.inf.farlands.terrain.registry.SystemsData.Arg;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctNoiseHarvest;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctNoiseSource;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctOverworldDensity;
@@ -28,6 +33,17 @@ import net.minecraft.world.level.levelgen.WorldgenRandom;
  * 采集不全时回退 vanilla sampler。
  */
 public final class OctBiomeSystem implements BiomeSystem {
+
+    /** 声明：seed 只有一条映射，左端是空串；三轴缩放默认不缩放。 */
+    @SystemDefaultParams
+    public static final SystemParams DEFAULT_PARAMS = SystemParams.of(
+            SystemParamSpec.ofLong("seed")
+                    .keyword("", () -> Arg.ofLong(ThreadLocalRandom.current().nextLong()),
+                            "createWorld.tab.infs-farlands.param.seed.random")
+                    .build(),
+            SystemParamSpec.ofDouble("scaleX").define(1.0).build(),
+            SystemParamSpec.ofDouble("scaleY").define(1.0).build(),
+            SystemParamSpec.ofDouble("scaleZ").define(1.0).build());
 
     private final long seed;
     private final OctScale scale;

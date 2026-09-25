@@ -1,9 +1,14 @@
 package com.inf.farlands.terrain.system.terrain.noise.overworld.Oct;
 
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 import com.inf.farlands.terrain.NoiseSystem;
 import com.inf.farlands.terrain.registry.SystemArgs;
+import com.inf.farlands.terrain.registry.SystemDefaultParams;
+import com.inf.farlands.terrain.registry.SystemParamSpec;
+import com.inf.farlands.terrain.registry.SystemParams;
+import com.inf.farlands.terrain.registry.SystemsData.Arg;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctNoiseHarvest;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctNoiseSource;
 import com.inf.farlands.terrain.system.common.overworld.Oct.OctOverworldDensity;
@@ -28,6 +33,17 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
  * 本系统实例也是 per-level，所以重建结果按 vanilla router 身份缓存，每个 chunk 不会重算。
  */
 public final class OctNoiseSystem implements NoiseSystem {
+
+    /** 声明：三轴缩放默认不缩放；seed 只有一条映射，左端是空串。 */
+    @SystemDefaultParams
+    public static final SystemParams DEFAULT_PARAMS = SystemParams.of(
+            SystemParamSpec.ofDouble("scaleX").define(1.0).build(),
+            SystemParamSpec.ofDouble("scaleY").define(1.0).build(),
+            SystemParamSpec.ofDouble("scaleZ").define(1.0).build(),
+            SystemParamSpec.ofLong("seed")
+                    .keyword("", () -> Arg.ofLong(ThreadLocalRandom.current().nextLong()),
+                            "createWorld.tab.infs-farlands.param.seed.random")
+                    .build());
 
     private final OctScale scale;
     private final PositionalRandomFactory root;

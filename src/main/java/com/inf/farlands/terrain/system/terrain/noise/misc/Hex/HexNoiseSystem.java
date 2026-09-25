@@ -4,6 +4,9 @@ import com.mojang.serialization.MapCodec;
 import com.inf.farlands.FarlandsConstant;
 import com.inf.farlands.terrain.NoiseSystem;
 import com.inf.farlands.terrain.registry.SystemArgs;
+import com.inf.farlands.terrain.registry.SystemDefaultParams;
+import com.inf.farlands.terrain.registry.SystemParamSpec;
+import com.inf.farlands.terrain.registry.SystemParams;
 
 import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.world.level.ChunkPos;
@@ -18,6 +21,13 @@ import net.minecraft.world.level.levelgen.PositionalRandomFactory;
 
 /** Hex 噪声系统：XZ 正弦高度场，不生成水。 */
 public final class HexNoiseSystem implements NoiseSystem {
+
+    /** 声明：三轴缩放，默认 1.0 即不缩放。 */
+    @SystemDefaultParams
+    public static final SystemParams DEFAULT_PARAMS = SystemParams.of(
+            SystemParamSpec.ofDouble("scaleX").define(1.0).build(),
+            SystemParamSpec.ofDouble("scaleY").define(1.0).build(),
+            SystemParamSpec.ofDouble("scaleZ").define(1.0).build());
 
     /** 高度场基高，单位方块。 */
     private static final double BASE = 64.0;
