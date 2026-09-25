@@ -11,6 +11,7 @@ import com.inf.farlands.terrain.system.carver.misc.Void.VoidCarverSystem;
 import com.inf.farlands.terrain.system.carver.overworld.Vanilla.VanillaCarverSystem;
 import com.inf.farlands.terrain.system.surface.misc.Void.VoidSurfaceSystem;
 import com.inf.farlands.terrain.system.surface.overworld.Vanilla.VanillaSurfaceSystem;
+import com.inf.farlands.terrain.system.terrain.block.overworld.Infdev.Infdev20100226BlockSystem;
 import com.inf.farlands.terrain.system.terrain.noise.misc.Hex.HexNoiseSystem;
 import com.inf.farlands.terrain.system.terrain.noise.misc.Void.VoidNoiseSystem;
 import com.inf.farlands.terrain.system.terrain.noise.misc.Weierstrass.WeierstrassNoiseSystem;
@@ -28,7 +29,7 @@ public class FarlandsRegister {
         registerSystems();
     }
 
-    /** 12 个内置系统按四族登记，id 与实现类的对应关系集中在此。 */
+    /** 13 个内置系统按四族登记，id 与实现类的对应关系集中在此。 */
     private static void registerSystems() {
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_VOID_NOISE_SYSTEM, VoidNoiseSystem.class);
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OVERWORLD_VANILLA_NOISE_SYSTEM,
@@ -37,6 +38,8 @@ public class FarlandsRegister {
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_WEIERSTRASS_NOISE_SYSTEM,
                 WeierstrassNoiseSystem.class);
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OVERWORLD_OCT_NOISE_SYSTEM, OctNoiseSystem.class);
+        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OVERWORLD_INFDEV_20100226_BLOCK_SYSTEM,
+                Infdev20100226BlockSystem.class);
 
         SystemRegistries.registerBiome(SystemRegistries.BIOME_MISC_VOID_BIOME_SYSTEM, VoidBiomeSystem.class);
         SystemRegistries.registerBiome(SystemRegistries.BIOME_OVERWORLD_VANILLA_BIOME_SYSTEM,
