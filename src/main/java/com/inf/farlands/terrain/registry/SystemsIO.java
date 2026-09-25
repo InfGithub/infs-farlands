@@ -50,6 +50,26 @@ public final class SystemsIO {
                 .resolveAgainst(server.getWorldPath(LevelResource.DATA));
     }
 
+    /**
+     * 创建世界页签的选择在 level 构造之前的暂存。客户端在服务端线程启动之前放进来，本类在文件
+     * 不存在且世界尚未初始化的那条分支里取用一次即清空，所以既成世界与专服都碰不到它。
+     *
+     * <p>只在「这次 level 构造」的生命周期内有效，不进磁盘、不做回退。取用时落盘仍由
+     * {@link net.minecraft.world.level.storage.SavedDataStorage} 负责，本类不写文件。
+     */
+    private static volatile SystemsData staged;
+
+    /** level 构造前把界面选择交给本类。由集成服务器在 createLevels 之前调用。 */
+    public static void stageForLevelCreation(SystemsData data) {
+        staged = data;
+    }
+
+    private static SystemsData takeStaged() {
+        SystemsData data = staged;
+        staged = null;
+        return data;
+    }
+
     /** 解析该世界的配置：文件在则严格自读，不在则按新世界落默认并写回，其余情形抛。 */
     public static SystemsData resolve(MinecraftServer server) {
         Path file = file(server);
@@ -59,7 +79,10 @@ public final class SystemsIO {
         if (server.getWorldData().overworldData().isInitialized()) {
             throw new IllegalStateException("farlands: 已存在的世界没有系统配置文件 " + file);
         }
-        SystemsData data = defaultFor(server);
+        SystemsData data = takeStaged();
+        if (data == null) {
+            data = defaultFor(server);
+        }
         server.getDataStorage().set(SystemsData.TYPE, data);
         return data;
     }

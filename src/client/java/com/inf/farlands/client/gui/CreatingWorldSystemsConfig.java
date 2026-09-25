@@ -2,15 +2,23 @@ package com.inf.farlands.client.gui;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
+import com.inf.farlands.terrain.registry.BiomeDefaultSystem;
+import com.inf.farlands.terrain.registry.CarverDefaultSystem;
 import com.inf.farlands.terrain.registry.FamilyKind;
 import com.inf.farlands.terrain.registry.FamilyPage;
+import com.inf.farlands.terrain.registry.SurfaceDefaultSystem;
 import com.inf.farlands.terrain.registry.SystemId;
+import com.inf.farlands.terrain.registry.SystemRegistries;
+import com.inf.farlands.terrain.registry.SystemSelectionParser;
 import com.inf.farlands.terrain.registry.SystemsData;
 import com.inf.farlands.terrain.registry.SystemsIO;
+import com.inf.farlands.terrain.registry.TerrainDefaultSystem;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
@@ -95,6 +103,44 @@ public final class CreatingWorldSystemsConfig {
         } catch (RuntimeException e) {
             toastReadFailure(e);
         }
+    }
+
+    /**
+     * 把当前三页的全部选择与参数文本编成一份 {@link SystemsData}，供新建世界落盘。
+     *
+     * <p>四个族的注册表取类与参数文本的键都在这里收口，{@link SystemSelectionParser} 只做文本到
+     * {@code Arg} 的还原。选中的系统不在该族注册表里时 {@code classOf} 抛。
+     *
+     * <p>文本非法的解析失败直穿给调用方，由它决定中止创建，不在此处吞掉或退回默认。
+     */
+    public static SystemsData buildSystemsData() {
+        Map<Identifier, SystemsData.LevelSelection> levels = new LinkedHashMap<>();
+        for (FamilyPage page : FamilyPage.values()) {
+            levels.put(page.dimensionId(), levelSelection(page));
+        }
+        return new SystemsData(levels);
+    }
+
+    private static SystemsData.LevelSelection levelSelection(FamilyPage page) {
+        return new SystemsData.LevelSelection(
+                family(page, FamilyKind.TERRAIN, SystemRegistries::terrainClassOf,
+                        TerrainDefaultSystem.defaultFor(page)),
+                family(page, FamilyKind.BIOME, SystemRegistries::biomeClassOf,
+                        BiomeDefaultSystem.defaultFor(page)),
+                family(page, FamilyKind.SURFACE, SystemRegistries::surfaceClassOf,
+                        SurfaceDefaultSystem.defaultFor(page)),
+                family(page, FamilyKind.CARVER, SystemRegistries::carverClassOf,
+                        CarverDefaultSystem.defaultFor(page)));
+    }
+
+    /** 一族的选择。没选过时用该页的默认系统，与界面的初始选中同一份表。 */
+    private static SystemsData.SystemSelection family(FamilyPage page, FamilyKind kind,
+            Function<SystemId, Class<?>> classOf, SystemId fallback) {
+        SystemId id = system(page, kind);
+        if (id == null) {
+            id = fallback;
+        }
+        return SystemSelectionParser.parse(id, text(page, kind, id), classOf.apply(id));
     }
 
     private static void apply(SystemsData data) {
