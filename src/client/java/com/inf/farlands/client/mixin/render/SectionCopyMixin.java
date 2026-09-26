@@ -40,13 +40,34 @@ public class SectionCopyMixin {
         // 基准取算索引时钉住的那个值，不再读实时窗口，避免两次读错开
         int base = WindowSnapshot.baseOf(wc);
 
+        // 一次遍历同时取最高键与非空计数。
         int maxY = Integer.MIN_VALUE;
+        int cnt = 0;
         for (Map.Entry<Integer, LevelChunkSection> e : all.entrySet()) {
-            if (e.getValue() != null && e.getKey() > maxY) {
-                maxY = e.getKey();
+            int k = e.getKey();
+            if (e.getValue() != null) {
+                if (k > maxY) {
+                    maxY = k;
+                }
+                cnt++;
             }
         }
-        int length = all.isEmpty() ? 0 : maxY - base + 1;
+        // 数组只需覆盖 SectionCopy 实际访问的下标：sectionY - base。sectionY 来自
+        // RenderRegionCache.createRegion，它取脏段的段号再向上下各扩一格；而脏段来自
+        // visibleSections，被 ViewArea.containsSection 限在相机段上下各半高。base 就是相机段
+        // 减半高，故最大可达下标为窗口段数加一，只比窗口上界高一段。
+        //
+        // 不设上限的后果：allSections 是历次窗口的并集，可含远离当前窗口的键。section 包与
+        // 读回都按调用方给的 sectionY 直写，不判边界，于是 maxY - base 可达上亿，每次调用
+        // 分配 GB 级引用数组，表现为周期性 GC 停顿。
+        //
+        // 上限取窗口跨度加一，恰好覆盖最大可达下标；正常情形实际跨度不超过它，与改动前逐位相同。
+        int length = 0;
+        if (cnt != 0) {
+            int span = maxY - base + 1;
+            int windowSpan = wc.getWindowMaxY() - base + 2;
+            length = span <= windowSpan ? span : (windowSpan > 0 ? windowSpan : span);
+        }
         if (length <= 0) {
             WindowSnapshot.clear(wc);
             return new LevelChunkSection[0];

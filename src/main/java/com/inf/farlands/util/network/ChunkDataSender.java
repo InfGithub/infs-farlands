@@ -19,6 +19,7 @@ import com.inf.farlands.serialize.TerrainHooks;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.util.window.WindowedChunk;
+import com.inf.farlands.util.world.WorldBounds;
 
 import io.netty.buffer.Unpooled;
 
@@ -132,6 +133,28 @@ public final class ChunkDataSender {
     }
 
     /**
+     * 玩家窗口下界与上界，界夹到可表示段范围。
+     *
+     * <p>不夹的后果：玩家段 134217726 时上界为 134217743，越过可表示上界 134217727。
+     * 逐段 enqueueForWindow 会经 BiomeFiller 落到 ChunkAccess.getSection，把该段建进
+     * allSections，那里没有边界判定；随后经本类的 section 包送到客户端，客户端按
+     * allSections 的键跨度建渲染数组，跨度可达上亿，每次调用分配 GB 级引用数组，
+     * 表现为周期性 GC 停顿。
+     *
+     * <p>先 long 化再夹：centerY 接近 int 顶端时 centerY + N 自身会回绕，回绕值再取 min
+     * 得到的是错误的上界。
+     */
+    static int windowMinSection(int centerY) {
+        return (int) Math.max((long) centerY - FarlandsConfig.verticalSimulationDistance,
+                (long) WorldBounds.MIN_SECTION);
+    }
+
+    static int windowMaxSection(int centerY) {
+        return (int) Math.min((long) centerY + FarlandsConfig.verticalSimulationDistance,
+                (long) WorldBounds.MAX_SECTION);
+    }
+
+    /**
      * 窗口变化检测 + difference：新窗口内不在旧窗口区间的 sectionY = 新进入 -> 入队该玩家
      * tracking view 内每个 chunk。首次记录（或换维度）整窗入队。
      *
@@ -146,8 +169,8 @@ public final class ChunkDataSender {
 
         if (state == null || !state.dimension.equals(dim)) {
             WINDOW_STATES.put(id, new PlayerWindowState(centerY, dim));
-            int min = centerY - FarlandsConfig.verticalSimulationDistance;
-            int max = centerY + FarlandsConfig.verticalSimulationDistance;
+            int min = windowMinSection(centerY);
+            int max = windowMaxSection(centerY);
             for (int sy = min; sy <= max; sy++) {
                 enqueueForWindow(player, sy);
             }
@@ -163,10 +186,13 @@ public final class ChunkDataSender {
         if (state.centerY == centerY) {
             return false;
         }
-        int oldMin = state.centerY - FarlandsConfig.verticalSimulationDistance;
-        int oldMax = state.centerY + FarlandsConfig.verticalSimulationDistance;
-        int newMin = centerY - FarlandsConfig.verticalSimulationDistance;
-        int newMax = centerY + FarlandsConfig.verticalSimulationDistance;
+        int oldMin = windowMinSection(state.centerY);
+        int oldMax = windowMaxSection(state.centerY);
+        int newMin = windowMinSection(centerY);
+        int newMax = windowMaxSection(centerY);
+        if (newMin > newMax) {
+            return false;
+        }
         for (int sy = newMin; sy <= newMax; sy++) {
             if (sy >= oldMin && sy <= oldMax) {
                 continue;
@@ -259,8 +285,8 @@ public final class ChunkDataSender {
         ChunkTrackingView view = player.getChunkTrackingView();
         int viewDistance = view instanceof ChunkTrackingView.Positioned pos ? pos.viewDistance() : 8;
         int centerY = Mth.floorDiv(player.getBlockY(), 16);
-        int windowMinY = centerY - FarlandsConfig.verticalSimulationDistance;
-        int windowMaxY = centerY + FarlandsConfig.verticalSimulationDistance;
+        int windowMinY = windowMinSection(centerY);
+        int windowMaxY = windowMaxSection(centerY);
         for (long chunkKey : marked) {
             int cx = ChunkPos.getX(chunkKey);
             int cz = ChunkPos.getZ(chunkKey);
@@ -292,7 +318,7 @@ public final class ChunkDataSender {
         ServerLevel level = (ServerLevel) player.level();
         ChunkPos playerChunk = player.chunkPosition();
         int budget = FarlandsConfig.sectionSendBytesPerTick;
-        int windowMinY = Mth.floorDiv(player.getBlockY(), 16) - FarlandsConfig.verticalSimulationDistance;
+        int windowMinY = windowMinSection(Mth.floorDiv(player.getBlockY(), 16));
 
         List<Map.Entry<Long, Set<Integer>>> sorted = new ArrayList<>(queue.entrySet());
         sorted.sort(Comparator.comparingLong(e -> distSq(e.getKey(), playerChunk)));
