@@ -9,6 +9,7 @@ import com.inf.farlands.util.window.WindowedChunk;
 
 import java.lang.reflect.Field;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 
@@ -86,7 +87,10 @@ public class FarLandsCommands {
                         .then(Commands.literal("system")
                                 .then(Commands.literal("args")
                                         .then(Commands.literal("dump")
-                                                .executes(ctx -> dumpSystemArgs(ctx.getSource()))))));
+                                                .executes(ctx -> dumpSystemArgs(ctx.getSource())))))
+                        .then(Commands.literal("random")
+                                .then(Commands.literal("tp")
+                                        .executes(ctx -> randomTeleport(ctx.getSource())))));
     }
 
     private static int dump(CommandSourceStack source) {
@@ -231,6 +235,24 @@ public class FarLandsCommands {
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("SYSDATA err", e);
         }
+        return 1;
+    }
+
+    /**
+     * 取三个 int 全域随机整数，按这三个坐标把 {@code tp} 派发给同一个命令源。
+     *
+     * <p>不自己调传送：可用范围判定、客户端位置包、传送后的速度与 onGround 处理都在原版那条命令里，
+     * 自己另走一遍等于把这四处复制成第二份实现。派发经
+     * {@code Commands.performPrefixedCommand}，嵌套调用复用当前命令执行上下文，命令在本方法返回后
+     * 立刻执行。
+     *
+     * <p>取值不做筛选也不钳制，落在原版判据之外的抽取由原版那条命令自己报错。
+     */
+    private static int randomTeleport(CommandSourceStack source) {
+        int x = ThreadLocalRandom.current().nextInt();
+        int y = ThreadLocalRandom.current().nextInt();
+        int z = ThreadLocalRandom.current().nextInt();
+        source.getServer().getCommands().performPrefixedCommand(source, "tp " + x + " " + y + " " + z);
         return 1;
     }
 
