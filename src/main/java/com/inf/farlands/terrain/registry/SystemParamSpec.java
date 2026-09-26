@@ -92,38 +92,38 @@ public final class SystemParamSpec {
     }
 
     /**
-     * 默认值的文本形式，没有默认值时为 null。按声明类型分派，与界面预填、将来落盘共用同一份写法。
+     * 默认值的文本形式，没有默认值时为 null。按声明类型分派，与界面预填共用同一份写法。
      */
     public String defaultText() {
         if (this.defaultValue == null) {
             return null;
         }
-        return switch (this.type) {
-            case INT, SHORT, BYTE, LONG -> Long.toString(this.number().longValue());
-            case FLOAT, DOUBLE -> doubleText(this.number().doubleValue());
-            case BOOLEAN -> this.number().longValue() != 0L ? "true" : "false";
-            case STRING, ENUM -> this.string();
+        return text(this.key, this.type, this.defaultValue.value());
+    }
+
+    /**
+     * 按声明类型把一个参数值写成界面与解析器共用的文本形式：布尔出 true/false，数值不带类型后缀，
+     * 字符串原样。默认值与界面预填都走这里，同一形态只有一份实现。
+     */
+    public static String text(String key, ArgType type, Dynamic<?> value) {
+        return switch (type) {
+            case INT, SHORT, BYTE, LONG -> Long.toString(number(key, value).longValue());
+            case FLOAT, DOUBLE -> doubleText(number(key, value).doubleValue());
+            case BOOLEAN -> number(key, value).longValue() != 0L ? "true" : "false";
+            case STRING, ENUM -> string(key, value);
         };
-    }
-
-    private Number number() {
-        return number(this.key, this.defaultValue.value());
-    }
-
-    private String string() {
-        return string(this.key, this.defaultValue.value());
     }
 
     private static <T> Number number(String key, Dynamic<T> value) {
         return value.getOps().getNumberValue(value.getValue())
                 .getOrThrow(message -> new IllegalStateException(
-                        "System param default is not a number: " + key + " " + message));
+                        "System param is not a number: " + key + " " + message));
     }
 
     private static <T> String string(String key, Dynamic<T> value) {
         return value.getOps().getStringValue(value.getValue())
                 .getOrThrow(message -> new IllegalStateException(
-                        "System param default is not a string: " + key + " " + message));
+                        "System param is not a string: " + key + " " + message));
     }
 
     private static String doubleText(double value) {

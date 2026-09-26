@@ -10,6 +10,8 @@ import java.util.function.Function;
 
 import com.inf.farlands.terrain.registry.FamilyKind;
 import com.inf.farlands.terrain.registry.SystemId;
+import com.inf.farlands.terrain.registry.SystemParamSpec;
+import com.inf.farlands.terrain.registry.SystemParams;
 import com.inf.farlands.terrain.registry.SystemRegistries;
 import com.inf.farlands.terrain.registry.SystemSelectionParser;
 import com.inf.farlands.terrain.registry.SystemsData;
@@ -17,6 +19,7 @@ import com.inf.farlands.terrain.registry.SystemsIO;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.storage.LevelResource;
@@ -191,12 +194,38 @@ public final class CreatingWorldSystemsConfig {
         applySystem(page, FamilyKind.CARVER, selection.carver());
     }
 
+    /**
+     * 把一个族的选择预填进界面：有参数声明的按声明键逐个写文本形态，没有声明的把整张参数复合写进
+     * 自由框那个键。两侧各自与解析端同一形态，重建世界时才能原样读回。
+     */
     private static void applySystem(Identifier page, FamilyKind kind, SystemsData.SystemSelection selection) {
         SystemId id = new SystemId(selection.id());
         select(page, kind, id);
-        for (Map.Entry<String, SystemsData.Arg> arg : selection.args().entrySet()) {
-            putText(page, kind, id, arg.getKey(), arg.getValue().value().getValue().toString());
+        SystemParams declared = SystemParams.declaredBy(classOf(kind, id));
+        if (declared == null) {
+            putText(page, kind, id, FREE_KEY, SystemsData.SystemSelection.ARGS_CODEC
+                    .encodeStart(NbtOps.INSTANCE, selection.args())
+                    .getOrThrow()
+                    .toString());
+            return;
         }
+        for (SystemParamSpec spec : declared.entries()) {
+            SystemsData.Arg arg = selection.args().get(spec.key());
+            if (arg != null) {
+                putText(page, kind, id, spec.key(),
+                        SystemParamSpec.text(spec.key(), spec.type(), arg.value()));
+            }
+        }
+    }
+
+    /** 按族取实现类，供预填判断该系统有没有参数声明。 */
+    private static Class<?> classOf(FamilyKind kind, SystemId id) {
+        return switch (kind) {
+            case TERRAIN -> SystemRegistries.terrainClassOf(id);
+            case BIOME -> SystemRegistries.biomeClassOf(id);
+            case SURFACE -> SystemRegistries.surfaceClassOf(id);
+            case CARVER -> SystemRegistries.carverClassOf(id);
+        };
     }
 
     /** 读取失败弹一段中英可译的提示，正文带异常消息便于定位。 */

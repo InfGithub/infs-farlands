@@ -81,9 +81,12 @@ public final class SystemsData extends SavedData {
     /** 一族的选择：注册 id 加该族的构造参数。 */
     public record SystemSelection(Identifier id, Map<String, Arg> args) {
 
+        /** 参数名到 Arg 的映射。落盘与界面自由参数框共用同一份写法。 */
+        public static final Codec<Map<String, Arg>> ARGS_CODEC = Codec.unboundedMap(Codec.STRING, Arg.CODEC);
+
         public static final Codec<SystemSelection> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Identifier.CODEC.fieldOf("id").forGetter(SystemSelection::id),
-                Codec.unboundedMap(Codec.STRING, Arg.CODEC).fieldOf("args").forGetter(SystemSelection::args))
+                ARGS_CODEC.fieldOf("args").forGetter(SystemSelection::args))
                 .apply(i, SystemSelection::new));
     }
 
