@@ -162,16 +162,32 @@ public abstract class GenerationChunkHolderMixin {
 
             // biome 阶段独立：后台按窗口并集填 biome 并升 BIOMES，完成后回主线程做 fsa 读回，
             // 读回完成再入生成队列。读回与入队必须回主线程，thenAccept 在后台线程执行。
-            CompletableFuture.runAsync(
-                    () -> BiomeFiller.fillChunkBiomes(level, levelchunk),
-                    Util.backgroundExecutor())
-                    .thenAccept(v -> SectionIO.runOnMainThread(() -> {
-                        // fsa 读回：先查磁盘窗口内 section，有则读回恢复数据、光照、stage 并补发。
-                        // 完成后才 enqueueChunk，collectSegments 的 isOrAfter(TERRAIN) 自动跳过已读回的，
-                        // 磁盘没有的 section 正常入生成队列。
-                        SectionLifecycle.loadChunkSections(levelchunk,
-                                () -> GenQueue.enqueueChunk(levelchunk));
-                    }, level));
+            //
+            // biome 阶段不在生成与光照两张标志内，而它同样会换掉 section 的 biomes 容器，发送侧
+            // 据此另查 isBiomeFilling。begin 必须在提交之前由本线程落下，end 必须在填充的最后一笔
+            // 写之后：填充抛异常或提交本身失败都要清，否则该 chunk 永久为忙。
+            GenQueue.beginBiomeFill(levelchunk);
+            try {
+                CompletableFuture.runAsync(
+                        () -> {
+                            try {
+                                BiomeFiller.fillChunkBiomes(level, levelchunk);
+                            } finally {
+                                GenQueue.endBiomeFill(levelchunk);
+                            }
+                        },
+                        Util.backgroundExecutor())
+                        .thenAccept(v -> SectionIO.runOnMainThread(() -> {
+                            // fsa 读回：先查磁盘窗口内 section，有则读回恢复数据、光照、stage 并补发。
+                            // 完成后才 enqueueChunk，collectSegments 的 isOrAfter(TERRAIN) 自动跳过已读回的，
+                            // 磁盘没有的 section 正常入生成队列。
+                            SectionLifecycle.loadChunkSections(levelchunk,
+                                    () -> GenQueue.enqueueChunk(levelchunk));
+                        }, level));
+            } catch (RuntimeException e) {
+                GenQueue.endBiomeFill(levelchunk);
+                throw e;
+            }
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("farlands: existence flow failed chunk={}", proto.getPos(), e);
             throw new RuntimeException(e);

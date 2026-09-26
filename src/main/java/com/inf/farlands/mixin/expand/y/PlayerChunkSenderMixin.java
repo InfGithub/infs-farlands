@@ -25,9 +25,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * HEAD 设置该玩家的窗口 minY，RETURN 清除。
  *
  * <p>
- * 生成或光照在途时 {@code WindowSendState.sendableSections} 返回空列表，这个 chunk 包一个 section
- * 都不带；而 fill 与读回的补发入队都发生在更早的时刻，玩家当时可能还不在范围内，于是该 chunk 会
- * 一直是空壳。这里在同样的判据下标记一次内容变化，由 ChunkDataSender 按玩家当前窗口补发。
+ * 生成、光照或 biome 阶段在途时 {@code WindowSendState.sendableSections} 返回空列表，这个 chunk 包
+ * 一个 section 都不带；而 fill 与读回的补发入队都发生在更早的时刻，玩家当时可能还不在范围内，
+ * 于是该 chunk 会一直是空壳。这里在同样的判据下标记一次内容变化，由 ChunkDataSender 按玩家当前
+ * 窗口补发。
  */
 @Mixin(PlayerChunkSender.class)
 public class PlayerChunkSenderMixin {
@@ -38,7 +39,7 @@ public class PlayerChunkSenderMixin {
         ServerPlayer player = packetListener.player;
         int centerY = Mth.floorDiv(player.getBlockY(), 16);
         WindowSendState.setWindowMinY(centerY - ((WindowedChunk) chunk).windowHalfBelow());
-        if (GenQueue.isChunkBusy(chunk)) {
+        if (GenQueue.isChunkBusy(chunk) || GenQueue.isBiomeFilling(chunk)) {
             ChunkDataSender.markChunkChanged(chunk);
         }
     }

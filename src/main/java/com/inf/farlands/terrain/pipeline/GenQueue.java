@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -86,6 +87,15 @@ public final class GenQueue {
 
     /** 每 chunk 生成在途标志，chunkKey 到 CAS，同 chunk 至多一个生成任务，防并发写高度图。 */
     private static final ConcurrentHashMap<Long, AtomicBoolean> CHUNK_IN_FLIGHT = new ConcurrentHashMap<>();
+
+    /**
+     * biome 阶段在途的 chunk，按 chunk 实例记，同坐标重载不互相牵连。
+     *
+     * <p>短路完成后的群系填充跑在 Util.backgroundExecutor 上，既不是生成任务也不是光照任务，
+     * 上面两张标志都不覆盖它。它同样会在两次遍历之间换掉 section 的 biomes 容器，所以发送侧
+     * 必须另查本集合，否则按前一次算出的定长缓冲会在写时越界。
+     */
+    private static final Set<LevelChunk> BIOME_FILLING = ConcurrentHashMap.newKeySet();
 
     private GenQueue() {
     }
@@ -335,6 +345,26 @@ public final class GenQueue {
         }
         AtomicBoolean light = LIGHT_IN_FLIGHT.get(key);
         return light != null && light.get();
+    }
+
+    /**
+     * biome 阶段开始。
+     *
+     * <p>必须在提交群系填充任务之前、由主线程调用：发送是主线程上连续的两条语句，标志只能在
+     * 它们之外落下，才能在填充的第一笔写之前生效。
+     */
+    public static void beginBiomeFill(LevelChunk chunk) {
+        BIOME_FILLING.add(chunk);
+    }
+
+    /** biome 阶段结束。由填充任务的 finally 调用，填充抛异常时同样要清，否则该 chunk 永久为忙。 */
+    public static void endBiomeFill(LevelChunk chunk) {
+        BIOME_FILLING.remove(chunk);
+    }
+
+    /** 该 chunk 的 biome 阶段是否在途。发送侧与补发标记据此判定，见 WindowSendState.sendableSections。 */
+    public static boolean isBiomeFilling(LevelChunk chunk) {
+        return BIOME_FILLING.contains(chunk);
     }
 
     /** 报告某 section 已生成，触发光照，该 chunk 无在途光照时一次。 */

@@ -48,9 +48,12 @@ public final class WindowSendState {
      * fill 或光照在途即 GenQueue.isChunkBusy 的 chunk 返回空列表：genPool 并发写 section 时，
      * 两次遍历之间的 section 集合与内容会不一致；过滤后 section 稳定才打包。空出来的数据由
      * fill 完成后的段包补齐。
+     *
+     * 短路完成后的 biome 阶段跑在 Util.backgroundExecutor 上，不在那两张标志内，所以另查
+     * GenQueue.isBiomeFilling，它在两次遍历之间同样会换掉 section 的 biomes 容器。
      */
     public static List<Map.Entry<Integer, LevelChunkSection>> sendableSections(LevelChunk chunk) {
-        if (GenQueue.isChunkBusy(chunk)) {
+        if (GenQueue.isChunkBusy(chunk) || GenQueue.isBiomeFilling(chunk)) {
             return List.of();
         }
         int minY = windowMinY(chunk);
