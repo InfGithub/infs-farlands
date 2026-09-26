@@ -164,10 +164,6 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
         return this.levelHeightAccessor.getMaxY();
     }
 
-    private int _sectIdx(int y) {
-        return windowSectionIndexFromY(y >> 4);
-    }
-
     @Overwrite
     private static void replaceMissingSections(PalettedContainerFactory containerFactory,
             LevelChunkSection[] sections) {
@@ -442,18 +438,30 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
     }
 
     /**
-     * 群系按原始 quart Y 定位段，不 clamp 到维度范围。
+     * 群系按原始 quart Y 定位段，不 clamp 到维度范围，且缺段不物化。
      *
-     * clamp 是 vanilla 为直接索引 sections 数组而设，越界即抛；本 port 走 getSection，任意索引
-     * 都成立，clamp 只剩把范围外 Y 折到边界段的副作用。段内偏移一直用的是未 clamp 的 y & 3，
-     * 去掉 clamp 后索引与偏移同源。范围外缺失的段由 getSection 按需建出，是干净段，窗口外由
-     * fsa 清理回收，不写盘。
+     * clamp 是 vanilla 为直接索引 sections 数组而设，越界即抛；本 port 直接查 allSections，
+     * 任意 quart Y 都成立，clamp 只剩把范围外 Y 折到边界段的副作用。段内偏移一直用的是未
+     * clamp 的 y & 3，去掉 clamp 后索引与偏移同源。
+     *
+     * 缺段不能走 getSection：那会把每次群系查询变成段的来源。刷怪这类按整列随机取 Y 的调用
+     * 每次都能建出一个窗口外的段，而窗口外的段只靠 fsa 清理回收，追不上就是无界内存。缺段返回
+     * containerFactory 的默认群系，与"建一个空段再读它的群系"逐字等价：空段的 biome 容器就是
+     * new PalettedContainer<>(defaultBiome, strategy)。
      */
     @Overwrite
     public Holder<Biome> getNoiseBiome(int x, int y, int z) {
         try {
-            LevelChunkSection s = this.getSection(_sectIdx(QuartPos.toBlock(y)));
-            return s.getNoiseBiome(x & 3, y & 3, z & 3);
+            LevelChunkSection s = this.allSections.get(y >> 2);
+            if (s != null) {
+                return s.getNoiseBiome(x & 3, y & 3, z & 3);
+            }
+            if (this.containerFactory != null) {
+                return this.containerFactory.defaultBiome();
+            }
+            // containerFactory 在构造 RETURN 赋值，此支理论不可达，保留取段兜底
+            return this.getSection(windowSectionIndexFromY(QuartPos.toBlock(y) >> 4))
+                    .getNoiseBiome(x & 3, y & 3, z & 3);
         } catch (Throwable throwable) {
             CrashReport crashreport = CrashReport.forThrowable(throwable, "Getting biome");
             CrashReportCategory crashreportcategory = crashreport.addCategory("Biome being got");
