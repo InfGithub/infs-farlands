@@ -43,5 +43,6 @@ replay_*.log
 source
 docs
 repos
+debug
 *.log
 handoff.md
