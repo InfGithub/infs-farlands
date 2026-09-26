@@ -16,6 +16,8 @@
   "commands.infs-farlands.client.section.block.dump": "Section 方块数据已写入客户端日志。",
   "commands.infs-farlands.client.section.biome.dump": "Section 生物群系数据已写入客户端日志。",
   "commands.infs-farlands.client.section.render.dump": "Section 渲染状态已写入客户端日志。",
+  "commands.infs-farlands.section.size.dump": "服务端 Section 总数：%s 个 chunk，%s 个 section。",
+  "commands.infs-farlands.client.section.size.dump": "客户端 Section 总数：%s 个 chunk，%s 个 section。",
   "createWorld.tab.infs-farlands.title": "边境之地",
   "createWorld.tab.infs-farlands.button": "无",
   "createWorld.tab.infs-farlands.page.overworld": "主世界",

@@ -5,12 +5,19 @@ import com.inf.farlands.command.CommandRegistrationEvent;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.util.window.WindowedChunk;
 
+import java.lang.reflect.Field;
+
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ChunkHolder;
+import net.minecraft.server.level.ChunkMap;
+import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
@@ -18,6 +25,7 @@ import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.DataLayer;
+import net.minecraft.world.level.chunk.ImposterProtoChunk;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
@@ -65,7 +73,10 @@ public class FarLandsCommands {
                                 .then(Commands.literal("pipeline")
                                         .then(Commands.literal("state")
                                                 .then(Commands.literal("dump")
-                                                        .executes(ctx -> dumpPipelineState(ctx.getSource())))))));
+                                                        .executes(ctx -> dumpPipelineState(ctx.getSource())))))
+                                .then(Commands.literal("size")
+                                        .then(Commands.literal("dump")
+                                                .executes(ctx -> dumpSectionSize(ctx.getSource()))))));
     }
 
     private static int dump(CommandSourceStack source) {
@@ -140,6 +151,55 @@ public class FarLandsCommands {
             InfsFarlands.LOGGER.error("PLSTATE err", e);
         }
         return 1;
+    }
+
+    /**
+     * 全部已加载 chunk 的 section 总数，即 Σ windowedAllSections().size()。
+     *
+     * <p>
+     * 取 ChunkMap.visibleChunkMap 的全部 holder：它只在 tick 时整体换引用，不做原地增删，命令跑在主
+     * 线程，读一次字段再遍历是稳定快照。chunk 取 getLatestChunk，因此含生成中的 ProtoChunk，不只
+     * ticking 那批。ImposterProtoChunk 必须解包到 wrapped 的 LevelChunk：它没有覆写
+     * windowedAllSections，混入注入的表是它自己那份，直接读会漏算。
+     */
+    private static int dumpSectionSize(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            ServerLevel level = (ServerLevel) player.level();
+            ServerChunkCache chunkSource = level.getChunkSource();
+            Long2ObjectMap<ChunkHolder> holders = farlands$visibleChunkMap(chunkSource.chunkMap);
+            int chunks = 0;
+            long sections = 0L;
+            for (ChunkHolder holder : holders.values()) {
+                ChunkAccess ca = holder.getLatestChunk();
+                if (ca == null) {
+                    continue;
+                }
+                if (ca instanceof ImposterProtoChunk imposter) {
+                    ca = imposter.getWrapped();
+                }
+                chunks++;
+                sections += ((WindowedChunk) ca).windowedAllSections().size();
+            }
+            int chunkCount = chunks;
+            long sectionCount = sections;
+            InfsFarlands.LOGGER.info("SIZEDUMP server dim={} chunks={} sections={}",
+                    level.dimension().identifier(), chunkCount, sectionCount);
+            source.sendSuccess(() -> Component.translatable("commands.infs-farlands.section.size.dump",
+                    chunkCount, sectionCount), false);
+        } catch (Exception e) {
+            InfsFarlands.LOGGER.error("SIZEDUMP server err", e);
+        }
+        return 1;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Long2ObjectMap<ChunkHolder> farlands$visibleChunkMap(ChunkMap chunkMap) {
+        try {
+            return (Long2ObjectMap<ChunkHolder>) F_VISIBLE_CHUNK_MAP.get(chunkMap);
+        } catch (Exception e) {
+            throw new RuntimeException("farlands: ChunkMap.visibleChunkMap", e);
+        }
     }
 
     /** 当前 section 的 4x4x4 biome 网格，服务端/客户端共用。 */
@@ -222,6 +282,19 @@ public class FarLandsCommands {
             }
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("FLDUMP BLOCKS err", e);
+        }
+    }
+
+    // ---- ChunkMap.visibleChunkMap 是 private，服务端没有公开的已加载 chunk 迭代入口 ----
+
+    private static final Field F_VISIBLE_CHUNK_MAP;
+
+    static {
+        try {
+            F_VISIBLE_CHUNK_MAP = ChunkMap.class.getDeclaredField("visibleChunkMap");
+            F_VISIBLE_CHUNK_MAP.setAccessible(true);
+        } catch (Exception e) {
+            throw new RuntimeException("fail FarLandsCommands", e);
         }
     }
 }

@@ -3,12 +3,15 @@ package com.inf.farlands.client.register.command;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.command.CommandRegistrationEvent;
 import com.inf.farlands.register.command.FarLandsCommands;
+import com.inf.farlands.util.window.WindowedChunk;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.Octree;
 import net.minecraft.client.renderer.SectionOcclusionGraph;
@@ -22,6 +25,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.phys.AABB;
@@ -63,7 +67,10 @@ public class ClientFarLandsCommands {
                                                         .executes(ctx -> dumpBlocksClient(ctx.getSource()))))
                                         .then(Commands.literal("render")
                                                 .then(Commands.literal("dump")
-                                                        .executes(ctx -> dumpRenderClient(ctx.getSource())))))));
+                                                        .executes(ctx -> dumpRenderClient(ctx.getSource()))))
+                                        .then(Commands.literal("size")
+                                                .then(Commands.literal("dump")
+                                                        .executes(ctx -> dumpSectionSizeClient(ctx.getSource())))))));
     }
 
     private static int dumpClient(CommandSourceStack source) {
@@ -122,6 +129,50 @@ public class ClientFarLandsCommands {
             InfsFarlands.LOGGER.error("BLOCKDUMP client err", e);
         }
         return 1;
+    }
+
+    /**
+     * 客户端全部已加载 chunk 的 section 总数，即 Σ windowedAllSections().size()。
+     *
+     * <p>
+     * 客户端没有公开的遍历入口：ClientChunkCache.storage 与它内部 Storage.chunks 都是 private，
+     * 两跳反射取 AtomicReferenceArray。storage 在视距变化时整体换实例，命令跑在客户端线程，读一次
+     * 即稳定快照。
+     */
+    private static int dumpSectionSizeClient(CommandSourceStack source) {
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.level == null || mc.player == null) {
+                return 1;
+            }
+            AtomicReferenceArray<?> chunks = minecraft$clientChunks(mc.level.getChunkSource());
+            int count = 0;
+            long sections = 0L;
+            for (int i = 0; i < chunks.length(); i++) {
+                if (chunks.get(i) instanceof LevelChunk lc) {
+                    count++;
+                    sections += ((WindowedChunk) lc).windowedAllSections().size();
+                }
+            }
+            int chunkCount = count;
+            long sectionCount = sections;
+            InfsFarlands.LOGGER.info("SIZEDUMP client dim={} chunks={} sections={}",
+                    mc.level.dimension().identifier(), chunkCount, sectionCount);
+            source.sendSuccess(() -> Component.translatable("commands.infs-farlands.client.section.size.dump",
+                    chunkCount, sectionCount), false);
+        } catch (Exception e) {
+            InfsFarlands.LOGGER.error("SIZEDUMP client err", e);
+        }
+        return 1;
+    }
+
+    private static AtomicReferenceArray<?> minecraft$clientChunks(ClientChunkCache cache) {
+        try {
+            Object storage = F_CLIENT_STORAGE.get(cache);
+            return (AtomicReferenceArray<?>) F_STORAGE_CHUNKS.get(storage);
+        } catch (Exception e) {
+            throw new RuntimeException("farlands: ClientChunkCache.storage.chunks", e);
+        }
     }
 
     /**
@@ -297,10 +348,13 @@ public class ClientFarLandsCommands {
         }
     }
 
-    // ---- 渲染侧状态的私有成员访问 ----
+    // ---- 渲染侧与客户端 chunk 存储的私有成员访问 ----
     // viewArea、visibleSections、Octree.root、遮挡图的三个调度标志都是 private，
-    // ViewArea.getRenderSectionAt 是 protected，跨包只能反射。字段名在类加载期解析一次，失败即抛。
+    // ViewArea.getRenderSectionAt 是 protected，ClientChunkCache.storage 与其 Storage.chunks
+    // 也是 private，跨包只能反射。字段名在类加载期解析一次，失败即抛。
 
+    private static final Field F_CLIENT_STORAGE;
+    private static final Field F_STORAGE_CHUNKS;
     private static final Field F_VIEW_AREA;
     private static final Field F_VISIBLE_SECTIONS;
     private static final Field F_OCTREE_ROOT;
@@ -325,6 +379,10 @@ public class ClientFarLandsCommands {
             F_NEEDS_FRUSTUM_UPDATE.setAccessible(true);
             M_RENDER_SECTION_AT = ViewArea.class.getDeclaredMethod("getRenderSectionAt", BlockPos.class);
             M_RENDER_SECTION_AT.setAccessible(true);
+            F_CLIENT_STORAGE = ClientChunkCache.class.getDeclaredField("storage");
+            F_CLIENT_STORAGE.setAccessible(true);
+            F_STORAGE_CHUNKS = F_CLIENT_STORAGE.getType().getDeclaredField("chunks");
+            F_STORAGE_CHUNKS.setAccessible(true);
         } catch (Exception e) {
             throw new RuntimeException("fail ClientFarLandsCommands", e);
         }
