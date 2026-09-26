@@ -11,6 +11,7 @@ import java.util.function.BiConsumer;
 import com.inf.farlands.client.gui.CreatingWorldSystemsConfig;
 import com.inf.farlands.terrain.registry.SystemParamSpec;
 import com.inf.farlands.terrain.registry.SystemParams;
+import com.inf.farlands.terrain.registry.SystemSelectionParser;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -51,6 +52,8 @@ public final class ParamGroup extends AbstractContainerWidget {
     private static final int LABEL_TOP = 6;
     /** 框内文本上限。原版 EditBox 的 maxLength 默认只有 32，贴一段参数 JSON 会被静默截断。 */
     private static final int MAX_TEXT_LENGTH = 1024;
+    /** 文本不合声明时的字色，合法时换回 EditBox.DEFAULT_TEXT_COLOR。 */
+    private static final int INVALID_TEXT_COLOR = 0xFFFF5555;
     private static final String FREE_TEXT = "{\"seed\":{\"type\":\"long\",\"value\":0}}";
     /** 自由框接受的形状示例。引导句与排版在语言文件的 free.example 里，本常量是它的 %s 实参。 */
     private static final String FREE_GRAMMAR =
@@ -64,6 +67,10 @@ public final class ParamGroup extends AbstractContainerWidget {
     private final Map<String, EditBox> texts = new LinkedHashMap<>();
     /** 参数名到它的采集回调，reload 时按当前文本重放一遍。 */
     private final Map<String, BiConsumer<String, String>> reporters = new LinkedHashMap<>();
+    /** 参数名到它的声明，逐框校验用；自由框不进这张表。 */
+    private final Map<String, SystemParamSpec> specs = new LinkedHashMap<>();
+    /** 参数名到建框时的原始 tooltip，标红时在它后面追加错因，恢复时换回来。 */
+    private final Map<String, Component> baseTooltips = new LinkedHashMap<>();
     private final int groupWidth;
     private int labelWidth = MIN_LABEL_WIDTH;
     private boolean free;
@@ -92,6 +99,8 @@ public final class ParamGroup extends AbstractContainerWidget {
         this.children.clear();
         this.texts.clear();
         this.reporters.clear();
+        this.specs.clear();
+        this.baseTooltips.clear();
         this.free = params == null;
         Font font = Minecraft.getInstance().font;
         if (this.free) {
@@ -100,10 +109,17 @@ public final class ParamGroup extends AbstractContainerWidget {
                     Component.translatable("createWorld.tab.infs-farlands.param.free"));
             box.setMaxLength(MAX_TEXT_LENGTH);
             box.setValue(saved.getOrDefault(CreatingWorldSystemsConfig.FREE_KEY, FREE_TEXT));
-            box.setTooltip(Tooltip.create(Component.translatable(
-                    "createWorld.tab.infs-farlands.param.free.example", FREE_GRAMMAR)));
+            Component base = Component.translatable(
+                    "createWorld.tab.infs-farlands.param.free.example", FREE_GRAMMAR);
+            box.setTooltip(Tooltip.create(base));
+            this.baseTooltips.put(CreatingWorldSystemsConfig.FREE_KEY, base);
+            box.setResponder(value -> {
+                this.mark(CreatingWorldSystemsConfig.FREE_KEY, box, SystemSelectionParser.problemFree(value));
+                if (onText != null) {
+                    onText.accept(CreatingWorldSystemsConfig.FREE_KEY, value);
+                }
+            });
             if (onText != null) {
-                box.setResponder(value -> onText.accept(CreatingWorldSystemsConfig.FREE_KEY, value));
                 this.reporters.put(CreatingWorldSystemsConfig.FREE_KEY, onText);
             }
             this.texts.put(CreatingWorldSystemsConfig.FREE_KEY, box);
@@ -116,15 +132,23 @@ public final class ParamGroup extends AbstractContainerWidget {
                 EditBox box = new EditBox(font, this.boxWidth(), BOX_HEIGHT, Component.literal(spec.key()));
                 box.setMaxLength(MAX_TEXT_LENGTH);
                 box.setHint(Component.literal(spec.type().id()));
-                box.setTooltip(Tooltip.create(this.tooltip(spec)));
+                Component base = this.tooltip(spec);
+                box.setTooltip(Tooltip.create(base));
                 String text = saved.getOrDefault(spec.key(), spec.defaultText());
                 if (text != null) {
                     box.setValue(text);
                 }
+                box.setResponder(value -> {
+                    this.mark(spec.key(), box, SystemSelectionParser.problem(spec, value));
+                    if (onText != null) {
+                        onText.accept(spec.key(), value);
+                    }
+                });
                 if (onText != null) {
-                    box.setResponder(value -> onText.accept(spec.key(), value));
                     this.reporters.put(spec.key(), onText);
                 }
+                this.specs.put(spec.key(), spec);
+                this.baseTooltips.put(spec.key(), base);
                 this.texts.put(spec.key(), box);
                 this.children.add(label);
                 this.children.add(box);
@@ -132,6 +156,36 @@ public final class ParamGroup extends AbstractContainerWidget {
         }
         this.setHeight(this.rows * ROW_HEIGHT);
         this.layoutRows();
+        this.validateAll();
+    }
+
+    /** 建好框后按当前文本校验一遍：预填值也要标出来，但不回写采集回调。 */
+    private void validateAll() {
+        for (Map.Entry<String, EditBox> entry : this.texts.entrySet()) {
+            SystemParamSpec spec = this.specs.get(entry.getKey());
+            String problem = spec == null
+                    ? SystemSelectionParser.problemFree(entry.getValue().getValue())
+                    : SystemSelectionParser.problem(spec, entry.getValue().getValue());
+            this.mark(entry.getKey(), entry.getValue(), problem);
+        }
+    }
+
+    /**
+     * 标出或恢复一个框：非法时红字并把错因追加到原始 tooltip 之后，合法时换回默认字色与原始 tooltip。
+     */
+    private void mark(String key, EditBox box, String problem) {
+        Component base = this.baseTooltips.get(key);
+        if (problem == null) {
+            box.setTextColor(EditBox.DEFAULT_TEXT_COLOR);
+            if (base != null) {
+                box.setTooltip(Tooltip.create(base));
+            }
+            return;
+        }
+        box.setTextColor(INVALID_TEXT_COLOR);
+        if (base != null) {
+            box.setTooltip(Tooltip.create(Component.empty().append(base).append("\n").append(problem)));
+        }
     }
 
     private int labelWidth(Font font, SystemParams params) {

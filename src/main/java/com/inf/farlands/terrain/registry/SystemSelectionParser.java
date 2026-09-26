@@ -34,6 +34,37 @@ public final class SystemSelectionParser {
         return new SystemSelection(id.value(), args);
     }
 
+    /**
+     * 该段文本按声明是否可用：可用返回 null，否则返回可显示的错因。空框按关键字与字面默认值判，
+     * 与 {@link #parseDeclared} 的走法一致。
+     */
+    public static String problem(SystemParamSpec spec, String text) {
+        try {
+            if (text.isEmpty()) {
+                fromEmpty(spec);
+            } else {
+                parseText(spec, text);
+            }
+            return null;
+        } catch (RuntimeException e) {
+            return message(e);
+        }
+    }
+
+    /** 自由参数框文本是否可用：可用返回 null，否则返回可显示的错因。 */
+    public static String problemFree(String text) {
+        try {
+            parseFree(Map.of("", text));
+            return null;
+        } catch (RuntimeException e) {
+            return message(e);
+        }
+    }
+
+    private static String message(RuntimeException e) {
+        return e.getMessage() == null ? e.toString() : e.getMessage();
+    }
+
     /** 有声明：逐项按声明类型解析，空框走关键字或字面默认值。 */
     private static Map<String, Arg> parseDeclared(SystemParams declared, Map<String, String> texts) {
         Map<String, Arg> out = new LinkedHashMap<>();

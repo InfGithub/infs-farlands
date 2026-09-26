@@ -153,6 +153,19 @@ public final class CreatingWorldSystemsConfig {
     }
 
     /**
+     * 当前界面的选择与参数能否编成一份配置：能则 null，不能则返回可显示的错因。创建按钮提交前用它
+     * 校验，判据与真正落盘那一次完全相同，只是多吞一次异常。
+     */
+    public static String problem() {
+        try {
+            buildSystemsData();
+            return null;
+        } catch (RuntimeException e) {
+            return e.getMessage() == null ? e.toString() : e.getMessage();
+        }
+    }
+
+    /**
      * 一页的选择。地形族的默认按维度分派：原版三维度取主世界 vanilla 噪声系统，其余维度退 VOID。
      * 另三族不分维度，都退各自的 VOID。
      *

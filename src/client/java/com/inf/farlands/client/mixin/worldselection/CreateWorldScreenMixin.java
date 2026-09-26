@@ -6,9 +6,13 @@ import java.util.List;
 import com.inf.farlands.client.gui.CreatingWorldSystemsConfig;
 import com.inf.farlands.client.gui.FarlandsTab;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.tabs.Tab;
+import net.minecraft.client.gui.screens.AlertScreen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -70,5 +74,27 @@ public class CreateWorldScreenMixin {
     @Inject(method = "openCreateWorldScreen", at = @At("HEAD"))
     private static void farlands$resetConfig(CallbackInfo ci) {
         CreatingWorldSystemsConfig.reset();
+    }
+
+    /**
+     * 参数文本非法时拦住创建：留在本界面并弹一段说明，异常不带进服务端启动。校验复用
+     * buildSystemsData 本身，判据与真正落盘那一次相同；框上的标红由 ParamGroup 负责。
+     *
+     * <p>方法名在本类里唯一，所以注解只写名字。
+     */
+    @Inject(method = "onCreate", at = @At("HEAD"), cancellable = true)
+    private void farlands$blockInvalidSystems(CallbackInfo ci) {
+        String problem = CreatingWorldSystemsConfig.problem();
+        if (problem == null) {
+            return;
+        }
+        CreateWorldScreen self = (CreateWorldScreen) (Object) this;
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.setScreen(new AlertScreen(
+                () -> minecraft.setScreen(self),
+                Component.translatable("createWorld.tab.infs-farlands.error.args.title"),
+                Component.translatable("createWorld.tab.infs-farlands.error.args.message", problem),
+                CommonComponents.GUI_BACK, false));
+        ci.cancel();
     }
 }
