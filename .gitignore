@@ -46,3 +46,4 @@ repos
 debug
 *.log
 handoff.md
+workspace
