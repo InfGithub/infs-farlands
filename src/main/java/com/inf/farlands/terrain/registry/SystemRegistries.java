@@ -40,6 +40,7 @@ public final class SystemRegistries {
     public static final SystemId TERRAIN_OVERWORLD_OCT_NOISE_SYSTEM = id("overworld_oct_noise_system");
     public static final SystemId TERRAIN_OVERWORLD_INFDEV_20100226_BLOCK_SYSTEM = id(
             "overworld_infdev_20100226_block_system");
+    public static final SystemId TERRAIN_OVERWORLD_CWG_NOISE_SYSTEM = id("overworld_cwg_noise_system");
 
     public static final SystemId BIOME_MISC_VOID_BIOME_SYSTEM = id("misc_void_biome_system");
     public static final SystemId BIOME_OVERWORLD_VANILLA_BIOME_SYSTEM = id("overworld_vanilla_biome_system");
