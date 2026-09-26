@@ -1,6 +1,7 @@
 package com.inf.farlands.util.window;
 
 import com.inf.farlands.FarlandsConfig;
+import com.inf.farlands.util.world.WorldBounds;
 import java.util.Map;
 
 import net.minecraft.world.level.LevelHeightAccessor;
@@ -29,13 +30,21 @@ public interface WindowedChunk {
     void buildWindow(int sectionYMin, int sectionYMax);
 
     /**
-     * 窗口滑到以 centerSectionY 为中心，对称 ±N，并释放窗口加余量之外的段。
+     * 窗口滑到以 centerSectionY 为中心，对称 ±N，界夹到可表示段范围后再释放窗口加余量之外的段。
      *
      * <p>窗口只是视图，段容器是 allSections。移动后不释放旧段，容器就是历次窗口的并集，
      * 随竖直移动单调增长；释放并入移动这一步，容器便恒等于窗口加余量。
+     *
+     * <p>夹取必须先 long 化：center 接近 int 顶端时 center + N 自身就回绕，回绕后的值再取 min
+     * 会得到错误的下界。不夹取时中心 + N 会越过可表示段上界，造出方块基址 sy 左移 4 位已经
+     * 回绕的段，光照播种写该段即越界。
      */
     default void moveWindowTo(int centerSectionY) {
-        buildWindow(centerSectionY - windowHalfBelow(), centerSectionY + windowHalfAbove());
+        int sectionYMin = (int) Math.max((long) centerSectionY - windowHalfBelow(),
+                (long) WorldBounds.MIN_SECTION);
+        int sectionYMax = (int) Math.min((long) centerSectionY + windowHalfAbove(),
+                (long) WorldBounds.MAX_SECTION);
+        buildWindow(sectionYMin, sectionYMax);
         releaseSectionsOutsideWindow(FarlandsConfig.sectionCleanupMargin);
     }
 

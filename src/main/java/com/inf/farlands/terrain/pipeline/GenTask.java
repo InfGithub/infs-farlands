@@ -1,6 +1,5 @@
 package com.inf.farlands.terrain.pipeline;
 
-import com.inf.farlands.FarlandsConstant;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
@@ -9,6 +8,7 @@ import com.inf.farlands.terrain.surfaceFiller.SurfaceFiller;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
 import com.inf.farlands.util.window.WindowedChunk;
+import com.inf.farlands.util.world.WorldBounds;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -140,7 +140,7 @@ public final class GenTask {
         int[] curMax = { -1 };
         boolean[] open = { false };
         IntConsumer consider = sy -> {
-            if (sy > FarlandsConstant.MAX_CHUNK - 1 || sy < -FarlandsConstant.MAX_CHUNK) {
+            if (!WorldBounds.inSection(sy)) {
                 return;
             }
             if (SectionStage.isOrAfter(chunk, sy, SectionStage.TERRAIN)) {

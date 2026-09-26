@@ -15,10 +15,15 @@ public final class WorldBounds {
 
     public static final int MIN_PLAYABLE_BLOCK = ~FarlandsConstant.MAX_PLAYABLE_BLOCK;
 
-    /** 正方向最后一个可玩 chunk = 134,217,726 = 2^27-2。 */
-    public static final int MAX_PLAYABLE_CHUNK = FarlandsConstant.MAX_PLAYABLE_CHUNK;
+    /** 正方向最后一个可表示段 = 134,217,727 = 2^27-1，段号为 sy。 */
+    public static final int MAX_SECTION = FarlandsConstant.MAX_SECTION;
 
-    public static final int MIN_PLAYABLE_CHUNK = ~FarlandsConstant.MAX_PLAYABLE_CHUNK;
+    public static final int MIN_SECTION = FarlandsConstant.MIN_SECTION;
+
+    /** 正方向最后一个可玩段 = 134,217,726 = 2^27-2。 */
+    public static final int MAX_PLAYABLE_SECTION = FarlandsConstant.MAX_PLAYABLE_SECTION;
+
+    public static final int MIN_PLAYABLE_SECTION = ~FarlandsConstant.MAX_PLAYABLE_SECTION;
 
     public static boolean inBlock(int v) {
         return v >= MIN_PLAYABLE_BLOCK && v <= MAX_PLAYABLE_BLOCK;
@@ -36,8 +41,24 @@ public final class WorldBounds {
         return inBlock(x) && inBlock(z);
     }
 
+    /**
+     * 段号是否在可玩段范围内。判据与 inChunk 同值，量纲不同：本方法吃段号 sy，
+     * inChunk 吃区块 xz。
+     */
+    public static boolean inSection(int sy) {
+        return sy >= MIN_PLAYABLE_SECTION && sy <= MAX_PLAYABLE_SECTION;
+    }
+
+    /**
+     * 段号是否在可表示段范围内，即段内方块左移四位后不越过 int。比可玩段两端各宽一段，
+     * 那两段的方块全部在可玩方块范围之外。
+     */
+    public static boolean inSectionAbsolute(int sy) {
+        return sy >= MIN_SECTION && sy <= MAX_SECTION;
+    }
+
     public static boolean inChunk(int v) {
-        return v >= MIN_PLAYABLE_CHUNK && v <= MAX_PLAYABLE_CHUNK;
+        return v >= MIN_PLAYABLE_SECTION && v <= MAX_PLAYABLE_SECTION;
     }
 
     public static boolean inChunkRange(int cx, int cz) {
@@ -66,7 +87,7 @@ public final class WorldBounds {
     }
 
     public static int clampChunk(int v) {
-        return v > MAX_PLAYABLE_CHUNK ? MAX_PLAYABLE_CHUNK
-                : v < MIN_PLAYABLE_CHUNK ? MIN_PLAYABLE_CHUNK : v;
+        return v > MAX_PLAYABLE_SECTION ? MAX_PLAYABLE_SECTION
+                : v < MIN_PLAYABLE_SECTION ? MIN_PLAYABLE_SECTION : v;
     }
 }

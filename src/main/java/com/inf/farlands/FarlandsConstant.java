@@ -1,10 +1,11 @@
 package com.inf.farlands;
 
 public class FarlandsConstant {
-    public static final int MAX_CHUNK = 134217727;
+    public static final int MAX_SECTION = 134217727;
+    public static final int MIN_SECTION = ~MAX_SECTION;
     public static final int MAX_BLOCK = 2147483647;
     public static final int MAX_PLAYABLE_BLOCK = MAX_BLOCK - 16;
-    public static final int MAX_PLAYABLE_CHUNK = MAX_CHUNK - 1;
+    public static final int MAX_PLAYABLE_SECTION = MAX_SECTION - 1;
 
     /**
      * Mineshaft 结构起点 chunk 的绝对安全上界（防 int 溢出，非玩法边界）。

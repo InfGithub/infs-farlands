@@ -1,12 +1,12 @@
 package com.inf.farlands.terrain.carverFiller;
 
-import com.inf.farlands.FarlandsConstant;
 import com.inf.farlands.light.IColumnMasks;
 import com.inf.farlands.mixin.noise.HeightmapInvoker;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.util.window.WindowedChunk;
+import com.inf.farlands.util.world.WorldBounds;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,7 +40,7 @@ public final class CarverFiller {
     /** 该 chunk 是否已有 SURFACE 未 CARVERS 且非读回的 section。 */
     public static boolean hasCarversPending(LevelChunk chunk) {
         for (Integer sy : ((WindowedChunk) chunk).windowedAllSections().keySet()) {
-            if (sy > FarlandsConstant.MAX_CHUNK - 1 || sy < -FarlandsConstant.MAX_CHUNK) {
+            if (!WorldBounds.inSection(sy)) {
                 continue;
             }
             if (SectionStage.isOrAfter(chunk, sy, SectionStage.SURFACE)

@@ -6,6 +6,7 @@ import com.inf.farlands.util.maps.SectionUtil;
 import com.inf.farlands.util.pos.IntBlockPos;
 import com.inf.farlands.util.pos.IntSectionPos;
 import com.inf.farlands.util.window.WindowedChunk;
+import com.inf.farlands.util.world.WorldBounds;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -695,7 +696,7 @@ public class FarLandsSkyLightEngine implements LayerLightEventListener {
             int baseY = sy << 4;
             int topY = baseY + 15;
 
-            // long 化防溢出：topY = baseY + 15 在 2.14B 即 sy=MAX_CHUNK 时 = Integer.MAX_VALUE，
+            // long 化防溢出：topY = baseY + 15 在 2.14B 即 sy=MAX_SECTION 时 = Integer.MAX_VALUE，
             // int by++ 溢出为负 -> 无限循环 -> DataLayer.get 越界 CTD。
             for (long by = Math.max((long) baseY, (long) effectiveMax); by <= topY; by++) {
                 // P1：不 putBlock enqueue 直接带坐标 (x, by, z)
@@ -864,6 +865,11 @@ public class FarLandsSkyLightEngine implements LayerLightEventListener {
         lc = getChunk(cx, cz);
         if (lc instanceof WindowedChunk wc2) {
             for (int sy : wc2.windowedAllSections().keySet()) {
+                // allSections 是历次窗口的并集，不是当前窗口，越界段会留在里面。段内方块
+                // 左移四位已越过 int 的段不能播种：baseY 回绕，by 减 baseY 即越界。
+                if (!WorldBounds.inSectionAbsolute(sy)) {
+                    continue;
+                }
                 long secKey = HashMath.hash(cx, sy, cz);
                 // vanilla 语义：getDataLayerToWrite 创建层，传播初始化必须建层，
                 // 否则地表空层被跳过 -> 最低光源处永不 enqueue -> 传播无源 -> 全黑。
