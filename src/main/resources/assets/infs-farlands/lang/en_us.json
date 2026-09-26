@@ -18,6 +18,7 @@
   "commands.infs-farlands.client.section.render.dump": "Section render state written to client log.",
   "commands.infs-farlands.section.size.dump": "Server section totals: %s chunks, %s sections.",
   "commands.infs-farlands.client.section.size.dump": "Client section totals: %s chunks, %s sections.",
+  "commands.infs-farlands.system.args.dump": "System args for the current dimension written to server log.",
   "createWorld.tab.infs-farlands.title": "Farlands",
   "createWorld.tab.infs-farlands.button": "None",
   "createWorld.tab.infs-farlands.page.overworld": "Overworld",

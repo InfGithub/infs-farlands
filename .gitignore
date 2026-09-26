@@ -43,7 +43,7 @@ replay_*.log
 source
 docs
 repos
-debug
+/debug/
 *.log
 handoff.md
 workspace

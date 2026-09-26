@@ -3,9 +3,12 @@ package com.inf.farlands.register.command;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.command.CommandRegistrationEvent;
 import com.inf.farlands.serialize.SectionStage;
+import com.inf.farlands.terrain.registry.SystemsData;
+import com.inf.farlands.terrain.registry.SystemsHolder;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import java.lang.reflect.Field;
+import java.util.Map;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 
@@ -14,7 +17,9 @@ import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerChunkCache;
@@ -32,8 +37,9 @@ import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 
 /**
- * 服务端诊断命令族 {@code /farlands section ...}：把玩家当前 section 的光照层、群系、
- * 方块数据与地形管线状态 dump 到日志，用于极端坐标下的对账。
+ * 服务端诊断命令族。{@code /farlands section ...} 把玩家当前 section 的光照层、群系、
+ * 方块数据与地形管线状态 dump 到日志，用于极端坐标下的对账；{@code /farlands system args dump}
+ * 把当前维度的系统选择按磁盘那套 codec 编成 SNBT 写进日志。
  *
  * <p>
  * 本类不引用任何客户端类，专用服务器也能加载；客户端侧同名命令见
@@ -76,7 +82,11 @@ public class FarLandsCommands {
                                                         .executes(ctx -> dumpPipelineState(ctx.getSource())))))
                                 .then(Commands.literal("size")
                                         .then(Commands.literal("dump")
-                                                .executes(ctx -> dumpSectionSize(ctx.getSource()))))));
+                                                .executes(ctx -> dumpSectionSize(ctx.getSource())))))
+                        .then(Commands.literal("system")
+                                .then(Commands.literal("args")
+                                        .then(Commands.literal("dump")
+                                                .executes(ctx -> dumpSystemArgs(ctx.getSource()))))));
     }
 
     private static int dump(CommandSourceStack source) {
@@ -189,6 +199,37 @@ public class FarLandsCommands {
                     chunkCount, sectionCount), false);
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("SIZEDUMP server err", e);
+        }
+        return 1;
+    }
+
+    /**
+     * 把当前维度的系统选择按磁盘那套 codec 编成 SNBT 写进日志，供对账与手改配置取用。
+     *
+     * <p>只取当前维度那一条：整份 SystemsData 是维度到选择的映射，把这一条包成只含它的 SystemsData
+     * 再编码，形状与 systems.dat 里 data 载荷逐字一致。文件里没有该维度的条目时只记 absent，不改用
+     * 兜底值，因为这里要暴露的正是文件里到底有没有。
+     */
+    private static int dumpSystemArgs(CommandSourceStack source) {
+        try {
+            ServerLevel level = source.getLevel();
+            Identifier dimension = level.dimension().identifier();
+            SystemsData data = ((SystemsHolder) level).systems();
+            SystemsData.LevelSelection selection = data.selection(dimension);
+            if (selection == null) {
+                InfsFarlands.LOGGER.info("SYSDATA dim={} absent", dimension);
+            } else {
+                String snbt = SystemsData.CODEC
+                        .encodeStart(NbtOps.INSTANCE, new SystemsData(Map.of(dimension, selection)))
+                        .getOrThrow()
+                        .toString();
+                InfsFarlands.LOGGER.info("SYSDATA dim={}", dimension);
+                InfsFarlands.LOGGER.info("SYSDATA sel={}", snbt);
+            }
+            source.sendSuccess(
+                    () -> Component.translatable("commands.infs-farlands.system.args.dump"), false);
+        } catch (Exception e) {
+            InfsFarlands.LOGGER.error("SYSDATA err", e);
         }
         return 1;
     }
