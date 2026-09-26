@@ -1,10 +1,13 @@
 package com.inf.farlands.mixin.expand.y;
 
+import com.inf.farlands.light.FarLandsLightEngine;
 import com.inf.farlands.terrain.CarvingMaskStorage;
 import com.inf.farlands.terrain.ChunkBeardifier;
 import com.inf.farlands.util.window.EntitySectionWindow;
 import com.inf.farlands.util.window.WindowedChunk;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
@@ -24,6 +27,8 @@ import net.minecraft.CrashReport;
 import net.minecraft.CrashReportCategory;
 import net.minecraft.ReportedException;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeResolver;
@@ -36,6 +41,7 @@ import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.levelgen.Beardifier;
 import net.minecraft.world.level.levelgen.blending.BlendingData;
+import net.minecraft.world.level.lighting.LevelLightEngine;
 
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -250,6 +256,51 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
         return this.windowMinY + this.windowSections.length - 1;
     }
 
+    /**
+     * 释放窗口加 margin 之外的段。窗口移动的收尾，只在客户端跑：服务端的段释放必须先落盘，
+     * 归 fsa 生命周期的脏段预算与提交顺序管，这里碰它会丢未写盘的数据。
+     *
+     * <p>先收集再删，避免遍历中改集合。段连同 activeSectionYs 条目、脏标记与客户端光照层
+     * 一起放掉；只删 allSections 而不删光照层等于没释放，层仍按段各留 2048 字节。
+     */
+    @Override
+    public void releaseSectionsOutsideWindow(int margin) {
+        if (!((Object) this instanceof LevelChunk lc)) {
+            return;
+        }
+        Level level = lc.getLevel();
+        if (level == null || !level.isClientSide()) {
+            return;
+        }
+        int min = this.getWindowMinY() - margin;
+        int max = this.getWindowMaxY() + margin;
+        List<Integer> stale = null;
+        for (Integer sy : this.allSections.keySet()) {
+            if (sy < min || sy > max) {
+                if (stale == null) {
+                    stale = new ArrayList<>();
+                }
+                stale.add(sy);
+            }
+        }
+        if (stale == null) {
+            return;
+        }
+        LevelLightEngine lightEngine = level.getLightEngine();
+        FarLandsLightEngine farlands = lightEngine instanceof FarLandsLightEngine fle ? fle : null;
+        ChunkPos cpos = lc.getPos();
+        for (int sy : stale) {
+            this.allSections.remove(sy);
+            this.removeActiveSection(sy);
+            this.clearSectionDirty(sy);
+            if (farlands != null) {
+                SectionPos pos = SectionPos.of(cpos, sy);
+                farlands.removeSectionData(LightLayer.BLOCK, pos);
+                farlands.removeSectionData(LightLayer.SKY, pos);
+            }
+        }
+    }
+
     @Override
     public int lastPacketMinY() {
         return this.lastPacketMinY;
@@ -421,7 +472,8 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
             endY = _maxBuild() - 1;
         }
         for (int i = startY; i <= endY; i += 16) {
-            LevelChunkSection s = this.getSection(_sectIdx(i));
+            // 读路径不物化段：缺段即全空气，与建空段读出 hasOnlyAir 同值。
+            LevelChunkSection s = this.allSections.get(i >> 4);
             if (s != null && !s.hasOnlyAir()) {
                 return false;
             }
@@ -436,7 +488,9 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
         ChunkAccess self = (ChunkAccess) (Object) this;
         BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos();
         for (int i = _minSection(); i <= _maxSection(); i++) {
-            LevelChunkSection s = this.getSection(windowSectionIndexFromY(i));
+            // 读路径不物化段：缺段即无可匹配方块。扫的是 Level 访问器的 -4..19 带，
+            // 玩家在远处时这一段与窗口无关，走 getSection 会每次调用都在那里造 24 个段。
+            LevelChunkSection s = this.allSections.get(i);
             if (s == null) {
                 continue;
             }

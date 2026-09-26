@@ -129,7 +129,7 @@ public final class SectionLifecycle {
                 }
                 WindowedChunk wc = (WindowedChunk) lc;
                 // 增量扫描，只遍历窗口并集加余量之外的 section，成本是 O(log n + 边界外数)
-                wc.forEachOutsideWindows(FarlandsConfig.fsaCleanupMargin, sy -> {
+                wc.forEachOutsideWindows(FarlandsConfig.sectionCleanupMargin, sy -> {
                     if (budget[0] <= 0) {
                         return;
                     }

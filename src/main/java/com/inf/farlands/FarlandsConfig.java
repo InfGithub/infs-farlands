@@ -68,14 +68,14 @@ public class FarlandsConfig {
                         .build();
         public static final int verticalSimulationDistance;
 
-        public static final ConfigEntry<Integer> FSA_CLEANUP_MARGIN = Config.setInt("fsaCleanupMargin")
+        public static final ConfigEntry<Integer> SECTION_CLEANUP_MARGIN = Config.setInt("sectionCleanupMargin")
                         .comment("en_us",
-                                        "Sections outside all player windows plus this margin are cleanup candidates")
-                        .comment("zh_cn", "玩家窗口并集外加上该余量的 section 为清理候选")
+                                        "Sections outside the window plus this margin are released or cleaned up")
+                        .comment("zh_cn", "窗口外加上该余量的 section 属于释放或清理范围")
                         .range(0, 64)
                         .define(8)
                         .build();
-        public static final int fsaCleanupMargin;
+        public static final int sectionCleanupMargin;
 
         public static final ConfigEntry<Integer> FSA_CACHE_LIMIT = Config.setInt("fsaCacheLimit")
                         .comment("en_us", "Maximum number of open fsa files kept in cache")
@@ -160,7 +160,7 @@ public class FarlandsConfig {
                 worldGenMaxY = WORLD_GEN_MAX_Y.get();
                 maxCapIter = MAX_CAP_ITER.get();
                 verticalSimulationDistance = VERTICAL_SIMULATION_DISTANCE.get();
-                fsaCleanupMargin = FSA_CLEANUP_MARGIN.get();
+                sectionCleanupMargin = SECTION_CLEANUP_MARGIN.get();
                 fsaCacheLimit = FSA_CACHE_LIMIT.get();
                 fsaPersistInterval = FSA_PERSIST_INTERVAL.get();
                 maxGenTasksPerTick = MAX_GEN_TASKS_PER_TICK.get();

@@ -35,7 +35,7 @@ public abstract class LevelMixin {
             return;
         }
         int sectionY = pos.getY() >> 4;
-        if (EntitySectionWindow.isOutsideAllWindows(sectionY, FarlandsConfig.fsaCleanupMargin)) {
+        if (EntitySectionWindow.isOutsideAllWindows(sectionY, FarlandsConfig.sectionCleanupMargin)) {
             cir.setReturnValue(false);
         }
     }

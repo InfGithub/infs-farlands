@@ -28,9 +28,22 @@ public interface WindowedChunk {
     /** 重建窗口视图为精确的 [sectionYMin, sectionYMax]。 */
     void buildWindow(int sectionYMin, int sectionYMax);
 
-    /** 窗口滑到以 centerSectionY 为中心，对称 ±N。 */
+    /**
+     * 窗口滑到以 centerSectionY 为中心，对称 ±N，并释放窗口加余量之外的段。
+     *
+     * <p>窗口只是视图，段容器是 allSections。移动后不释放旧段，容器就是历次窗口的并集，
+     * 随竖直移动单调增长；释放并入移动这一步，容器便恒等于窗口加余量。
+     */
     default void moveWindowTo(int centerSectionY) {
         buildWindow(centerSectionY - windowHalfBelow(), centerSectionY + windowHalfAbove());
+        releaseSectionsOutsideWindow(FarlandsConfig.sectionCleanupMargin);
+    }
+
+    /**
+     * 释放当前窗口加 margin 之外的段及其伴随状态。仅客户端实现：服务端的段释放必须先落盘，
+     * 归 fsa 生命周期的脏段预算与提交顺序管。
+     */
+    default void releaseSectionsOutsideWindow(int margin) {
     }
 
     /** 确保 sectionY 可见：窗口内不动，窗口外将窗口滑到该点。 */

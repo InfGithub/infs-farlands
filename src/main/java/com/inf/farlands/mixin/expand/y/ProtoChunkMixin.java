@@ -26,7 +26,8 @@ public abstract class ProtoChunkMixin {
         if (!WorldBounds.inBuildHeight(y)) {
             return Blocks.VOID_AIR.defaultBlockState();
         }
-        LevelChunkSection s = ca.getSection(((WindowedChunk) ca).levelHeightAccessor().getSectionIndex(y));
+        // 读路径不物化段：缺段即全空气。走 getSection 会把任意 Y 的读取变成段的来源。
+        LevelChunkSection s = ((WindowedChunk) ca).windowedAllSections().get(y >> 4);
         return (s == null || s.hasOnlyAir())
                 ? Blocks.AIR.defaultBlockState()
                 : s.getBlockState(pos.getX() & 15, y & 15, pos.getZ() & 15);
@@ -39,7 +40,8 @@ public abstract class ProtoChunkMixin {
         if (!WorldBounds.inBuildHeight(y)) {
             return Fluids.EMPTY.defaultFluidState();
         }
-        LevelChunkSection s = ca.getSection(((WindowedChunk) ca).levelHeightAccessor().getSectionIndex(y));
+        // 与 getBlockState 同规：读不建段，缺段即无流体。
+        LevelChunkSection s = ((WindowedChunk) ca).windowedAllSections().get(y >> 4);
         return (s == null || s.hasOnlyAir())
                 ? Fluids.EMPTY.defaultFluidState()
                 : s.getFluidState(pos.getX() & 15, y & 15, pos.getZ() & 15);

@@ -57,7 +57,9 @@ public abstract class LevelChunkMixin {
         int x = pos.getX(), y = pos.getY(), z = pos.getZ();
         try {
             ChunkAccess ca = (ChunkAccess) (Object) this;
-            LevelChunkSection s = ca.getSection(((LevelHeightAccessor) (Object) this).getSectionIndex(y));
+            // 读路径不物化段：缺段即全空气。走 getSection 会把任意 Y 的读取变成段的来源，
+            // heightmap 的 2048 格下扫与光探针的 512 格下扫因此各能造出上百个空占位段。
+            LevelChunkSection s = ((WindowedChunk) ca).windowedAllSections().get(y >> 4);
             if (s != null && !s.hasOnlyAir()) {
                 return s.getBlockState(x & 15, y & 15, z & 15);
             }
@@ -74,7 +76,8 @@ public abstract class LevelChunkMixin {
     public FluidState getFluidState(int x, int y, int z) {
         try {
             ChunkAccess ca = (ChunkAccess) (Object) this;
-            LevelChunkSection s = ca.getSection(((LevelHeightAccessor) (Object) this).getSectionIndex(y));
+            // 与 getBlockState 同规：读不建段，缺段即无流体。
+            LevelChunkSection s = ((WindowedChunk) ca).windowedAllSections().get(y >> 4);
             if (s != null && !s.hasOnlyAir()) {
                 return s.getFluidState(x & 15, y & 15, z & 15);
             }
