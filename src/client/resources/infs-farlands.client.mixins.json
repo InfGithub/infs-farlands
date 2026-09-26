@@ -29,7 +29,7 @@
     "fix.xz.WeatherEffectRendererMixin",
     "fix.xyz.SectionRenderDispatcher$RenderSectionMixin",
     "integratedserver.IntegratedServerMixin",
-    "network.ClientboundCustomPayloadPacketMixin",
+    "network.ClientPayloadDispatchMixin",
     "command.ClientPacketListenerMixin",
     "light.ClientChunkCacheMixin",
     "render.ViewAreaMixin",

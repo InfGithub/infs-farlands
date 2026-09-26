@@ -16,6 +16,16 @@ public class ServerPacketHandlers {
         HANDLERS.put(type, handler);
     }
 
+    /**
+     * 该 payload 类型是否已登记处理器。分发侧据此决定要不要把包重投到服务端线程：
+     * 未登记的类型不跳转，走 vanilla 原路，行为与不装本模组时一致。
+     *
+     * <p>只读查表。登记全部发生在 mod 初始化期、任何连接建立之前，之后不再写入。
+     */
+    public static boolean isRegistered(CustomPacketPayload payload) {
+        return HANDLERS.containsKey(payload.type());
+    }
+
     @SuppressWarnings("unchecked")
     public static boolean handle(CustomPacketPayload payload, ServerGamePacketListenerImpl listener) {
         BiConsumer<CustomPacketPayload, ServerGamePacketListenerImpl> handler = (BiConsumer<CustomPacketPayload, ServerGamePacketListenerImpl>) HANDLERS
