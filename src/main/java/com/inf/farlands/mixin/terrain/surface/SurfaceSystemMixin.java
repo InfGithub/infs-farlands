@@ -3,18 +3,20 @@ package com.inf.farlands.mixin.terrain.surface;
 import java.lang.reflect.Constructor;
 import java.util.function.Function;
 
-import com.inf.farlands.FarlandsConfig;
+import com.inf.farlands.util.window.EntitySectionWindow;
 import com.inf.farlands.util.window.WindowedChunk;
 import com.inf.farlands.util.world.WorldBounds;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.BlockColumn;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -22,44 +24,46 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.NoiseChunk;
+import net.minecraft.world.level.levelgen.PositionalRandomFactory;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.SurfaceRules;
 import net.minecraft.world.level.levelgen.SurfaceSystem;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
+import net.minecraft.world.level.levelgen.synth.NormalNoise;
 
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
 /**
- * 地表阶段的全高适配：列扫描下界从维度界改为「地表 + 1 − maxCapIter」，并丢弃 surface rule
- * 产出的基岩。
+ * 地表阶段的全高适配：列扫描按玩家窗口并集的每一段来，并丢弃 surface rule 产出的基岩。
  *
  * <p>
- * vanilla 的 {@code buildSurface} 列扫描下界取 {@code protoChunk.getMinY()}，而
- * {@code ChunkAccess.getMinY()} 返回的是 {@code levelHeightAccessor.getMinY()}——即维度下界
- * （-64）。本 port 的地形不按维度高度生成：{@code AbstractTerrainFiller} 按窗口段构造
- * {@code NoiseSettings}（{@code new NoiseSettings(minSectionY * 16, …)}），且
+ * vanilla 的 {@code buildSurface} 列扫描下界取 {@code protoChunk.getMinY()}，即维度下界 -64。
+ * 本 port 的地形不按维度高度生成：{@code AbstractTerrainFiller} 按窗口段构造
+ * {@code NoiseSettings}，即 {@code new NoiseSettings(minSectionY * 16, …)} 这种形状，且
  * {@code DimensionType} 的 Y 界已放宽到 ±MAX_BLOCK，所以密度函数在 -64 以下继续产出、
  * fill 也照填。于是维度下界 -64 既不是地形下界，作为扫描下界就漏掉整片地形。
  *
  * <p>
- * 为什么是 {@code @Overwrite} 而不是 {@code @Redirect}：下界
- * {@code endY = max(可玩高度下界, 地表 + 1 − maxCapIter)} 依赖每列的地表高度（方法内局部量
- * {@code height}），而 {@code @Redirect} 的 handler 只能拿到被调用对象，算不出这个值。
- * 26.1.2 的 class 文件也没有 LocalVariableTable（{@code javap -l} 零条），按名捕获局部量不可行。
+ * 为什么是 {@code @Overwrite} 而不是 {@code @Redirect}：扫描区间依赖段的位置与方法内局部量，
+ * 而 {@code @Redirect} 的 handler 只能拿到被调用对象，算不出这些值。26.1.2 的 class 文件也没有
+ * LocalVariableTable，{@code javap -l} 零条，按名捕获局部量不可行。
  *
  * <p>
- * 下界的下限取 {@link WorldBounds#MIN_PLAYABLE_BLOCK} 而不是 {@code chunk.getMinY()}：既然
- * -64 以下有地形，那里也需要地表规则。上界仍是"地表往下 maxCapIter 格"，所以循环次数恒
- * ≤ maxCapIter——两种取值下差值都不会超过它（取地表侧时差为 512，取可玩下界侧时差更小），
- * 减法先转 long 防地表接近 int 上限时溢出。
+ * 扫描区间取 {@link EntitySectionWindow#ranges()} 的每一段，不取 {@code chunk.getMinY()}，也不取
+ * 本 chunk 的段容器 {@code allSections}。容器是历次窗口的并集，客户端由
+ * {@code releaseSectionsOutsideWindow} 收，服务端的清理又会跳过在途 chunk，所以竖直跳变之后
+ * 旧窗口带仍留在容器里，按它取跨度就是 {@code note.md} 第 37 条那条教训。段两端先夹到
+ * {@link WorldBounds#MIN_SECTION} 与 {@link WorldBounds#MAX_SECTION} 再左移四位，因为
+ * {@link EntitySectionWindow#update} 不夹取。
  *
  * <p>
- * maxCapIter 出自 {@code findLowestSourceBelow} 的 cap 先例：那是一次 2.14B 高度上的 21 亿次
- * 循环，结果是 8GB 堆耗尽、GC 风暴导致 jstack/jmap attach 全部超时、只能靠二分定位。此处与
- * 它同构，故沿用同一个上界。
+ * 同一对段端也是 {@code frozenOceanExtension} 复制体的循环两端。原版那条循环的下界是海平面
+ * 量级的读数，起点是本 port 写在窗口 Y 上的高度图读数，两者相差可达十亿格，genPool 的线程就在
+ * 里面空转。钳到段之后，循环长度与那些读数无关，恒不超过段高。
  *
  * <p>
  * <b>-64 以下被基岩填充是预期效果</b>：数据包 {@code overworld.json} 的 surface rule 第一条是
@@ -80,8 +84,9 @@ import org.spongepowered.asm.mixin.Unique;
  * <p>
  * 与上一版本（{@code worldOverflowFix/SurfaceSystemMixin}）逐条对照后保留/调整的约束：
  * <ul>
- * <li>列扫描下界：<b>下界下限改为可玩高度下界</b>（上一版本用 {@code chunk.getMinBuildHeight()}，
- * 即维度下界，会漏掉 -64 以下的地形）；{@code maxCapIter} 上界与 long 减原样保留。</li>
+ * <li>列扫描区间：<b>逐段取玩家窗口并集</b>。上一版本用 {@code chunk.getMinBuildHeight()}，
+ * 即维度下界，会漏掉 -64 以下的地形；本文件此前先用「地表往下 maxCapIter 格」近似、后改用段容器
+ * 的键跨度，两者都不是窗口。按段取、并且与冻洋分支同源之后才闭合。</li>
  * <li>基岩填充：-64 以下被刷成基岩是预期效果（见上），故不过滤返回值。上一版本当前的
  * {@code SurfaceSystemMixin} 里也没有过滤——它把 {@code endY} 压在维度下界以上，从源头
  * 避开了那片填充，但也因此漏掉了 -64 以下的地形。</li>
@@ -115,9 +120,89 @@ public abstract class SurfaceSystemMixin {
     private void erodedBadlandsExtension(BlockColumn blockColumn, int x, int z, int height, LevelHeightAccessor level) {
     }
 
+    /** 冻洋冰山几何用到的私有成员，供下面的复制体读取。 */
     @Shadow
-    private void frozenOceanExtension(int minSurfaceLevel, Biome biome, BlockColumn blockColumn,
-            BlockPos.MutableBlockPos topWaterPos, int x, int z, int height) {
+    @Final
+    private int seaLevel;
+
+    @Shadow
+    @Final
+    private NormalNoise icebergSurfaceNoise;
+
+    @Shadow
+    @Final
+    private NormalNoise icebergPillarNoise;
+
+    @Shadow
+    @Final
+    private NormalNoise icebergPillarRoofNoise;
+
+    @Shadow
+    @Final
+    private PositionalRandomFactory noiseRandom;
+
+    /**
+     * frozenOceanExtension 的复制体，逐字取自 26.1.2 原版，只有循环两端不同。
+     *
+     * <p>
+     * 原版循环是 {@code for (y = max(height, (int)extensionTop + 1); y >= minSurfaceLevel; y--)}。
+     * 起点由方法体内的 {@code extensionTop} 算出，调用点钳不到它；下界是
+     * {@code context.getMinSurfaceLevel()}，取值在表面高度量级。而本 port 的 {@code height} 是写在
+     * 窗口 Y 上的高度图读数，两者相差可达十亿格。jstack 上七条 {@code farlands-gen} 全停在循环体内的
+     * {@code column.getBlock}，就是这条循环。这里把两端都钳进当前这一段
+     * {@code [segBot, segTop]}，循环长度因此与 {@code extensionTop}、{@code minSurfaceLevel}、
+     * {@code height} 的取值无关。
+     *
+     * <p>
+     * 写入门 {@code scanRange} 与这一段同源，所以钳制不会丢掉任何落在窗口内的写入。
+     */
+    @Unique
+    private void farlands$frozenOceanExtension(int minSurfaceLevel, Biome biome, BlockColumn column,
+            BlockPos.MutableBlockPos blockPos, int blockX, int blockZ, int height, int segBot, int segTop) {
+        double iceberg = Math.min(
+                Math.abs(this.icebergSurfaceNoise.getValue(blockX, 0.0, blockZ) * 8.25),
+                this.icebergPillarNoise.getValue(blockX * 1.28, 0.0, blockZ * 1.28) * 15.0);
+        if (!(iceberg <= 1.8)) {
+            double icebergRoof = Math.abs(
+                    this.icebergPillarRoofNoise.getValue(blockX * 1.17, 0.0, blockZ * 1.17) * 1.5);
+            double top = Math.min(iceberg * iceberg * 1.2, Math.ceil(icebergRoof * 40.0) + 14.0);
+            if (biome.shouldMeltFrozenOceanIcebergSlightly(blockPos.set(blockX, this.seaLevel, blockZ),
+                    this.seaLevel)) {
+                top -= 2.0;
+            }
+
+            double extensionBottom;
+            if (top > 2.0) {
+                extensionBottom = this.seaLevel - top - 7.0;
+                top += this.seaLevel;
+            } else {
+                top = 0.0;
+                extensionBottom = 0.0;
+            }
+
+            double extensionTop = top;
+            RandomSource random = this.noiseRandom.at(blockX, 0, blockZ);
+            int maxSnowDepth = 2 + random.nextInt(4);
+            int minSnowHeight = this.seaLevel + 18 + random.nextInt(10);
+            int snowDepth = 0;
+
+            // 与原版唯一的差别：起点与终点都钳进这一段。
+            int from = Math.min(Math.max(height, (int) extensionTop + 1), segTop);
+            int to = Math.max(minSurfaceLevel, segBot);
+            for (int y = from; y >= to; y--) {
+                if (column.getBlock(y).isAir() && y < (int) extensionTop && random.nextDouble() > 0.01
+                        || column.getBlock(y).is(Blocks.WATER) && y > (int) extensionBottom
+                                && y < this.seaLevel && extensionBottom != 0.0
+                                && random.nextDouble() > 0.15) {
+                    if (snowDepth <= maxSnowDepth && y > minSnowHeight) {
+                        column.setBlock(y, Blocks.SNOW_BLOCK.defaultBlockState());
+                        snowDepth++;
+                    } else {
+                        column.setBlock(y, Blocks.PACKED_ICE.defaultBlockState());
+                    }
+                }
+            }
+        }
     }
 
     // ---- Context：类型不可引用，构造器 protected 且 @Invoker 不支持 <init> ----
@@ -150,14 +235,14 @@ public abstract class SurfaceSystemMixin {
     }
 
     /**
-     * 复制 vanilla buildSurface（26.1.2 L66-163），5 处改动：
+     * 复制 vanilla buildSurface，26.1.2 L66-163，5 处改动：
      * <ol>
-     * <li>列扫描下界 endY：max(可玩高度下界, 地表+1 − maxCapIter)，long 减防溢出。</li>
-     * <li>丢弃 surface rule 返回的基岩——bedrock_floor 的 vertical_gradient 在 getMinGenY()
+     * <li>扫描区间逐段取玩家窗口并集：段的两端左移四位，移位前先夹 WorldBounds 的段界。</li>
+     * <li>丢弃 surface rule 返回的基岩。bedrock_floor 的 vertical_gradient 在 getMinGenY()
      * 及以下全 true，不丢会盖住 -64 以下的地形。</li>
-     * <li>BlockColumn.setBlock 范围：scanRange = [endY, height]（每列更新，匿名类数组捕获）。</li>
+     * <li>BlockColumn.setBlock 范围：scanRange = 当前这一段，每列每段重建，匿名类数组捕获。</li>
      * <li>写入改为无锁直写 section；x/z 取列坐标 colCoord，只有 y 用入参。</li>
-     * <li>Context 与 SurfaceRule 走反射/invoker（类型不可引用）。</li>
+     * <li>Context 与 SurfaceRule 走反射/invoker，类型不可引用；冻洋分支改调本类复制体。</li>
      * </ol>
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
@@ -176,7 +261,7 @@ public abstract class SurfaceSystemMixin {
         ChunkPos chunkPos = protoChunk.getPos();
         int minBlockX = chunkPos.getMinBlockX();
         int minBlockZ = chunkPos.getMinBlockZ();
-        // 扫描区间 [endY, height]，每列不同——匿名类不能捕获循环变量，用数组传递
+        // 写入范围 scanRange，每列重建：匿名类不能捕获循环变量，用数组传递
         int[] scanRange = new int[2];
         // 写入用的列坐标：x/z 用列坐标，只有 y 用 setBlock 的入参
         int[] colCoord = new int[2];
@@ -214,6 +299,27 @@ public abstract class SurfaceSystemMixin {
         Object rule = ((Function) ruleSource).apply(context);
         BlockPos.MutableBlockPos blockPos = new BlockPos.MutableBlockPos();
 
+        // 扫描区间取玩家窗口并集的每一段，不取本 chunk 的段容器。容器是历次窗口的并集，跨度随
+        // 会话历史增长，竖直跳变之后旧窗口带还留在里面，按它取跨度就是 note.md 第 37 条那条教训：
+        // 要在并集上取数，先问边界由谁定义。段两端先夹到可表示段范围再移位，因为
+        // EntitySectionWindow.update 不夹取，玩家在高位时 c + verticalSimulationDistance 会越过
+        // MAX_SECTION。
+        int[] ranges = EntitySectionWindow.ranges();
+        if (ranges.length == 0) {
+            return;
+        }
+        int segCount = ranges.length / 2;
+        int[] segBot = new int[segCount];
+        int[] segTop = new int[segCount];
+        for (int i = 0; i < segCount; i++) {
+            int loSy = Math.max(Math.min(ranges[i * 2], WorldBounds.MAX_SECTION),
+                    WorldBounds.MIN_SECTION);
+            int hiSy = Math.min(Math.max(ranges[i * 2 + 1], WorldBounds.MIN_SECTION),
+                    WorldBounds.MAX_SECTION);
+            segBot[i] = loSy << 4;
+            segTop[i] = (hiSy << 4) + 15;
+        }
+
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 int blockX = minBlockX + x;
@@ -229,57 +335,58 @@ public abstract class SurfaceSystemMixin {
                 }
 
                 int height = protoChunk.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) + 1;
-                ((SurfaceRules$ContextInvoker) context).farlands$updateXZ(blockX, blockZ);
-                int stoneAboveDepth = 0;
-                int waterHeight = Integer.MIN_VALUE;
-                int nextCeilingStoneY = Integer.MAX_VALUE;
-                // 列扫描下界：下限取可玩高度下界（不是维度下界 chunk.getMinY()——本 port 的地形
-                // 按窗口段生成，-64 以下也有地形），上界为"地表往下 maxCapIter 格"以保证有界。
-                int endY = (int) Math.max((long) WorldBounds.MIN_PLAYABLE_BLOCK,
-                        (long) height - (long) FarlandsConfig.maxCapIter);
-                scanRange[0] = endY;
-                scanRange[1] = height;
+                for (int i = 0; i < segCount; i++) {
+                    // 每段一套列状态：段与段之间没有数据，状态各自从零起，与 GenTask 逐段填充同语义。
+                    int endY = segBot[i];
+                    scanRange[0] = segBot[i];
+                    scanRange[1] = segTop[i];
+                    ((SurfaceRules$ContextInvoker) context).farlands$updateXZ(blockX, blockZ);
+                    int stoneAboveDepth = 0;
+                    int waterHeight = Integer.MIN_VALUE;
+                    int nextCeilingStoneY = Integer.MAX_VALUE;
 
-                for (int y = height; y >= endY; y--) {
-                    BlockState old = column.getBlock(y);
-                    if (old.isAir()) {
-                        stoneAboveDepth = 0;
-                        waterHeight = Integer.MIN_VALUE;
-                    } else if (!old.getFluidState().isEmpty()) {
-                        if (waterHeight == Integer.MIN_VALUE) {
-                            waterHeight = y + 1;
-                        }
-                    } else {
-                        if (nextCeilingStoneY >= y) {
-                            nextCeilingStoneY = DimensionType.WAY_BELOW_MIN_Y;
+                    for (int y = Math.min(height, segTop[i]); y >= endY; y--) {
+                        BlockState old = column.getBlock(y);
+                        if (old.isAir()) {
+                            stoneAboveDepth = 0;
+                            waterHeight = Integer.MIN_VALUE;
+                        } else if (!old.getFluidState().isEmpty()) {
+                            if (waterHeight == Integer.MIN_VALUE) {
+                                waterHeight = y + 1;
+                            }
+                        } else {
+                            if (nextCeilingStoneY >= y) {
+                                nextCeilingStoneY = DimensionType.WAY_BELOW_MIN_Y;
 
-                            for (int lookaheadY = y - 1; lookaheadY >= endY - 1; lookaheadY--) {
-                                BlockState nextState = column.getBlock(lookaheadY);
-                                if (!this.isStone(nextState)) {
-                                    nextCeilingStoneY = lookaheadY + 1;
-                                    break;
+                                for (int lookaheadY = y - 1; lookaheadY >= endY - 1; lookaheadY--) {
+                                    BlockState nextState = column.getBlock(lookaheadY);
+                                    if (!this.isStone(nextState)) {
+                                        nextCeilingStoneY = lookaheadY + 1;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            stoneAboveDepth++;
+                            int stoneBelowDepth = y - nextCeilingStoneY + 1;
+                            ((SurfaceRules$ContextInvoker) context).farlands$updateY(
+                                    stoneAboveDepth, stoneBelowDepth, waterHeight, blockX, y, blockZ);
+                            if (old == this.defaultBlock) {
+                                BlockState state = ((SurfaceRules$SurfaceRuleInvoker) rule)
+                                        .farlands$tryApply(blockX, y, blockZ);
+                                if (state != null) {
+                                    column.setBlock(y, state);
                                 }
                             }
                         }
-
-                        stoneAboveDepth++;
-                        int stoneBelowDepth = y - nextCeilingStoneY + 1;
-                        ((SurfaceRules$ContextInvoker) context).farlands$updateY(
-                                stoneAboveDepth, stoneBelowDepth, waterHeight, blockX, y, blockZ);
-                        if (old == this.defaultBlock) {
-                            BlockState state = ((SurfaceRules$SurfaceRuleInvoker) rule)
-                                    .farlands$tryApply(blockX, y, blockZ);
-                            if (state != null) {
-                                column.setBlock(y, state);
-                            }
-                        }
                     }
-                }
 
-                if (surfaceBiome.is(Biomes.FROZEN_OCEAN) || surfaceBiome.is(Biomes.DEEP_FROZEN_OCEAN)) {
-                    this.frozenOceanExtension(
-                            ((SurfaceRules$ContextInvoker) context).farlands$getMinSurfaceLevel(),
-                            surfaceBiome.value(), column, blockPos, blockX, blockZ, startingHeight);
+                    if (surfaceBiome.is(Biomes.FROZEN_OCEAN) || surfaceBiome.is(Biomes.DEEP_FROZEN_OCEAN)) {
+                        this.farlands$frozenOceanExtension(
+                                ((SurfaceRules$ContextInvoker) context).farlands$getMinSurfaceLevel(),
+                                surfaceBiome.value(), column, blockPos, blockX, blockZ, startingHeight,
+                                segBot[i], segTop[i]);
+                    }
                 }
             }
         }
