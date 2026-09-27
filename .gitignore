@@ -47,3 +47,4 @@ repos
 *.log
 handoff.md
 workspace
+/lib/
