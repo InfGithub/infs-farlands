@@ -51,17 +51,37 @@ public class ChunkDataPacketRegister {
                     }
                     int minY = payload.windowMinY();
                     LevelLightEngine le = level.getChunkSource().getLightEngine();
+                    // 标脏按 chunk 的段区间合并一次。逐段调 setSectionDirtyWithNeighbors 会把同一个
+                    // 3x3x3 盒重复标几十遍，详见 flushSectionDirty。
+                    int curCx = Integer.MIN_VALUE;
+                    int curCz = Integer.MIN_VALUE;
+                    int dirtyMinSy = Integer.MAX_VALUE;
+                    int dirtyMaxSy = Integer.MIN_VALUE;
                     for (ChunkDataPacket.SectionEntry e : payload.sections()) {
                         ChunkAccess ca = level.getChunkSource().getChunk(
                                 e.chunkX(), e.chunkZ(), ChunkStatus.FULL, false);
                         if (ca instanceof LevelChunk lc) {
                             applySectionData(level, le, lc, e, minY);
+                            if (e.chunkX() != curCx || e.chunkZ() != curCz) {
+                                flushSectionDirty(level, curCx, curCz, dirtyMinSy, dirtyMaxSy);
+                                curCx = e.chunkX();
+                                curCz = e.chunkZ();
+                                dirtyMinSy = Integer.MAX_VALUE;
+                                dirtyMaxSy = Integer.MIN_VALUE;
+                            }
+                            if (e.sectionY() < dirtyMinSy) {
+                                dirtyMinSy = e.sectionY();
+                            }
+                            if (e.sectionY() > dirtyMaxSy) {
+                                dirtyMaxSy = e.sectionY();
+                            }
                         } else {
                             // chunk 未加载 → 缓存，chunk 加载后由 applyPendingSectionData 补应用
                             Common.cachePendingSectionData(level.dimension(),
                                     e.chunkX(), e.chunkZ(), minY, e);
                         }
                     }
+                    flushSectionDirty(level, curCx, curCz, dirtyMinSy, dirtyMaxSy);
                 });
     }
 
@@ -82,12 +102,35 @@ public class ChunkDataPacketRegister {
             return; // 仍未加载；补应用挂在 chunk 加载之后，理论不触发
         }
         LevelLightEngine le = level.getChunkSource().getLightEngine();
+        int dirtyMinSy = Integer.MAX_VALUE;
+        int dirtyMaxSy = Integer.MIN_VALUE;
         for (ChunkDataPacket.SectionEntry e : pending.entries) {
             applySectionData(level, le, lc, e, pending.minY);
+            if (e.sectionY() < dirtyMinSy) {
+                dirtyMinSy = e.sectionY();
+            }
+            if (e.sectionY() > dirtyMaxSy) {
+                dirtyMaxSy = e.sectionY();
+            }
         }
+        flushSectionDirty(level, cx, cz, dirtyMinSy, dirtyMaxSy);
     }
 
-    /** 应用单个 section 条目：数据 + 光照 + 持有边界 + 标脏。 */
+    /**
+     * 按 chunk 的段区间标脏一次。
+     *
+     * <p>{@code setSectionDirtyWithNeighbors} 一次连带 3x3x3 共 27 个段（{@code LevelRenderer:1343-1345}），
+     * 逐段调用会把同一个盒子重复标几十遍；而同一 chunk 各段的盒子并集正好是这段连续区间，所以区间调一次
+     * 即可，盒内每个目标恰好一次。minSy 大于 maxSy 表示本批没有可标的段（含 chunk 切换时的空批）。
+     */
+    private static void flushSectionDirty(ClientLevel level, int cx, int cz, int minSy, int maxSy) {
+        if (minSy > maxSy) {
+            return;
+        }
+        level.setSectionRangeDirty(cx - 1, minSy - 1, cz - 1, cx + 1, maxSy + 1, cz + 1);
+    }
+
+    /** 应用单个 section 条目：数据、光照与持有边界。标脏由调用方按 chunk 区间合并后统一做。 */
     private static void applySectionData(ClientLevel level, LevelLightEngine le, LevelChunk lc,
             ChunkDataPacket.SectionEntry e, int minY) {
         WindowedChunk wc = (WindowedChunk) lc;
@@ -121,6 +164,5 @@ public class ChunkDataPacketRegister {
         if (sl != null) {
             le.queueSectionData(LightLayer.SKY, SectionPos.of(lc.getPos(), e.sectionY()), sl);
         }
-        level.setSectionDirtyWithNeighbors(e.chunkX(), e.sectionY(), e.chunkZ());
     }
 }
