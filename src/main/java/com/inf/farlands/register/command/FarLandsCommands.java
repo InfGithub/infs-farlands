@@ -73,7 +73,9 @@ public class FarLandsCommands {
                                                 .executes(ctx -> dump(ctx.getSource()))))
                                 .then(Commands.literal("biome")
                                         .then(Commands.literal("dump")
-                                                .executes(ctx -> dumpBiomeCmd(ctx.getSource()))))
+                                                .executes(ctx -> dumpBiomeCmd(ctx.getSource())))
+                                        .then(Commands.literal("compute")
+                                                .executes(ctx -> computeBiomeCmd(ctx.getSource()))))
                                 .then(Commands.literal("block")
                                         .then(Commands.literal("dump")
                                                 .executes(ctx -> dumpBlocksCmd(ctx.getSource()))))
@@ -295,6 +297,70 @@ public class FarLandsCommands {
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("BIODUMP err", e);
         }
+    }
+
+    /**
+     * 用当前维度的 BiomeSystem 现算一遍该 section 的 biome 网格。
+     *
+     * <p>必须走 {@code LevelSystems.biomeSystem()}，不能用原版 sampler 代替：群系来源是每维度选定的
+     * 系统，Oct 之类的系统用自己的 seed 与缩放算气候，拿原版 sampler 对照只会得出错误结论。系统类名
+     * 一并打进日志，便于确认到底是谁算的。
+     *
+     * <p>{@code BiomeSystem.fillBiomes} 只提供「写进某个 chunk 的 section」这一种入口，所以这里临时
+     * 换上一个空白 section 跑一次，finally 里把原对象换回并按窗口映射同步数组。命令跑在服务端主线程，
+     * 与发包同线程，这段窗口内没有并发读者。
+     */
+    private static int computeBiomeCmd(CommandSourceStack source) {
+        try {
+            ServerPlayer player = source.getPlayerOrException();
+            ServerLevel level = (ServerLevel) player.level();
+            SectionPos sec = SectionPos.of(player.blockPosition());
+            LevelChunk lc = SectionLifecycle.latestChunk(level, sec.x(), sec.z());
+            if (lc == null) {
+                InfsFarlands.LOGGER.info("BIOCALC secY={} chunk null", sec.y());
+                return 0;
+            }
+            WindowedChunk wc = (WindowedChunk) lc;
+            LevelChunkSection stored = wc.windowedAllSections().get(sec.y());
+            if (stored == null) {
+                InfsFarlands.LOGGER.info("BIOCALC secY={} section null", sec.y());
+                return 0;
+            }
+            var system = ((com.inf.farlands.terrain.LevelSystems) level).biomeSystem();
+            int idx = lc.getSectionIndexFromSectionY(sec.y());
+            InfsFarlands.LOGGER.info("BIOCALC system={} pos={},{},{} sec={},{},{}",
+                    system.getClass().getSimpleName(), player.blockPosition().getX(),
+                    player.blockPosition().getY(), player.blockPosition().getZ(),
+                    sec.x(), sec.y(), sec.z());
+            LevelChunkSection computed = new LevelChunkSection(wc.containerFactory());
+            try {
+                wc.windowedAllSections().put(sec.y(), computed);
+                lc.getSection(idx); // 数组同步：get 内部执行 arr[idx]=s
+                system.fillBiomes(level, lc, sec.y(), sec.y());
+            } finally {
+                wc.windowedAllSections().put(sec.y(), stored);
+                lc.getSection(idx);
+            }
+            for (int y = 0; y < 4; y++) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("BIOCALC secY=").append(sec.y()).append(" y=").append(y);
+                for (int z = 0; z < 4; z++) {
+                    sb.append("\nBIOCALC   z=").append(z).append(' ');
+                    for (int x = 0; x < 4; x++) {
+                        sb.append(biomeName(computed, x, y, z)).append(' ');
+                    }
+                }
+                InfsFarlands.LOGGER.info("{}", sb);
+            }
+            source.sendSuccess(() -> Component.literal("BIOCALC written to server log"), false);
+        } catch (Exception e) {
+            InfsFarlands.LOGGER.error("BIOCALC err", e);
+        }
+        return 1;
+    }
+
+    private static String biomeName(LevelChunkSection s, int x, int y, int z) {
+        return s.getBiomes().get(x, y, z).unwrapKey().map(k -> k.identifier().getPath()).orElse("?");
     }
 
     public static void dumpLayer(LevelLightEngine le, LightLayer layer, SectionPos sec) {

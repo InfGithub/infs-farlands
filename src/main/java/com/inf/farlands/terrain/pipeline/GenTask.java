@@ -3,6 +3,7 @@ package com.inf.farlands.terrain.pipeline;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
+import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
 import com.inf.farlands.terrain.carverFiller.CarverFiller;
 import com.inf.farlands.terrain.surfaceFiller.SurfaceFiller;
 import com.inf.farlands.util.network.ChunkDataSender;
@@ -83,6 +84,17 @@ public final class GenTask {
             }
             List<int[]> segments = collectSegments();
             for (int[] seg : segments) {
+                // 先补 biome 再推 TERRAIN。本方法是全流程唯一把 stage 推到 TERRAIN 的地方，放这里就与
+                // 入队顺序无关；若让生成先跑，stage 越过 BIOMES，fillSectionBiomes 的 stage < BIOMES 门
+                // 会永假，该段 biome 永久停在新段默认值 plains（PalettedContainerFactory 的
+                // defaultBiome），地表规则随之按 plains 跑，密度依赖 biome 的系统连形状一起错。
+                //
+                // 不需要 BIOME_FILLING 括号：本任务全程持有 CHUNK_IN_FLIGHT，发送侧一律看到
+                // isChunkBusy 为真并返回空表，生成期间不会读这一段。那个标志是给短路完成后跑在
+                // backgroundExecutor 上的 biome 阶段用的，见 WindowSendState.sendableSections。
+                for (int sy = seg[0]; sy <= seg[1]; sy++) {
+                    BiomeFiller.fillSectionBiomes(serverLevel, chunk, sy);
+                }
                 try {
                     GenQueue.filler(serverLevel).fill(serverLevel, chunk, seg[0], seg[1]);
                 } catch (Exception e) {

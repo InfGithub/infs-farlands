@@ -35,8 +35,22 @@ public final class BiomeFiller {
         }
     }
 
+    /**
+     * 单段填充，对同一个 chunk 串行，并在锁内判 stage。
+     *
+     * <p>填充有三个来源会并发：短路完成那条跑在 {@code Util.backgroundExecutor}，窗口滑入那条在
+     * 主线程，GenTask 里补种那条在 genPool。而
+     * {@code LevelChunkSection.fillBiomesFromNoise} 是 {@code recreate()} 加 64 次
+     * {@code getAndSetUnchecked} 再整体换引用，两个线程同时跑会得到一份混合网格（一半 one 次求值、
+     * 一半另一次）；stage 的读改写同样需要原子。锁加在 chunk 上，一次填充一次，成本可忽略。
+     */
     private static void seedSection(ServerLevel level, LevelChunk chunk, BiomeSystem sys, int sectionY) {
-        sys.fillBiomes(level, chunk, sectionY, sectionY);
-        SectionStage.setStage(chunk, sectionY, SectionStage.BIOMES);
+        synchronized (chunk) {
+            if (SectionStage.getStage(chunk, sectionY) >= SectionStage.BIOMES) {
+                return;
+            }
+            sys.fillBiomes(level, chunk, sectionY, sectionY);
+            SectionStage.setStage(chunk, sectionY, SectionStage.BIOMES);
+        }
     }
 }
