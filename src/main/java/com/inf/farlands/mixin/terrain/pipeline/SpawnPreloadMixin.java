@@ -34,23 +34,28 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * 出生区预加载：主循环开始之前，把出生点附近的段推到 LIGHTED。
  *
- * <p>它是入场前的硬前提。PlayerSpawnFinder 在玩家进名单之前就用两参 getChunk 取整块并读高度图，
+ * <p>
+ * 它是入场前的硬前提。PlayerSpawnFinder 在玩家进名单之前就用两参 getChunk 取整块并读高度图，
  * 那条路是阻塞 FULL，而此刻没有玩家、没有窗口、就绪按设计不可达：只有这里先把出生区做成就绪，那次读
  * 才不会永久停在 managedBlock 上。所以循环没有墙钟上限，退出条件只剩「范围内全部点亮」；不收敛时只报
  * 一次停滞明细，不早退，因为早退的结局同样是把玩家关在加载界面外，只是挂得更晚、更没有诊断。
  *
- * <p>预加载期间窗口并集为空，而生成与读回都按窗口驱动，所以这里走显式段范围：GenQueue.preload 绕过
+ * <p>
+ * 预加载期间窗口并集为空，而生成与读回都按窗口驱动，所以这里走显式段范围：GenQueue.preload 绕过
  * tracking view 过滤，SectionLifecycle.preloadRange 用同一范围发起读回，并清掉窗口等待标记，否则
  * ChunkReadiness.isDataReady 里那一条恒假，FULL 补不出来，入场后连方块都放不下去。
  *
- * <p>范围内每段先种 biome 再入队：窗口并集为空时 BiomeFiller.fillChunkBiomes 什么都不会种，而
+ * <p>
+ * 范围内每段先种 biome 再入队：窗口并集为空时 BiomeFiller.fillChunkBiomes 什么都不会种，而
  * fillSectionBiomes 有 stage 小于 BIOMES 的门，等生成把 stage 推上去之后再补就跳过了，出生区会按
  * 默认群系成型。
  *
- * <p>驱动：prepareLevels 在主循环之前，ticket 到 chunk 的调度要手动 cache.tick，短路链的
+ * <p>
+ * 驱动：prepareLevels 在主循环之前，ticket 到 chunk 的调度要手动 cache.tick，短路链的
  * thenApplyAsync 要 waitUntilNextTick 的 runAllTasks。每轮让出一次 tick，防忙循环饿死同 JVM 的渲染。
  *
- * <p>票留到该维度第一个玩家入场才由 SpawnPreloadJoinMixin 移除。
+ * <p>
+ * 票留到该维度第一个玩家入场才由 SpawnPreloadJoinMixin 移除。
  */
 @Mixin(MinecraftServer.class)
 public abstract class SpawnPreloadMixin {
@@ -84,6 +89,7 @@ public abstract class SpawnPreloadMixin {
     @Shadow
     protected abstract void waitUntilNextTick();
 
+    @SuppressWarnings("resource")
     @Inject(method = "prepareLevels", at = @At("TAIL"))
     private void farlands$preloadSpawnArea(CallbackInfo ci) {
         MinecraftServer server = (MinecraftServer) (Object) this;
