@@ -144,7 +144,7 @@ public final class Config {
             ConfigEntry.Keyword<T> kw = keywords.get(kwd);
             if (kw == null) {
                 throw new IllegalArgumentException(
-                        "Config entry '%s': commentKeyword 引用了未声明的关键字 '%s'".formatted(name, kwd));
+                        "Config entry '%s': commentKeyword references undeclared keyword '%s'".formatted(name, kwd));
             }
             kw.notes().put(source, text);
             return self();
@@ -166,7 +166,7 @@ public final class Config {
                     return self();
                 }
                 throw new IllegalArgumentException(
-                        "Config entry '%s': define(\"%s\") 既不是已声明的关键字，也不是该类型的字面量"
+                        "Config entry '%s': define(\"%s\") is neither a declared keyword nor a literal of this type"
                                 .formatted(name, token));
             }
             this.defaultValue = value;
@@ -179,7 +179,7 @@ public final class Config {
                 throw new IllegalStateException("Duplicate config entry: %s".formatted(name));
             }
             if (defaultValue == null && defaultKeyword == null) {
-                throw new IllegalStateException("Config entry '%s': 缺少 define(...)".formatted(name));
+                throw new IllegalStateException("Config entry '%s': missing define(...)".formatted(name));
             }
             if (defaultKeyword == null && constraint != null) {
                 // 默认值自身也要合法，否则一份新生成的配置就是坏的。
@@ -252,7 +252,7 @@ public final class Config {
             ConfigEntry.Keyword<T> kw = keywords.get(token);
             if (kw == null) {
                 throw new IllegalArgumentException(
-                        "Config entry '%s': define(\"%s\") 不是已声明的关键字".formatted(name, token));
+                        "Config entry '%s': define(\"%s\") is not a declared keyword".formatted(name, token));
             }
             this.defaultValue = kw.supplier().get();
             this.defaultKeyword = token;
@@ -401,7 +401,7 @@ public final class Config {
             ConfigEntry.Keyword<Boolean> kw = keywords.get(token);
             if (kw == null) {
                 throw new IllegalArgumentException(
-                        "Config entry '%s': define(\"%s\") 不是已声明的关键字".formatted(name, token));
+                        "Config entry '%s': define(\"%s\") is not a declared keyword".formatted(name, token));
             }
             this.defaultValue = kw.supplier().get();
             this.defaultKeyword = token;

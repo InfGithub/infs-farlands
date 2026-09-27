@@ -37,7 +37,7 @@ public class BetaDensityFunction implements DensityFunction.SimpleFunction {
             M_DOWNFALL = F_CLIMATE_SETTINGS.getType().getDeclaredMethod("downfall");
             M_DOWNFALL.setAccessible(true);
         } catch (ReflectiveOperationException e) {
-            throw new RuntimeException("farlands: Biome 气候字段反射失败", e);
+            throw new RuntimeException("farlands: reflection on Biome climate settings failed", e);
         }
     }
 
@@ -119,7 +119,7 @@ public class BetaDensityFunction implements DensityFunction.SimpleFunction {
         try {
             return ((Float) M_DOWNFALL.invoke(F_CLIMATE_SETTINGS.get(biome))).floatValue();
         } catch (ReflectiveOperationException e) {
-            throw new RuntimeException("farlands: 读取 Biome.downfall 失败", e);
+            throw new RuntimeException("farlands: failed to read Biome.downfall", e);
         }
     }
 

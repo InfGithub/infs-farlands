@@ -1,6 +1,7 @@
 package com.inf.farlands.mixin.terrain.pipeline;
 
 import com.inf.farlands.InfsFarlands;
+import com.inf.farlands.serialize.ChunkReadiness;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.terrain.ChunkBeardifier;
@@ -31,6 +32,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * 地形管线：拦截 vanilla chunk 生成调度，短路到 FULL 空壳。
@@ -147,9 +151,16 @@ public abstract class GenerationChunkHolderMixin {
 
             this.startedWork.set(ChunkStatus.FULL);
 
+            // FULL 不在这里完成：它的门现在是数据就绪，由 ChunkReadiness 在就绪时补。只置到 SPAWN，
+            // getLatestChunk 在当前状态 future 未完成时回退到父状态，因此仍返回这个 LevelChunk，
+            // 存盘与 fsa 的遍历不受影响。
             for (ChunkStatus status : ChunkStatus.getStatusList()) {
+                if (status == ChunkStatus.FULL) {
+                    continue;
+                }
                 farlandsCompleteFuture(status, levelchunk);
             }
+            ChunkReadiness.watch((GenerationChunkHolder) (Object) this, levelchunk);
 
             // 结构性地形适配数据在这里算，不能在生成线程上算：Beardifier.forStructuresInChunk 会经
             // StructureManager 走 ServerChunkCache 的取 chunk，非主线程上那条路把活踢回主线程并阻塞
@@ -186,6 +197,8 @@ public abstract class GenerationChunkHolderMixin {
                             // 从清掉到 loadChunkSections 落下读回标记之间会出现一个既无在途也无读回的
                             // 缝，ChunkReadiness 会把这个缝判成就绪。
                             GenQueue.endBiomeFill(levelchunk);
+                            // 群系标志清掉后，一个已读回且已点亮的 chunk 可能刚好就绪，这里补一次。
+                            ChunkReadiness.drive();
                             // fsa 读回：先查磁盘窗口内 section，有则读回恢复数据、光照、stage 并补发。
                             // 完成后才 enqueueChunk，collectSegments 的 isOrAfter(TERRAIN) 自动跳过已读回的，
                             // 磁盘没有的 section 正常入生成队列。
@@ -199,6 +212,20 @@ public abstract class GenerationChunkHolderMixin {
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("farlands: existence flow failed chunk={}", proto.getPos(), e);
             throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 上报口径改按「存在流程跑过」算。
+     *
+     * <p>模板按「该状态对应的 chunk 是否存在」逐级回退，而 FULL 的 future 在 port 里被数据就绪悬着，
+     * 于是这里一路回退成 SPAWN。ChunkLoadCounter 判的是等于 FULL，prepareLevels 与入场准备都会因此
+     * 永不收敛，客户端的 chunk 网格也一格都画不出来。只改上报，数据门仍在 future 上。
+     */
+    @Inject(method = "getLatestStatus", at = @At("RETURN"), cancellable = true)
+    private void farlands$reportFull(CallbackInfoReturnable<ChunkStatus> cir) {
+        if (this.startedWork.get() == ChunkStatus.FULL) {
+            cir.setReturnValue(ChunkStatus.FULL);
         }
     }
 

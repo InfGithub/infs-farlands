@@ -45,7 +45,7 @@ public record SystemParams(List<SystemParamSpec> entries) {
             }
             if (declared != null) {
                 throw new IllegalStateException(
-                        "farlands: " + systemClass.getName() + " 有多个 @SystemDefaultParams 字段");
+                        "farlands: " + systemClass.getName() + " has more than one @SystemDefaultParams field");
             }
             declared = field;
         }
@@ -55,13 +55,13 @@ public record SystemParams(List<SystemParamSpec> entries) {
         if (!Modifier.isStatic(declared.getModifiers()) || !Modifier.isFinal(declared.getModifiers())
                 || declared.getType() != SystemParams.class) {
             throw new IllegalStateException(
-                    "farlands: " + systemClass.getName() + " 的 @SystemDefaultParams 字段必须是 static final SystemParams");
+                    "farlands: " + systemClass.getName() + " @SystemDefaultParams field must be static final SystemParams");
         }
         try {
             declared.setAccessible(true);
             return (SystemParams) declared.get(null);
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("farlands: 读取 " + systemClass.getName() + " 的参数声明失败", e);
+            throw new IllegalStateException("farlands: failed to read param declaration of " + systemClass.getName(), e);
         }
     }
 }

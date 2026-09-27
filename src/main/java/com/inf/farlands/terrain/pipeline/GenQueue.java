@@ -3,6 +3,7 @@ package com.inf.farlands.terrain.pipeline;
 import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.light.FarLandsLightEngine;
+import com.inf.farlands.serialize.ChunkReadiness;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
@@ -34,9 +35,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 /**
  * 地形管线生成任务队列。per-chunk 任务，全局并发队列，多个 worker 异步消费。
@@ -167,14 +166,20 @@ public final class GenQueue {
         }
     }
 
-    /** 预加载：指定 section 范围入队，绕过 tracking view 过滤。幂等，范围内全已生成则不入队。 */
+    /**
+     * 预加载：指定 section 范围入队，绕过 tracking view 过滤。幂等，范围内全已点亮则不入队。
+     *
+     * <p>门取 LIGHTED 而不是 TERRAIN：范围内已有数据但 stage 低于 LIGHTED 的段要靠这次入队触发光照补，
+     * 取 TERRAIN 会让它们既不生成也不点亮，预加载的等待就永远等不到。collectSegments 的预加载模式
+     * 只按段内 stage 收集，已有数据的那几段不会被重填。
+     */
     public static void preload(LevelChunk chunk, int minSy, int maxSy) {
         boolean anyPending = false;
         for (int sy = minSy; sy <= maxSy; sy++) {
             if (!WorldBounds.inSection(sy)) {
                 continue;
             }
-            if (!SectionStage.isOrAfter(chunk, sy, SectionStage.TERRAIN)) {
+            if (!SectionStage.isOrAfter(chunk, sy, SectionStage.LIGHTED)) {
                 anyPending = true;
                 break;
             }
@@ -307,8 +312,8 @@ public final class GenQueue {
      * 待处理、或仍有做过但没点亮的段，则 enqueueChunk，幂等。
      */
     private static boolean scanChunk(ServerLevel level, int cx, int cz) {
-        ChunkAccess ca = level.getChunk(cx, cz, ChunkStatus.FULL, false);
-        if (!(ca instanceof LevelChunk lc)) {
+        LevelChunk lc = SectionLifecycle.latestChunk(level, cx, cz);
+        if (lc == null) {
             return false;
         }
         long key = lc.getPos().pack();
@@ -406,7 +411,12 @@ public final class GenQueue {
                     // 达 ENTITY_TICKING，而空壳先发加光照后补的管线里播种时常常未达，主动广播绕开
                     // 这个依赖，播种完成即发。
                     SectionIO.runOnMainThread(
-                            () -> ChunkDataSender.broadcastChunkLight(serverLevel, chunk), serverLevel);
+                            () -> {
+                                ChunkDataSender.broadcastChunkLight(serverLevel, chunk);
+                                // 光照完成是就绪翻转的主要时点，投一次 drive：主线程若正阻塞在某个等
+                                // FULL 的位置上，这一笔会在 managedBlock 的队列里执行，把等待解开。
+                                ChunkReadiness.drive();
+                            }, serverLevel);
                 } else {
                     InfsFarlands.LOGGER.error("farlands: light failed chunk={}", chunk.getPos(), t);
                 }

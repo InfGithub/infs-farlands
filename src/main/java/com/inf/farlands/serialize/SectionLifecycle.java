@@ -37,7 +37,6 @@ import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainerFactory;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 
 /**
@@ -98,8 +97,8 @@ public final class SectionLifecycle {
      */
     private static final Set<LevelChunk> pendingWindowRead = ConcurrentHashMap.newKeySet();
 
-    /** 该 chunk 是否在等窗口建立后读回。ChunkReadiness 的就绪判据之一。 */
-    static boolean isPendingWindowRead(LevelChunk chunk) {
+    /** 该 chunk 是否在等窗口建立后读回。ChunkReadiness 的就绪判据之一，也是停滞诊断的一项。 */
+    public static boolean isPendingWindowRead(LevelChunk chunk) {
         return pendingWindowRead.contains(chunk);
     }
 
@@ -228,8 +227,8 @@ public final class SectionLifecycle {
             return;
         }
         SectionIO.runOnMainThread(() -> {
-            ChunkAccess ca = level.getChunk(cp.x(), cp.z(), ChunkStatus.FULL, false);
-            if (ca != null && ca != lc) {
+            LevelChunk now = latestChunk(level, cp.x(), cp.z());
+            if (now != null && now != lc) {
                 return; // 已重新加载为新对象，丢弃旧编码
             }
             for (Map.Entry<Path, List<Object[]>> e : byFile.entrySet()) {
@@ -564,6 +563,7 @@ public final class SectionLifecycle {
                         if (pending.decrementAndGet() <= 0) {
                             SectionIO.unmarkReadingBatch(lc, windowSy);
                             skySourcesReady(lc);
+                            ChunkReadiness.drive();
                             onDone.run();
                         }
                     });
@@ -591,6 +591,30 @@ public final class SectionLifecycle {
                 loadChunkSections(lc, () -> TerrainHooks.enqueueGen(lc));
             }
         }
+    }
+
+    /**
+     * 预加载的范围读回：范围内每段发起读回，并解除窗口等待标记。
+     *
+     * <p>预加载期间没有玩家窗口，走不到 loadChunkSections 的并集分支；而窗口等待标记必须清掉，否则
+     * ChunkReadiness.isDataReady 里那一条恒假，FULL 补不出来，玩家进世界后连方块都放不下去。
+     */
+    public static void preloadRange(LevelChunk lc, int minSy, int maxSy) {
+        clearPendingWindowRead(lc);
+        for (int sy = minSy; sy <= maxSy; sy++) {
+            if (!SectionIO.isReading(lc.getPos().pack(), sy)) {
+                loadSection(lc, sy, () -> {
+                });
+            }
+        }
+    }
+
+    /**
+     * 解除窗口等待标记。存在流程派发的 loadChunkSections 可能晚于预加载的范围读回落下这个标记，
+     * 所以预加载循环每轮都要再清一次。
+     */
+    public static void clearPendingWindowRead(LevelChunk lc) {
+        pendingWindowRead.remove(lc);
     }
 
     /**
@@ -623,6 +647,7 @@ public final class SectionLifecycle {
                 applyDecoded(lc, d.sectionY(), d.decoded());
             }
             skySourcesReady(lc);
+            ChunkReadiness.drive();
             onDone.run();
         });
     }
@@ -660,6 +685,13 @@ public final class SectionLifecycle {
             }
         }
         SectionStage.setStage(lc, sy, decoded.stage());
+        // 磁盘只存 fsa 的方块与光照，chunk NBT 的 sections 被剥空，所以原版读盘路径里那句
+        // poiManager.checkConsistencyWithBlocks 在本 port 从不执行。恢复的段在这里补一次，
+        // 清掉方块已不存在的 POI 条目。
+        if (lc.getLevel() instanceof ServerLevel poiLevel) {
+            poiLevel.getPoiManager().checkConsistencyWithBlocks(SectionPos.of(lc.getPos(), sy),
+                    decoded.section());
+        }
         ChunkDataSender.markChunkChanged(lc);
     }
 
@@ -670,6 +702,24 @@ public final class SectionLifecycle {
         try {
             Object visible = F_VISIBLE_CHUNKS.get(level.getChunkSource().chunkMap);
             return ((Long2ObjectLinkedOpenHashMap<ChunkHolder>) visible).values();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 非阻塞取该位置当前的 LevelChunk。存在流程走过就有，没走过或只有 proto 时返回 null。
+     *
+     * <p>只在主线程调：visibleChunkMap 是裸的 Long2ObjectLinkedOpenHashMap，不是线程安全的。
+     * getLatestChunk 本身不阻塞，FULL 的 future 被数据就绪悬着时会回退到 SPAWN 那个持 LevelChunk
+     * 的 future，所以这里拿到的是壳而不是等数据。
+     */
+    @SuppressWarnings("unchecked")
+    public static LevelChunk latestChunk(ServerLevel level, int cx, int cz) {
+        try {
+            Object visible = F_VISIBLE_CHUNKS.get(level.getChunkSource().chunkMap);
+            ChunkHolder holder = ((Long2ObjectLinkedOpenHashMap<ChunkHolder>) visible).get(ChunkPos.pack(cx, cz));
+            return holder != null && holder.getLatestChunk() instanceof LevelChunk lc ? lc : null;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

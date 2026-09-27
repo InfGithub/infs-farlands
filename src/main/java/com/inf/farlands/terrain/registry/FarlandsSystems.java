@@ -63,7 +63,7 @@ public final class FarlandsSystems {
                 || constructors[0].getParameterCount() != 1
                 || constructors[0].getParameterTypes()[0] != SystemArgs.class) {
             throw new IllegalArgumentException(
-                    "farlands: 系统 %s (%s) 必须恰好一个 public 构造器，形参为 SystemArgs"
+                    "farlands: system %s (%s) must have exactly one public constructor taking SystemArgs"
                             .formatted(id, type.getName()));
         }
     }

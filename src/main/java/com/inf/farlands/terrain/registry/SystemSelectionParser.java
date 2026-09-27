@@ -91,7 +91,7 @@ public final class SystemSelectionParser {
         Arg fallback = spec.defaultValue();
         if (fallback == null) {
             throw new IllegalStateException(
-                    "farlands: 系统参数 " + spec.key() + " 既无文本、也无关键字与默认值");
+                    "farlands: system arg " + spec.key() + " has no text, no keyword and no default");
         }
         return fallback;
     }
@@ -106,14 +106,14 @@ public final class SystemSelectionParser {
         try {
             tag = TagParser.parseCompoundFully(text);
         } catch (Exception e) {
-            throw new IllegalStateException("farlands: 自由参数框不是合法 SNBT 映射", e);
+            throw new IllegalStateException("farlands: free-form arg box is not a valid SNBT map", e);
         }
         Map<String, Arg> out = new LinkedHashMap<>();
         for (String key : tag.keySet()) {
             Tag value = tag.get(key);
             out.put(key, Arg.CODEC.parse(NbtOps.INSTANCE, value).getOrThrow(
                     message -> new IllegalStateException(
-                            "farlands: 自由参数 " + key + " 解析失败: " + message)));
+                            "farlands: free-form arg " + key + " failed to parse: " + message)));
         }
         return out;
     }
@@ -133,7 +133,7 @@ public final class SystemSelectionParser {
             case BOOLEAN -> Arg.ofBoolean(bool(spec.key(), text));
             case STRING -> Arg.ofString(text);
             case ENUM -> throw new IllegalStateException(
-                    "farlands: 枚举参数 " + spec.key() + " 需要枚举类，不能用纯文本解析");
+                    "farlands: enum arg " + spec.key() + " needs an enum class, plain text is not enough");
         };
     }
 
@@ -150,7 +150,7 @@ public final class SystemSelectionParser {
             return value;
         } catch (ArithmeticException | NumberFormatException e) {
             throw new IllegalStateException(
-                    "farlands: 系统参数 " + key + " 不是 [" + min + ", " + max + "] 内的整数: " + text, e);
+                    "farlands: system arg " + key + " is not an integer in [" + min + ", " + max + "]: " + text, e);
         }
     }
 
@@ -160,10 +160,10 @@ public final class SystemSelectionParser {
         try {
             value = Double.parseDouble(text.trim());
         } catch (NumberFormatException e) {
-            throw new IllegalStateException("farlands: 系统参数 " + key + " 不是数值: " + text, e);
+            throw new IllegalStateException("farlands: system arg " + key + " is not a number: " + text, e);
         }
         if (Double.isNaN(value) || Double.isInfinite(value) || Math.abs(value) > limit) {
-            throw new IllegalStateException("farlands: 系统参数 " + key + " 超出取值范围: " + text);
+            throw new IllegalStateException("farlands: system arg " + key + " out of range: " + text);
         }
         return value;
     }
@@ -176,20 +176,20 @@ public final class SystemSelectionParser {
         if ("false".equals(trimmed)) {
             return false;
         }
-        throw new IllegalStateException("farlands: 系统参数 " + key + " 不是 true 或 false: " + text);
+        throw new IllegalStateException("farlands: system arg " + key + " is not true or false: " + text);
     }
 
     /** 枚举文本还原成真实例，并带上枚举类名，取值方 {@link SystemArgs#getEnum} 走 Class.cast 才有东西可取。 */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     static <E extends Enum<E>> Arg enumArg(String key, Class<? extends Enum<?>> enumClass, String text) {
         if (enumClass == null) {
-            throw new IllegalStateException("farlands: 枚举参数 " + key + " 没有声明枚举类");
+            throw new IllegalStateException("farlands: enum arg " + key + " has no enum class declared");
         }
         try {
             return Arg.<E>ofEnum((E) Enum.valueOf((Class) enumClass, text.trim()));
         } catch (IllegalArgumentException e) {
             throw new IllegalStateException(
-                    "farlands: 系统参数 " + key + " 的枚举常量不存在: "
+                    "farlands: system arg " + key + " has no such enum constant: "
                             + enumClass.getName() + "." + text.trim(), e);
         }
     }

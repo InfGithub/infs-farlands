@@ -113,7 +113,7 @@ public final class CwgNoiseSystem implements NoiseSystem {
         int sampleZ = requireSampleSize("noiseSampleSizeZ", args.getInt("noiseSampleSizeZ"));
         if (this.noiseSampleSizeX != sampleZ) {
             throw new IllegalArgumentException(
-                    "farlands: noiseSampleSizeX 与 noiseSampleSizeZ 必须相等，cell 的水平边长只有一个");
+                    "farlands: noiseSampleSizeX and noiseSampleSizeZ must be equal, a cell has one horizontal edge");
         }
 
         // 四个种子按顺序取自同一条随机流，顺序换了四路噪声互换。
@@ -238,7 +238,7 @@ public final class CwgNoiseSystem implements NoiseSystem {
     private static int requireSampleSize(String key, int value) {
         if (value != 4 && value != 8 && value != 16) {
             throw new IllegalArgumentException(
-                    "farlands: 采样格边长必须是 4、8 或 16: " + key + " = " + value);
+                    "farlands: sample cell edge must be 4, 8 or 16: " + key + " = " + value);
         }
         return value;
     }
@@ -246,14 +246,14 @@ public final class CwgNoiseSystem implements NoiseSystem {
     /** 频率必须为正的有限值。0 会让该路恒定，NaN 会让比较全部为假。 */
     private static double requireFrequency(String key, double value) {
         if (!(value > 0.0) || Double.isInfinite(value)) {
-            throw new IllegalArgumentException("farlands: 频率必须是正的有限值: " + key + " = " + value);
+            throw new IllegalArgumentException("farlands: frequency must be positive and finite: " + key + " = " + value);
         }
         return value;
     }
 
     private static int requireOctaves(String key, int value) {
         if (value < 1 || value > 30) {
-            throw new IllegalArgumentException("farlands: 八度数必须在 1 到 30 之间: " + key + " = " + value);
+            throw new IllegalArgumentException("farlands: octave count must be between 1 and 30: " + key + " = " + value);
         }
         return value;
     }

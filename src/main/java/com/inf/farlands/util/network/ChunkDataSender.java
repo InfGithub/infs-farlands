@@ -35,11 +35,9 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 
 /**
@@ -220,8 +218,8 @@ public final class ChunkDataSender {
                     .computeIfAbsent(player.getUUID(), k -> new ConcurrentHashMap<>())
                     .computeIfAbsent(cp.pack(), k -> ConcurrentHashMap.newKeySet())
                     .add(s);
-            ChunkAccess ca = level.getChunk(cp.x(), cp.z(), ChunkStatus.FULL, false);
-            if (ca instanceof LevelChunk lc) {
+            LevelChunk lc = SectionLifecycle.latestChunk(level, cp.x(), cp.z());
+            if (lc != null) {
                 // fsa 读回优先：磁盘有数据则恢复数据、光照与 stage 并补发，不重生成。读回完成后
                 // 再补填 biome 并入生成队列，GenQueue.enqueue 的 isOrAfter 会跳过已读回的 section。
                 SectionLifecycle.loadSection(lc, s, () -> {
@@ -293,8 +291,8 @@ public final class ChunkDataSender {
             if (!ChunkTrackingView.isWithinDistance(playerChunk.x(), playerChunk.z(), viewDistance, cx, cz, true)) {
                 continue;
             }
-            ChunkAccess chunk = level.getChunk(cx, cz, ChunkStatus.FULL, false);
-            if (!(chunk instanceof LevelChunk lc)) {
+            LevelChunk lc = SectionLifecycle.latestChunk(level, cx, cz);
+            if (lc == null) {
                 // 未加载：到此为止，重载时 fsa 读回、新生成或空包会重新标记
                 continue;
             }
@@ -328,8 +326,8 @@ public final class ChunkDataSender {
         outer: for (Map.Entry<Long, Set<Integer>> e : sorted) {
             int cx = ChunkPos.getX(e.getKey());
             int cz = ChunkPos.getZ(e.getKey());
-            ChunkAccess chunk = level.getChunk(cx, cz, ChunkStatus.FULL, false);
-            if (!(chunk instanceof LevelChunk lc)) {
+            LevelChunk lc = SectionLifecycle.latestChunk(level, cx, cz);
+            if (lc == null) {
                 queue.remove(e.getKey()); // 未加载：剪掉，重载时标记或 chunk 包会补
                 continue;
             }

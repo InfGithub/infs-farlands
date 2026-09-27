@@ -1,5 +1,6 @@
 package com.inf.farlands.mixin.expand.y;
 
+import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.Dynamic2CommandExceptionType;
@@ -24,7 +25,6 @@ import net.minecraft.world.level.biome.BiomeResolver;
 import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
@@ -89,7 +89,7 @@ public abstract class BiomeRegionFillMixin {
                 .blockToSectionCoord(region.maxZ()); chunkZ++) {
             for (int chunkX = SectionPos.blockToSectionCoord(region.minX()); chunkX <= SectionPos
                     .blockToSectionCoord(region.maxX()); chunkX++) {
-                ChunkAccess chunk = level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
+                LevelChunk chunk = SectionLifecycle.latestChunk(level, chunkX, chunkZ);
                 if (chunk == null) {
                     return Either.right(ERROR_NOT_LOADED.create());
                 }

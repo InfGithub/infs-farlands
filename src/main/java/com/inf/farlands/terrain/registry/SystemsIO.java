@@ -101,7 +101,7 @@ public final class SystemsIO {
             return read(file);
         }
         if (server.getWorldData().overworldData().isInitialized()) {
-            throw new IllegalStateException("farlands: 已存在的世界没有系统配置文件 " + file);
+            throw new IllegalStateException("farlands: existing world has no systems config file " + file);
         }
         SystemsData data = takeStaged();
         if (data == null) {
@@ -117,16 +117,16 @@ public final class SystemsIO {
         try {
             root = NbtIo.readCompressed(file, NbtAccounter.defaultQuota());
         } catch (Exception e) {
-            throw new IllegalStateException("farlands: 读取系统配置失败 " + file, e);
+            throw new IllegalStateException("farlands: failed to read systems config " + file, e);
         }
         Tag data = root.get("data");
         if (data == null) {
-            throw new IllegalStateException("farlands: 系统配置缺少 data 键 " + file);
+            throw new IllegalStateException("farlands: systems config has no data tag " + file);
         }
         try {
             return SystemsData.CODEC.parse(NbtOps.INSTANCE, data).getOrThrow(IllegalStateException::new);
         } catch (RuntimeException e) {
-            throw new IllegalStateException("farlands: 系统配置解析失败 " + file, e);
+            throw new IllegalStateException("farlands: failed to parse systems config " + file, e);
         }
     }
 
@@ -233,7 +233,7 @@ public final class SystemsIO {
         long value = number(key, arg).longValue();
         if (value < min || value > max) {
             throw new IllegalStateException(
-                    "farlands: 系统参数 " + key + " 超出 " + arg.type().id() + " 范围: " + value);
+                    "farlands: system arg " + key + " out of " + arg.type().id() + " range: " + value);
         }
         return value;
     }
@@ -243,14 +243,15 @@ public final class SystemsIO {
         try {
             return new BigDecimal(number.toString()).longValueExact();
         } catch (ArithmeticException | NumberFormatException e) {
-            throw new IllegalStateException("farlands: 系统参数 " + key + " 不是 long 范围内的整数: " + number, e);
+            throw new IllegalStateException("farlands: system arg " + key + " is not an integer in long range: " + number,
+                    e);
         }
     }
 
     private static double doubleValue(String key, Arg arg) {
         double value = number(key, arg).doubleValue();
         if (Double.isNaN(value) || Double.isInfinite(value)) {
-            throw new IllegalStateException("farlands: 系统参数 " + key + " 不是有限 double: " + value);
+            throw new IllegalStateException("farlands: system arg " + key + " is not a finite double: " + value);
         }
         return value;
     }
@@ -259,7 +260,7 @@ public final class SystemsIO {
         double value = number(key, arg).doubleValue();
         if (Double.isNaN(value) || Double.isInfinite(value) || value < -Float.MAX_VALUE
                 || value > Float.MAX_VALUE) {
-            throw new IllegalStateException("farlands: 系统参数 " + key + " 超出 float 范围: " + value);
+            throw new IllegalStateException("farlands: system arg " + key + " out of float range: " + value);
         }
         return value;
     }
@@ -270,7 +271,7 @@ public final class SystemsIO {
 
     private static <T> Number number(String key, Dynamic<T> value) {
         return value.getOps().getNumberValue(value.getValue()).getOrThrow(
-                message -> new IllegalStateException("farlands: 系统参数 " + key + " 不是数值: " + message));
+                message -> new IllegalStateException("farlands: system arg " + key + " is not a number: " + message));
     }
 
     private static String string(String key, Arg arg) {
@@ -279,28 +280,28 @@ public final class SystemsIO {
 
     private static <T> String string(String key, Dynamic<T> value) {
         return value.getOps().getStringValue(value.getValue()).getOrThrow(
-                message -> new IllegalStateException("farlands: 系统参数 " + key + " 不是字符串: " + message));
+                message -> new IllegalStateException("farlands: system arg " + key + " is not a string: " + message));
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private static void setEnum(SystemArgs args, String key, Arg arg) {
         String className = arg.enumClass().orElseThrow(() -> new IllegalStateException(
-                "farlands: 系统参数 " + key + " 声明为 enum 但缺 enumClass"));
+                "farlands: system arg " + key + " declared as enum but missing enumClass"));
         Class<?> type;
         try {
             type = Class.forName(className);
         } catch (ClassNotFoundException e) {
-            throw new IllegalStateException("farlands: 系统参数 " + key + " 的枚举类未找到: " + className, e);
+            throw new IllegalStateException("farlands: system arg " + key + " enum class not found: " + className, e);
         }
         if (!type.isEnum()) {
-            throw new IllegalStateException("farlands: 系统参数 " + key + " 的类不是枚举: " + className);
+            throw new IllegalStateException("farlands: system arg " + key + " class is not an enum: " + className);
         }
         String name = string(key, arg);
         try {
             args.setEnum(key, (Enum) Enum.valueOf((Class) type, name));
         } catch (IllegalArgumentException e) {
             throw new IllegalStateException(
-                    "farlands: 系统参数 " + key + " 的枚举常量不存在: " + className + "." + name, e);
+                    "farlands: system arg " + key + " has no such enum constant: " + className + "." + name, e);
         }
     }
 }

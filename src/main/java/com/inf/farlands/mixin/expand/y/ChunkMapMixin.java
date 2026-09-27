@@ -1,6 +1,8 @@
 package com.inf.farlands.mixin.expand.y;
 
 import com.inf.farlands.FarlandsConfig;
+import com.inf.farlands.serialize.ChunkReadiness;
+import com.inf.farlands.serialize.TerrainHooks;
 import com.inf.farlands.util.window.WindowSendState;
 
 import java.util.ArrayList;
@@ -9,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 import net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket;
+import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -21,6 +24,9 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * biomes 重发按收件玩家各自的窗口发包。
@@ -66,5 +72,25 @@ public abstract class ChunkMapMixin {
                 WindowSendState.clear();
             }
         });
+    }
+
+    /**
+     * 数据未就绪时跳过 chunk NBT 存盘。
+     *
+     * <p>模板的存盘不看生成与光照是否在跑，会在 fill 与光照中途把高度图、方块实体与计划刻写进 NBT。
+     * 关服时改看 isChunkBusy：窗口永不建立的 chunk 会长期落在 pendingWindowRead 里，isDataReady 恒假，
+     * 若一并跳过就写不出 NBT，而关服的同步刷盘只覆盖 fsa。
+     */
+    @Inject(method = "saveChunkIfNeeded", at = @At("HEAD"), cancellable = true)
+    private void farlands$skipUnreadySave(ChunkHolder chunk, long now, CallbackInfoReturnable<Boolean> cir) {
+        if (!(chunk.getLatestChunk() instanceof LevelChunk levelChunk)) {
+            return;
+        }
+        boolean skip = ChunkReadiness.isShuttingDown()
+                ? TerrainHooks.isChunkBusy(levelChunk)
+                : !ChunkReadiness.isDataReady(levelChunk);
+        if (skip) {
+            cir.setReturnValue(false);
+        }
     }
 }

@@ -2,6 +2,7 @@ package com.inf.farlands.register.command;
 
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.command.CommandRegistrationEvent;
+import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.registry.SystemsData;
 import com.inf.farlands.terrain.registry.SystemsHolder;
@@ -34,7 +35,6 @@ import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.ImposterProtoChunk;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 
 /**
@@ -151,8 +151,8 @@ public class FarLandsCommands {
             ServerPlayer player = source.getPlayerOrException();
             ServerLevel level = (ServerLevel) player.level();
             SectionPos sec = SectionPos.of(player.blockPosition());
-            ChunkAccess ca = level.getChunk(sec.x(), sec.z(), ChunkStatus.FULL, false);
-            if (ca instanceof LevelChunk lc) {
+            LevelChunk lc = SectionLifecycle.latestChunk(level, sec.x(), sec.z());
+            if (lc != null) {
                 int stage = SectionStage.getStage(lc, sec.y());
                 InfsFarlands.LOGGER.info("PLSTATE secY={} stage={}", sec.y(), stage);
                 source.sendSuccess(() -> Component.translatable("commands.infs-farlands.section.pipeline.state"), false);
@@ -268,8 +268,10 @@ public class FarLandsCommands {
     /** 当前 section 的 4x4x4 biome 网格，服务端/客户端共用。 */
     public static void dumpBiomes(Level level, SectionPos sec) {
         try {
-            ChunkAccess ca = level.getChunk(sec.x(), sec.z(), ChunkStatus.FULL, false);
-            if (!(ca instanceof LevelChunk lc)) {
+            LevelChunk lc = level instanceof ServerLevel sl
+                    ? SectionLifecycle.latestChunk(sl, sec.x(), sec.z())
+                    : (level.getChunk(sec.x(), sec.z()) instanceof LevelChunk c ? c : null);
+            if (lc == null) {
                 InfsFarlands.LOGGER.info("BIODUMP secY={} chunk null", sec.y());
                 return;
             }
@@ -322,8 +324,10 @@ public class FarLandsCommands {
     /** 方块数据：. = 空气，# = 非空气——与光照矩阵对照，区分方块格的 0 为正常、空气格的 0 为异常。 */
     public static void dumpBlocks(Level level, SectionPos sec) {
         try {
-            ChunkAccess ca = level.getChunk(sec.x(), sec.z(), ChunkStatus.FULL, false);
-            if (!(ca instanceof LevelChunk lc)) {
+            LevelChunk lc = level instanceof ServerLevel sl
+                    ? SectionLifecycle.latestChunk(sl, sec.x(), sec.z())
+                    : (level.getChunk(sec.x(), sec.z()) instanceof LevelChunk c ? c : null);
+            if (lc == null) {
                 InfsFarlands.LOGGER.info("FLDUMP BLOCKS secY={} null", sec.y());
                 return;
             }

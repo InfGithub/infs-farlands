@@ -1,6 +1,7 @@
 package com.inf.farlands.mixin.serialize;
 
 import com.inf.farlands.InfsFarlands;
+import com.inf.farlands.serialize.ChunkReadiness;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.terrain.pipeline.GenQueue;
@@ -32,6 +33,7 @@ public abstract class MinecraftServerMixin {
     @Inject(method = "stopServer", at = @At("HEAD"))
     private void farlands$fsaShutdownFlush(CallbackInfo ci) {
         MinecraftServer server = (MinecraftServer) (Object) this;
+        ChunkReadiness.markShuttingDown();
         try {
             SectionLifecycle.awaitEncodeTasks(server, 5000);
             SectionIO.awaitIODrain();

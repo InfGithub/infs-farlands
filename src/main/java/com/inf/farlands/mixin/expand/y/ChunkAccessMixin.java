@@ -385,7 +385,8 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
         Beardifier beardifier = this.farlandsBeardifier;
         if (beardifier == null) {
             throw new IllegalStateException(
-                    "farlands: chunk 的 Beardifier 未设置，存在流程漏了写入 " + ((ChunkAccess) (Object) this).getPos());
+                    "farlands: chunk Beardifier not set, existence flow missed the write "
+                            + ((ChunkAccess) (Object) this).getPos());
         }
         return beardifier;
     }

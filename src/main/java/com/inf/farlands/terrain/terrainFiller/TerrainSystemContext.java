@@ -31,7 +31,7 @@ public final class TerrainSystemContext {
         TerrainSystem system = SYSTEM.get();
         if (system == null) {
             throw new IllegalStateException(
-                    "TerrainSystemContext 未设置：NoiseChunk 的构造点漏了 set");
+                    "TerrainSystemContext not set: the NoiseChunk construction site missed set");
         }
         return system;
     }
