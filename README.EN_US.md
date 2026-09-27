@@ -8,48 +8,46 @@
 ![@Inject](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2FInfGithub%2Fdc5cf49ced449ef6cda0c106718f8e53%2Fraw%2Finject.json)
 ![@Mixin](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2FInfGithub%2Fdc5cf49ced449ef6cda0c106718f8e53%2Fraw%2Fmixin.json)
 
-[English](README.EN_US.md)
-
-## 构建
+## Building
 
 ```bash
 ./gradlew build
 ```
 
-## 特性
+## Features
 
-- 将游戏的 X/Y/Z 轴界限改为 ±2,147,483,647 格。
-- 为全 Y 轴编写了独立的**光照引擎**和**地形管线**。
-- 修复了一些游戏在高坐标下的异常行为。
+- Extends the game's X/Y/Z coordinate limits to ±2,147,483,647 blocks.
+- Implements an independent **lighting engine** and **terrain generation pipeline** for the entire Y-axis.
+- Fixes some abnormal game behavior at high coordinates.
 
-## 提示
+## Notes
 
-本模组不依赖 `Fabric API`。
+This mod does not depend on `Fabric API`.
 
-配置文件位于 `config/infs-farlands.json`。
+The configuration file is located at `config/infs-farlands.json`.
 
-光照引擎和地形管线目前依然处于**测试阶段**。
+The lighting engine and terrain generation pipeline are currently still in the **experimental stage**.
 
-## 警告
+## Warnings
 
-本模组是实验性的。
+This mod is experimental.
 
-某些漏洞可能造成如下影响：
+Certain bugs may cause the following:
 
 - CTD
 - OOM
-- 游戏冻结
-- 数据损坏
+- Game freezes
+- Data corruption
 
-如果您发现了漏洞，或想提出建议，请创建 Issue 和 Pull Request。
+If you find a bug or would like to make a suggestion, please create an Issue or Pull Request.
 
-## 兼容性
+## Compatibility
 
-### 已知不兼容的模组
+### Known Incompatible Mods
 
 - **C2ME**
 - **ScalableLux**
 
-### 已兼容的模组：
+### Known Compatible Mods
 
-- 无
+- None
