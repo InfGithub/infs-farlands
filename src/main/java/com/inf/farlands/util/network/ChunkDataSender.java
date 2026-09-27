@@ -90,6 +90,14 @@ public final class ChunkDataSender {
         PENDING_QUEUES.remove(id);
     }
 
+    /** 停服时清掉按玩家与按维度的表。两个队列表里持有的都是旧 LevelChunk。 */
+    public static void clearWorldState() {
+        WINDOW_STATES.clear();
+        PENDING_QUEUES.clear();
+        CHANGED_CHUNKS.clear();
+        playersMoved = false;
+    }
+
     /** 本 tick 是否有玩家跨 chunk 移动，驱动地形与光照队列按当前距离重排。 */
     private static volatile boolean playersMoved;
 

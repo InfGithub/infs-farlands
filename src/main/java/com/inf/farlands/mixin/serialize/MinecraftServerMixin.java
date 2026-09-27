@@ -4,7 +4,12 @@ import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.serialize.ChunkReadiness;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
+import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.pipeline.GenQueue;
+import com.inf.farlands.terrain.pipeline.SpawnPreload;
+import com.inf.farlands.util.network.ChunkDataSender;
+import com.inf.farlands.util.network.SystemsSender;
+import com.inf.farlands.util.window.EntitySectionWindow;
 
 import net.minecraft.server.MinecraftServer;
 
@@ -43,5 +48,30 @@ public abstract class MinecraftServerMixin {
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("farlands: fsa shutdown flush failed", e);
         }
+    }
+
+    /**
+     * 停服后清掉按世界的进程级状态。
+     *
+     * <p>必须挂在 RETURN 而不是 HEAD：HEAD 那一段要跑 shutdownSyncFlush，它依赖 SectionStage 的阶段；
+     * 而 ChunkReadiness 的关服标志也不能提前复位，否则 vanilla 在 saveAllChunks 里那次 chunk NBT 保存会走
+     * isDataReady 而不是 isChunkBusy，forceload 且无玩家那类 chunk 就写不出 NBT。RETURN 在 saveAllChunks、
+     * level.close 与几个 close 之后，线程随后才结束；客户端在 disconnect 里自旋等 isShutdown()，所以这里
+     * 既晚于旧世界所有需要这些状态的动作，又早于新世界开始。
+     *
+     * <p>三张位置侧信道表不在这里清：它们在主源集两端共用，客户端那条收尾中的渲染链要到
+     * updateLevelInEngines(null) 才释放 sectionNode 长键，清早了会把哈希当坐标。那三张表由客户端卸关卡时清。
+     */
+    @Inject(method = "stopServer", at = @At("RETURN"))
+    private void farlands$clearWorldState(CallbackInfo ci) {
+        SectionLifecycle.clearWorldState();
+        GenQueue.clearWorldState();
+        ChunkDataSender.clearWorldState();
+        SpawnPreload.clearAll();
+        SystemsSender.clearWorldState();
+        ChunkReadiness.clearAll();
+        SectionStage.clearAll();
+        EntitySectionWindow.clear();
+        SectionIO.clearCache();
     }
 }

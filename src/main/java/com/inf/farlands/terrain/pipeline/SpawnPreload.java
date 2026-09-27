@@ -28,6 +28,11 @@ public final class SpawnPreload {
         CHUNKS.computeIfAbsent(dimension, k -> ConcurrentHashMap.newKeySet()).add(pos.pack());
     }
 
+    /** 停服时清空登记。票随进程结束即散，这里清的是内存里的条目。 */
+    public static void clearAll() {
+        CHUNKS.clear();
+    }
+
     /** 该维度的第一个玩家入场时移除该维度的预加载票，幂等。主线程。 */
     public static void release(ServerLevel level) {
         Set<Long> keys = CHUNKS.remove(level.dimension());

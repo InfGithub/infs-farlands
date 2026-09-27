@@ -379,6 +379,17 @@ public final class GenQueue {
         return BIOME_FILLING.contains(chunk);
     }
 
+    /** 停服时清掉队列与三张在途标志。队列里持有的都是旧 LevelChunk。 */
+    public static void clearWorldState() {
+        synchronized (QUEUE) {
+            QUEUE.clear();
+        }
+        CHUNK_IN_FLIGHT.clear();
+        LIGHT_IN_FLIGHT.clear();
+        BIOME_FILLING.clear();
+        consumerActive.set(false);
+    }
+
     /** 报告某 section 已生成，触发光照，该 chunk 无在途光照时一次。 */
     public static void notifyGenerated(LevelChunk chunk) {
         long key = chunk.getPos().pack();

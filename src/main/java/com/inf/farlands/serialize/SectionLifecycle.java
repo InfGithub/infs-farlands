@@ -102,6 +102,18 @@ public final class SectionLifecycle {
         return pendingWindowRead.contains(chunk);
     }
 
+    /**
+     * 停服时清掉按世界的在途状态。两个队列里持有的都是旧 LevelChunk。
+     *
+     * <p>不复位 ENCODE_TASKS_IN_FLIGHT：旧世界可能有超时未收尾的编码任务仍在途，它们的出口会递减这个
+     * 计数，先set(0) 会被减成负数，下一个世界的关服等待就会误判成没有在途任务而直接放行。
+     */
+    public static void clearWorldState() {
+        pendingEncode.clear();
+        pendingWindowRead.clear();
+        ENCODE_FAIL_LOGGED.set(0);
+    }
+
     /** 26.1.2 没有 ChunkMap.getChunks()，改反射 visibleChunkMap。 */
     private static final Field F_VISIBLE_CHUNKS;
 

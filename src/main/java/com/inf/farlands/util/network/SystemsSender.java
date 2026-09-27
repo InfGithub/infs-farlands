@@ -54,4 +54,9 @@ public final class SystemsSender {
         }
         SENT_DIMENSIONS.keySet().retainAll(roster);
     }
+
+    /** 停服时清空已发维度记录。 */
+    public static void clearWorldState() {
+        SENT_DIMENSIONS.clear();
+    }
 }

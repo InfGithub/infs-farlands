@@ -138,6 +138,19 @@ public final class Long2ObjectStripedMap<V> {
         }
     }
 
+    /** 清空全部分段。调用点都在静止状态，没有并发读写。 */
+    public void clear() {
+        for (int i = 0; i < SEG_COUNT; i++) {
+            StampedLock l = locks[i];
+            long stamp = l.writeLock();
+            try {
+                segments[i].clear();
+            } finally {
+                l.unlockWrite(stamp);
+            }
+        }
+    }
+
     public int size() {
         int n = 0;
         for (int i = 0; i < SEG_COUNT; i++) {

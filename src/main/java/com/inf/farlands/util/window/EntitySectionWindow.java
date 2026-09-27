@@ -25,6 +25,11 @@ public final class EntitySectionWindow {
         return ranges;
     }
 
+    /** 停服时清空窗口带。update 在玩家列表为空时本就会自清，这里只是把新世界启动到首个 tick 之间也覆盖掉。 */
+    public static void clear() {
+        ranges = new int[0];
+    }
+
     public static void update(List<ServerPlayer> players) {
         int n = players.size();
         if (n == 0) {

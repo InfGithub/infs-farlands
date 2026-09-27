@@ -137,4 +137,16 @@ public final class ChunkReadiness {
     public static boolean isShuttingDown() {
         return shuttingDown;
     }
+
+    /**
+     * 停服时丢弃登记表并复位关服标志。
+     *
+     * <p>标志只置位不复位的话，同一个进程里再开一个世界时，saveChunkIfNeeded 的门会一直看
+     * isChunkBusy 而不是 isDataReady，对新世界是错的语义。复位必须晚于 vanilla 的 saveAllChunks，
+     * 所以调用点在 stopServer 的 RETURN。
+     */
+    public static void clearAll() {
+        WATCHED.clear();
+        shuttingDown = false;
+    }
 }

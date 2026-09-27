@@ -106,6 +106,11 @@ public final class SectionStage {
         return stage >= TERRAIN && stage < LIGHTED;
     }
 
+    /** 停服时清空全部 chunk 的阶段表。键只含坐标，不清会让下一个世界同坐标的 chunk 继承旧阶段。 */
+    public static void clearAll() {
+        STAGES.clear();
+    }
+
     /**
      * 该 chunk 是否有做过但没点亮的段。fsa 读回后停在 CARVERS 的段属这一类，它是光照补触发与
      * 数据就绪判据共同的输入。

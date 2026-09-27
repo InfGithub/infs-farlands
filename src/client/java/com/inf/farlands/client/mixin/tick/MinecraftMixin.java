@@ -1,8 +1,10 @@
 package com.inf.farlands.client.mixin.tick;
 
+import com.inf.farlands.client.ClientWorldState;
 import com.inf.farlands.client.FarlandsClientTick;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,5 +28,24 @@ public class MinecraftMixin {
     @Inject(method = "tick", at = @At("RETURN"))
     private void farlands$clientTickEnd(CallbackInfo ci) {
         FarlandsClientTick.atEnd((Minecraft) (Object) this, (int) clientTickCount);
+    }
+
+    /**
+     * 卸关卡后的进程级清理。三参 disconnect 是唯一出口：disconnectFromWorld、disconnectWithSavingScreen、
+     * disconnectWithProgressScreen 与两参 disconnect 最终都汇入它。RETURN 处集成服务端线程已死、level 已置空、
+     * updateLevelInEngines(null) 已跑、player 已空，旧世界的打包键没有活持有者。
+     */
+    @Inject(method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;ZZ)V", at = @At("RETURN"))
+    private void farlands$clearOnDisconnect(Screen screen, boolean keepResourcePacks, boolean stopSound,
+            CallbackInfo ci) {
+        ClientWorldState.clearOnLevelDrop();
+    }
+
+    /**
+     * 服务端要求重入配置阶段时的那条卸关卡路径。它不经过 disconnect，也不停集成服务端，所以只清客户端这一侧。
+     */
+    @Inject(method = "clearClientLevel(Lnet/minecraft/client/gui/screens/Screen;)V", at = @At("RETURN"))
+    private void farlands$clearOnLevelClear(Screen screen, CallbackInfo ci) {
+        ClientWorldState.clearOnLevelDrop();
     }
 }

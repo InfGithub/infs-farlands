@@ -31,6 +31,11 @@ public class SectionUtil {
         return lookup.size();
     }
 
+    /** 客户端卸关卡时清空。 */
+    public static void clearAll() {
+        lookup.clear();
+    }
+
     public static void trim(long currentTick) {
         long cutoff = currentTick - 600;
         lookup.removeIf(p -> p.lastAccess < cutoff);

@@ -310,6 +310,37 @@ public final class SectionIO {
         }
     }
 
+    /**
+     * 停服：关掉全部缓存文件并清空缓存，释放上一个世界的句柄与内存偏移表。
+     *
+     * <p>必须排在 flushAllSync 之后：偏移表脏页在那一步已经同步落盘，而把它标脏的 commitWrite 回调都在
+     * 主线程队列里，主线程此刻正停在这段注入里，所以此后不会再有回调标脏。这里仍按淘汰路径的写法做一次
+     * 防御：先 flushAggregate 取脏页并同步写掉，再 close。走异步的 submitWritePages 不行，进程可能马上
+     * 结束；直接 close 更不行，flushAggregate 会清掉脏标记，页没写就等于永久丢掉偏移表。
+     *
+     * <p>不关 IO 执行器：单机换世界时同一个进程还要用它。
+     */
+    public static void clearCache() {
+        for (Path p : new ArrayList<>(cache.keySet())) {
+            SectionStorage st = cache.remove(p);
+            if (st == null) {
+                continue;
+            }
+            List<SectionStorage.PageWrite> pages = st.flushAggregate();
+            if (!pages.isEmpty()) {
+                try {
+                    st.writePages(pages);
+                } catch (Exception e) {
+                    InfsFarlands.LOGGER.error("fsa clearCache flush failed {}", p, e);
+                }
+            }
+            try {
+                st.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     // ---- 读回在途 ----
 
     public static IntSet readingSet(long chunkKey) {

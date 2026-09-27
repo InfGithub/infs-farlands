@@ -37,6 +37,15 @@ public class BlockUtil {
         return lookup.size();
     }
 
+    /** 客户端卸关卡时清空两张表。清掉之后新建的键会在 put 里重新注册，旧世界的键不再有活持有者。 */
+    public static void clearAll() {
+        lookup.clear();
+        Long2ObjectStripedMap<IntBlockPos> old = oldLookup;
+        if (old != null) {
+            old.clear();
+        }
+    }
+
     // --------------------------------------------
 
     public static void swap() {

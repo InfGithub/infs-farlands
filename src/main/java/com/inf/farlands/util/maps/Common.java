@@ -60,6 +60,11 @@ public class Common {
         return PENDING_SECTION_DATA.remove(new PendingKey(dimension, ChunkPos.pack(cx, cz)));
     }
 
+    /** 客户端卸关卡时清空 §5 缓存。键只含维度与坐标，跨世界会命中同一格。 */
+    public static void clearPendingSectionData() {
+        PENDING_SECTION_DATA.clear();
+    }
+
     /** chunk 卸载时丢弃缓存，防残留堆积。 */
     public static void discardPendingSectionData(ResourceKey<Level> dimension, ChunkPos pos) {
         PENDING_SECTION_DATA.remove(new PendingKey(dimension, pos.pack()));
