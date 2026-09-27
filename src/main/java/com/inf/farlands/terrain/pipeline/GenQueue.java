@@ -121,12 +121,18 @@ public final class GenQueue {
                 sl);
     }
 
-    /** Y 触发：主线程上的单 section 请求。幂等，已生成不入队，入队粒度是 chunk 级任务。 */
+    /**
+     * Y 触发：主线程上的单 section 请求。幂等，已点亮不入队，入队粒度是 chunk 级任务。
+     *
+     * <p>门取 LIGHTED 而不是 TERRAIN：读回后停在 TERRAIN 到 CARVERS 之间的段也需要一次入队，
+     * 由 GenTask 的光照补触发收口。取 TERRAIN 会把窗口滑入的单段读回直接挡掉，那条路的段在
+     * 恢复后已经 isOrAfter 为 TERRAIN。
+     */
     public static void enqueue(LevelChunk chunk, int sectionY) {
-        if (SectionStage.isOrAfter(chunk, sectionY, SectionStage.TERRAIN)) {
+        if (SectionStage.isOrAfter(chunk, sectionY, SectionStage.LIGHTED)) {
             return;
         }
-        // fsa 读回在途：该 section 正在从磁盘恢复，完成回调会再调 enqueue，由 isOrAfter 跳过。
+        // fsa 读回在途：该 section 正在从磁盘恢复，完成回调会再调 enqueue，由本方法的 stage 门判定。
         if (SectionIO.isReading(chunk.getPos().pack(), sectionY)) {
             return;
         }
@@ -243,6 +249,22 @@ public final class GenQueue {
         return found[0];
     }
 
+    /**
+     * 该 chunk 是否仍有做过但没点亮的段，即 stage 落在 TERRAIN 到 CARVERS 之间的段。
+     *
+     * <p>存在这类段说明光照还没跑过。scanChunk 不带这条判据的话，一个 stage 停在 CARVERS 的
+     * chunk 会永远不被重扫：光照失败一次就再没有下一次，而它的段也永远不会写盘。
+     */
+    private static boolean hasBelowLighted(LevelChunk chunk) {
+        boolean[] found = { false };
+        SectionStage.forEachStage(chunk, (sy, stage) -> {
+            if (stage >= SectionStage.TERRAIN && stage < SectionStage.LIGHTED) {
+                found[0] = true;
+            }
+        });
+        return found[0];
+    }
+
     /** onServerTick 每 tick 唤醒，submit 一批。 */
     public static void tick() {
         wakeConsumer();
@@ -297,8 +319,8 @@ public final class GenQueue {
     }
 
     /**
-     * 扫描单个 chunk：已加载 LevelChunk 且窗口并集内有未 TERRAIN 的 section，或 surface 与 carvers
-     * 待处理，则 enqueueChunk，幂等。
+     * 扫描单个 chunk：已加载 LevelChunk 且窗口并集内有未 TERRAIN 的 section、surface 与 carvers
+     * 待处理、或仍有做过但没点亮的段，则 enqueueChunk，幂等。
      */
     private static boolean scanChunk(ServerLevel level, int cx, int cz) {
         ChunkAccess ca = level.getChunk(cx, cz, ChunkStatus.FULL, false);
@@ -312,7 +334,8 @@ public final class GenQueue {
         }
         if (!hasUnprocessed(lc)
                 && !SurfaceFiller.hasSurfacePending(lc)
-                && !CarverFiller.hasCarversPending(lc)) {
+                && !CarverFiller.hasCarversPending(lc)
+                && !hasBelowLighted(lc)) {
             return false;
         }
         enqueueChunk(lc);

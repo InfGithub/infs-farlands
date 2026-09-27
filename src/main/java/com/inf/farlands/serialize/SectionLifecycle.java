@@ -133,12 +133,14 @@ public final class SectionLifecycle {
                     if (budget[0] <= 0) {
                         return;
                     }
-                    if (wc.isSectionDirty(sy)) {
+                    if (!wc.isSectionDirty(sy)) {
+                        removeFromMemory(lc, sy);
+                    } else if (SectionStage.getStage(lc, sy) >= SectionStage.LIGHTED) {
                         pendingEncode.add(new EncodeUnit(lc, sy, true));
                         budget[0]--;
-                    } else {
-                        removeFromMemory(lc, sy);
                     }
+                    // 脏但低于 LIGHTED：既不入队也不释放。入队会被 encodeNow 的兜底拒掉，
+                    // 释放则让未落盘的段从内存消失。光照补触发完成后由 persistChunkDirty 收口。
                 });
             }
         }
@@ -299,7 +301,8 @@ public final class SectionLifecycle {
                 }
                 WindowedChunk wc = (WindowedChunk) lc;
                 for (Integer sy : wc.windowedAllSections().keySet()) {
-                    if (wc.isSectionDirty(sy)) {
+                    // 同 cleanup：低于 LIGHTED 的段此刻不写盘，等光照补触发后的 persistChunkDirty。
+                    if (wc.isSectionDirty(sy) && SectionStage.getStage(lc, sy) >= SectionStage.LIGHTED) {
                         pendingEncode.add(new EncodeUnit(lc, sy, false));
                     }
                 }
@@ -461,6 +464,12 @@ public final class SectionLifecycle {
             DataLayer bl = le.getLayerListener(LightLayer.BLOCK).getDataLayerData(SectionPos.of(lc.getPos(), sy));
             DataLayer sl = le.getLayerListener(LightLayer.SKY).getDataLayerData(SectionPos.of(lc.getPos(), sy));
             int stage = SectionStage.getStage(lc, sy);
+            // 兜底不变量：fsa 里只允许写入 LIGHTED。低于它的段这时仍在内存里且仍脏，
+            // 光照补触发完成后 persistChunkDirty 会重新入队；写下去等于把没点亮的状态固化到盘上，
+            // 重进时恢复出低于 LIGHTED 的段，又得补一次光照。
+            if (stage < SectionStage.LIGHTED) {
+                return null;
+            }
             return SectionSerializer.encode(section, bl, sl, stage, factory, sy);
         } catch (Exception e) {
             // encode 失败就静默返回，数据不写盘也就是丢失，但 dirty 保留，之后重试

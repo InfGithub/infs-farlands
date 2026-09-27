@@ -114,8 +114,16 @@ public final class GenTask {
                 InfsFarlands.LOGGER.error("GENTASK carvers ex chunk={},{} {}",
                         chunk.getPos().x(), chunk.getPos().z(), e.toString());
             }
-            // 光照触发条件是 carvers 完成，carvers 是光照前最后一个阶段。
-            if (carved.length > 0) {
+            // 光照触发条件：carvers 产出了东西，或读回后停在 TERRAIN 到 CARVERS 之间的段。
+            // 后者是 fsa 恢复路径的稳定态，三条 pending 判据都不认它，carvers 因此为空，
+            // 只按 carvers 判会永远等不到光照。
+            int[] belowLighted = belowLightedSections();
+            if (carved.length > 0 || belowLighted.length > 0) {
+                // 恢复的段不脏，applyDecoded 只恢复 stage。不标脏则 persistChunkDirty 写不到它，
+                // stage 会一直停在盘上的旧值，每次重进都要重算一遍光照。
+                for (int sy : belowLighted) {
+                    ((WindowedChunk) chunk).markSectionDirty(sy);
+                }
                 GenQueue.notifyGenerated(chunk);
                 // fill、surface、carvers 直接写 section，没有 vanilla 广播；这里只标记该 chunk
                 // 内容已变，由 ChunkDataSender 每 tick 按玩家当前窗口物化后再发 §5 包。
@@ -127,6 +135,31 @@ public final class GenTask {
             // fill 异常也清理，清在途并释放 ticket。异常路径若不清理会让标志残留，chunk 永不卸载。
             GenQueue.completeTask(chunk);
         }
+    }
+
+    /**
+     * 做过但没点亮的 section，即 stage 落在 TERRAIN 到 CARVERS 之间的段，光照补触发的判据。
+     *
+     * <p>它是 fsa 恢复路径的稳定态：collectSegments 跳过 isOrAfter 为 TERRAIN 的段，SurfaceFiller
+     * 只认 TERRAIN 未 SURFACE 的段，CarverFiller 只认 SURFACE 未 CARVERS 的段，三条 pending 判据
+     * 都不认 stage 已是 CARVERS 的段，carvers 因此为空，光照永远不会被触发。UNPROCESSED 与 BIOMES
+     * 不在判据内：窗口内的由生成收口，窗口外的永不处理。
+     *
+     * <p>按 stage 载体取，不按 allSections 取：非噪声生成器的维度里 fill 会早退、段没被建出来，
+     * 而 GenTask 已经推进了 stage，按 allSections 会漏掉它们。
+     */
+    private int[] belowLightedSections() {
+        List<Integer> out = new ArrayList<>();
+        SectionStage.forEachStage(chunk, (sy, stage) -> {
+            if (stage >= SectionStage.TERRAIN && stage < SectionStage.LIGHTED) {
+                out.add(sy);
+            }
+        });
+        int[] arr = new int[out.size()];
+        for (int i = 0; i < arr.length; i++) {
+            arr[i] = out.get(i);
+        }
+        return arr;
     }
 
     /**
