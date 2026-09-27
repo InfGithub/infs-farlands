@@ -1,5 +1,6 @@
 package com.inf.farlands.register;
 
+import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.command.FarlandsCommandRegistry;
 import com.inf.farlands.register.command.FarLandsCommands;
 import com.inf.farlands.register.packet.*;
@@ -21,14 +22,45 @@ import com.inf.farlands.terrain.system.terrain.noise.overworld.Oct.OctNoiseSyste
 import com.inf.farlands.terrain.system.terrain.noise.overworld.Vanilla.VanillaNoiseSystem;
 
 public class FarlandsRegister {
+
+    /** payload 类型是否已登记。模组初始化与三处 codec 构造点都会调，可能来自不同线程。 */
+    private static boolean payloadTypesRegistered;
+
     public static void registerStatic() {
-        ChunkDataPacketRegister.registerType();
-        ClampStatePacketRegister.registerType();
-        ClampTogglePacketRegister.registerType();
-        LightUpdatePacketRegister.registerType();
-        SectionBlocksUpdatePacketRegister.registerType();
-        SystemsPacketRegister.registerType();
+        registerPayloadTypes("mod-init");
         registerSystems();
+    }
+
+    /**
+     * 登记六个自定义 payload 类型，只做一次。
+     *
+     * <p>两个来源：模组初始化，以及 {@code ClientboundCustomPayloadPacket} 与
+     * {@code ServerboundCustomPayloadPacket} 的 {@code <clinit>} 里那三处 codec 构造点。分发表在那三个点上
+     * 一次性建好，内容取自 Commonbounds／Serverbounds 的当时内容，所以谁先触发那个 {@code <clinit>}，
+     * 快照就是谁的时机。装了会在自己模组初始化期碰这两个类的模组（Fabric API 的 networking 模块就是）时，
+     * {@code <clinit>} 就早于本模组的初始化，快照拍到空表，本模组的包全部落回 DiscardedPayload，发包抛
+     * ClassCastException。故三处构造点也负责把表填好，使这件事与任何第三方模组的初始化顺序无关。
+     *
+     * <p>必须整体上锁：clientbound 的 {@code <clinit>} 在渲染线程，serverbound 的在 Netty 线程，两个方向的
+     * 表可能并发构造，check-then-act 会双填，而重复 id 会让 CustomPacketPayload.codec 的
+     * toUnmodifiableMap 抛 Duplicate key。
+     *
+     * @param source 触发来源，只用于日志；第一个调用者的来源会留下，便于事后判别是顺序问题还是别的。
+     */
+    public static void registerPayloadTypes(String source) {
+        synchronized (FarlandsRegister.class) {
+            if (payloadTypesRegistered) {
+                return;
+            }
+            payloadTypesRegistered = true;
+            InfsFarlands.LOGGER.info("farlands: registered custom payload types from {}", source);
+            ChunkDataPacketRegister.registerType();
+            ClampStatePacketRegister.registerType();
+            ClampTogglePacketRegister.registerType();
+            LightUpdatePacketRegister.registerType();
+            SectionBlocksUpdatePacketRegister.registerType();
+            SystemsPacketRegister.registerType();
+        }
     }
 
     /** 15 个内置系统按四族登记，id 与实现类的对应关系集中在此。 */

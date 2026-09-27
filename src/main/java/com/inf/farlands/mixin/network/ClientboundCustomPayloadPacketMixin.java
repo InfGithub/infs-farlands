@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
+import com.inf.farlands.register.FarlandsRegister;
 import com.inf.farlands.util.network.Commonbounds;
 
 import net.minecraft.network.FriendlyByteBuf;
@@ -22,6 +23,8 @@ public class ClientboundCustomPayloadPacketMixin {
     private static StreamCodec<RegistryFriendlyByteBuf, CustomPacketPayload> addGameplayTypes(
             CustomPacketPayload.FallbackProvider<RegistryFriendlyByteBuf> fallback,
             List<CustomPacketPayload.TypeAndCodec<? super RegistryFriendlyByteBuf, ?>> types) {
+        // 表就在这里构造，所以在这里保证本模组的类型已登记：与任何第三方模组的初始化顺序无关。
+        FarlandsRegister.registerPayloadTypes("codec-clinit");
         List<CustomPacketPayload.TypeAndCodec<? super RegistryFriendlyByteBuf, ?>> extended = new ArrayList<>(types);
         for (int i = 0; i < Commonbounds.gameplayBounds.size(); i++) {
             extended.add(Commonbounds.gameplayBounds.get(i));
@@ -33,6 +36,7 @@ public class ClientboundCustomPayloadPacketMixin {
     private static StreamCodec<FriendlyByteBuf, CustomPacketPayload> addConfigTypes(
             CustomPacketPayload.FallbackProvider<FriendlyByteBuf> fallback,
             List<CustomPacketPayload.TypeAndCodec<? super FriendlyByteBuf, ?>> types) {
+        FarlandsRegister.registerPayloadTypes("codec-clinit");
         List<CustomPacketPayload.TypeAndCodec<? super FriendlyByteBuf, ?>> extended = new ArrayList<>(types);
         for (int i = 0; i < Commonbounds.configBounds.size(); i++) {
             extended.add(Commonbounds.configBounds.get(i));

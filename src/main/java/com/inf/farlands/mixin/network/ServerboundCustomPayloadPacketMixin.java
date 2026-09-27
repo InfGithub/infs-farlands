@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.inf.farlands.register.FarlandsRegister;
 import com.inf.farlands.util.network.ServerPacketHandlers;
 import com.inf.farlands.util.network.Serverbounds;
 
@@ -27,6 +28,9 @@ public class ServerboundCustomPayloadPacketMixin {
     private static StreamCodec<RegistryFriendlyByteBuf, CustomPacketPayload> addGameplayTypes(
             CustomPacketPayload.FallbackProvider<RegistryFriendlyByteBuf> fallback,
             List<CustomPacketPayload.TypeAndCodec<? super RegistryFriendlyByteBuf, ?>> types) {
+        // 同 clientbound：表在这里构造，就在这里保证已登记。本表在 Netty 线程上构造，
+        // 与另一侧可能并发，故 registerPayloadTypes 内部整体上锁。
+        FarlandsRegister.registerPayloadTypes("codec-clinit");
         List<CustomPacketPayload.TypeAndCodec<? super RegistryFriendlyByteBuf, ?>> extended = new ArrayList<>(types);
         for (int i = 0; i < Serverbounds.gameplayBounds.size(); i++) {
             extended.add(Serverbounds.gameplayBounds.get(i));
