@@ -249,22 +249,6 @@ public final class GenQueue {
         return found[0];
     }
 
-    /**
-     * 该 chunk 是否仍有做过但没点亮的段，即 stage 落在 TERRAIN 到 CARVERS 之间的段。
-     *
-     * <p>存在这类段说明光照还没跑过。scanChunk 不带这条判据的话，一个 stage 停在 CARVERS 的
-     * chunk 会永远不被重扫：光照失败一次就再没有下一次，而它的段也永远不会写盘。
-     */
-    private static boolean hasBelowLighted(LevelChunk chunk) {
-        boolean[] found = { false };
-        SectionStage.forEachStage(chunk, (sy, stage) -> {
-            if (stage >= SectionStage.TERRAIN && stage < SectionStage.LIGHTED) {
-                found[0] = true;
-            }
-        });
-        return found[0];
-    }
-
     /** onServerTick 每 tick 唤醒，submit 一批。 */
     public static void tick() {
         wakeConsumer();
@@ -335,7 +319,7 @@ public final class GenQueue {
         if (!hasUnprocessed(lc)
                 && !SurfaceFiller.hasSurfacePending(lc)
                 && !CarverFiller.hasCarversPending(lc)
-                && !hasBelowLighted(lc)) {
+                && !SectionStage.hasBelowLighted(lc)) {
             return false;
         }
         enqueueChunk(lc);

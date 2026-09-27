@@ -321,6 +321,12 @@ public final class SectionIO {
         return set != null && set.contains(sectionY);
     }
 
+    /** 该 chunk 是否有读回在途。只回答有无，不把可变的集合交给调用方。 */
+    public static boolean isReadingAny(long chunkKey) {
+        IntSet set = readingInFlight.get(chunkKey);
+        return set != null && !set.isEmpty();
+    }
+
     public static void markReading(LevelChunk chunk, int sectionY) {
         readingInFlight.computeIfAbsent(chunk.getPos().pack(), k -> new IntOpenHashSet()).add(sectionY);
     }

@@ -101,6 +101,28 @@ public final class SectionStage {
         return false;
     }
 
+    /** 段是否做过但没点亮，即 stage 落在 TERRAIN 到 LIGHTED 之间。 */
+    public static boolean isBelowLighted(int stage) {
+        return stage >= TERRAIN && stage < LIGHTED;
+    }
+
+    /**
+     * 该 chunk 是否有做过但没点亮的段。fsa 读回后停在 CARVERS 的段属这一类，它是光照补触发与
+     * 数据就绪判据共同的输入。
+     *
+     * <p>扫描路径也要带上这条判据：一个 stage 停在 CARVERS 的 chunk 没有任何 pending 步骤，
+     * 光照失败一次就再没有下一次，它的段也永远不会写盘。
+     */
+    public static boolean hasBelowLighted(LevelChunk chunk) {
+        boolean[] found = { false };
+        forEachStage(chunk, (sy, stage) -> {
+            if (isBelowLighted(stage)) {
+                found[0] = true;
+            }
+        });
+        return found[0];
+    }
+
     /** 遍历该 chunk 的 section 状态。无 key 时什么都不做。 */
     public static void forEachStage(LevelChunk chunk, BiConsumer<Integer, Integer> consumer) {
         ConcurrentHashMap<Integer, Integer> m = STAGES.get(chunk.getPos().pack());

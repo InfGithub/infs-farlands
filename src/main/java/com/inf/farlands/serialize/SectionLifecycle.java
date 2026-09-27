@@ -98,6 +98,11 @@ public final class SectionLifecycle {
      */
     private static final Set<LevelChunk> pendingWindowRead = ConcurrentHashMap.newKeySet();
 
+    /** 该 chunk 是否在等窗口建立后读回。ChunkReadiness 的就绪判据之一。 */
+    static boolean isPendingWindowRead(LevelChunk chunk) {
+        return pendingWindowRead.contains(chunk);
+    }
+
     /** 26.1.2 没有 ChunkMap.getChunks()，改反射 visibleChunkMap。 */
     private static final Field F_VISIBLE_CHUNKS;
 
@@ -173,10 +178,14 @@ public final class SectionLifecycle {
      * 否则随探索单调增长。
      */
     public static void flushChunk(LevelChunk lc) {
+        // 卸载即与窗口读回、就绪等待脱钩：这个 chunk 不会再被读回，挂起项必须丢掉，
+        // 否则 pendingWindowRead 与就绪登记表会留下已卸载的强引用。
+        pendingWindowRead.remove(lc);
+        ServerLevel level = (ServerLevel) lc.getLevel();
+        ChunkReadiness.discard(level, lc.getPos());
         if (TerrainHooks.isChunkBusy(lc)) {
             return;
         }
-        ServerLevel level = (ServerLevel) lc.getLevel();
         ENCODE_TASKS_IN_FLIGHT.incrementAndGet();
         try {
             ENCODE_POOL.submit(() -> {

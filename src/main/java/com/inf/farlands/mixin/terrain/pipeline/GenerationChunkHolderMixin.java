@@ -170,14 +170,22 @@ public abstract class GenerationChunkHolderMixin {
             try {
                 CompletableFuture.runAsync(
                         () -> {
+                            boolean filled = false;
                             try {
                                 BiomeFiller.fillChunkBiomes(level, levelchunk);
+                                filled = true;
                             } finally {
-                                GenQueue.endBiomeFill(levelchunk);
+                                if (!filled) {
+                                    GenQueue.endBiomeFill(levelchunk);
+                                }
                             }
                         },
                         Util.backgroundExecutor())
                         .thenAccept(v -> SectionIO.runOnMainThread(() -> {
+                            // 群系在途标志与读回在同一次主线程任务里交接。若在后台线程就清掉标志，
+                            // 从清掉到 loadChunkSections 落下读回标记之间会出现一个既无在途也无读回的
+                            // 缝，ChunkReadiness 会把这个缝判成就绪。
+                            GenQueue.endBiomeFill(levelchunk);
                             // fsa 读回：先查磁盘窗口内 section，有则读回恢复数据、光照、stage 并补发。
                             // 完成后才 enqueueChunk，collectSegments 的 isOrAfter(TERRAIN) 自动跳过已读回的，
                             // 磁盘没有的 section 正常入生成队列。

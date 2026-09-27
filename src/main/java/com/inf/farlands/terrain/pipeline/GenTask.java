@@ -151,7 +151,7 @@ public final class GenTask {
     private int[] belowLightedSections() {
         List<Integer> out = new ArrayList<>();
         SectionStage.forEachStage(chunk, (sy, stage) -> {
-            if (stage >= SectionStage.TERRAIN && stage < SectionStage.LIGHTED) {
+            if (SectionStage.isBelowLighted(stage)) {
                 out.add(sy);
             }
         });

@@ -1,6 +1,7 @@
 package com.inf.farlands;
 
 import com.inf.farlands.light.FarLandsLightEngine;
+import com.inf.farlands.serialize.ChunkReadiness;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.terrain.LevelSystems;
@@ -153,5 +154,7 @@ public class FarlandsTick {
         GenQueue.tick();
         // 动态扫描：每 tick 从玩家当前位置螺旋扫描视距内未生成的 chunk 补入队。
         GenQueue.scanAndEnqueue(server);
+        // 数据就绪驱动：当 tick 变成就绪的 chunk 在同一 tick 放行 promotion 的两个 future。
+        ChunkReadiness.drive();
     }
 }
