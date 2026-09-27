@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * fsa 的关服同步刷盘。
  *
  * 旧仓库挂在 ServerStoppingEvent 上，顺序是 awaitEncodeTasks(5000)、awaitIODrain、
- * drainMainThreadTasks、GenQueue.awaitIdle(5000)、shutdownSyncFlush。本 port 的等价位点是
+ * drainMainThreadTasks、GenQueue.awaitIdle(server, 5000)、shutdownSyncFlush。本 port 的等价位点是
  * MinecraftServer.stopServer() 的 HEAD，已 javap 核实存在且为 protected。它在最终保存之前
  * 执行，此时各维度与 chunk 都还在。
  *
@@ -43,7 +43,7 @@ public abstract class MinecraftServerMixin {
             SectionLifecycle.awaitEncodeTasks(server, 5000);
             SectionIO.awaitIODrain();
             SectionIO.drainMainThreadTasks(server);
-            GenQueue.awaitIdle(5000);
+            GenQueue.awaitIdle(server, 5000);
             SectionLifecycle.shutdownSyncFlush(server);
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("farlands: fsa shutdown flush failed", e);

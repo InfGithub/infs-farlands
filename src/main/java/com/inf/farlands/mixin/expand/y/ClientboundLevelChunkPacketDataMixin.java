@@ -1,5 +1,6 @@
 package com.inf.farlands.mixin.expand.y;
 
+import com.inf.farlands.serialize.SectionSerializer;
 import com.inf.farlands.util.window.WindowSendState;
 
 import java.util.List;
@@ -45,7 +46,10 @@ public class ClientboundLevelChunkPacketDataMixin {
         buffer.writeVarInt(toSend.size());
         for (Map.Entry<Integer, LevelChunkSection> e : toSend) {
             buffer.writeVarInt(e.getKey());
-            e.getValue().write(buffer);
+            // 与编码池的 fsa 编码互斥，同 SectionSerializer.packLockFor。
+            synchronized (SectionSerializer.packLockFor(chunk.getPos().pack())) {
+                e.getValue().write(buffer);
+            }
         }
     }
 

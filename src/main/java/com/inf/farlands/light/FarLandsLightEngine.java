@@ -589,31 +589,44 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
      * （IntegratedServer.initServer 的 saveEverything 卡住，进度屏冻结、无日志无异常）。
      */
     private void drainLight() {
-        int budget = acquireBudget();
-        if (budget <= 0) {
-            exitDrain(); // 本窗配额已用完
-            return;
+        try {
+            int budget = acquireBudget();
+            if (budget <= 0) {
+                return; // 本窗配额已用完，出口统一在 finally
+            }
+            while (budget > 0) {
+                long key = queue.nextDirty();
+                if (key == Long.MIN_VALUE) {
+                    break;
+                }
+                FarLandsLightQueue.ChunkWork tasks = queue.takeTask(key);
+                if (tasks == null) {
+                    continue; // 已被并发取走，takeTask 原子 remove，空转一次
+                }
+                int cx = tasks.chunkX();
+                int cz = tasks.chunkZ();
+                if (!taskLock.tryLock(cx, cz)) {
+                    queue.requeue(tasks); // 相邻任务占用，重排队尾下轮重试
+                    Thread.yield();
+                    continue;
+                }
+                try {
+                    lightPool.submit(() -> executeTask(tasks, cx, cz));
+                } catch (Throwable t) {
+                    // 池已关闭或提交被拒：锁必须还、任务必须放回。否则这个 ChunkWork 既不在
+                    // workMap 也不在 pendingWork，没人执行也没人 requeue，onComplete 永不完成，
+                    // LIGHT_IN_FLIGHT 永久为真，块锁也永远不释放。与 wakeConsumer 的处理对齐。
+                    taskLock.unlock(cx, cz);
+                    queue.requeue(tasks);
+                    InfsFarlands.LOGGER.error("farlands: light submit failed chunk={},{}", cx, cz, t);
+                    return;
+                }
+                budget--;
+            }
+        } finally {
+            // consumerActive 是 wakeConsumer CAS 的唯一闸门，任何出口漏掉它都会让队列永久搁浅。
+            exitDrain();
         }
-        while (budget > 0) {
-            long key = queue.nextDirty();
-            if (key == Long.MIN_VALUE) {
-                break;
-            }
-            FarLandsLightQueue.ChunkWork tasks = queue.takeTask(key);
-            if (tasks == null) {
-                continue; // 已被并发取走，takeTask 原子 remove，空转一次
-            }
-            int cx = tasks.chunkX();
-            int cz = tasks.chunkZ();
-            if (!taskLock.tryLock(cx, cz)) {
-                queue.requeue(tasks); // 相邻任务占用，重排队尾下轮重试
-                Thread.yield();
-                continue;
-            }
-            lightPool.submit(() -> executeTask(tasks, cx, cz));
-            budget--;
-        }
-        exitDrain();
     }
 
     /**

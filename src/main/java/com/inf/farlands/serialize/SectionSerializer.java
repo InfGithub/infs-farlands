@@ -50,6 +50,30 @@ public final class SectionSerializer {
     private SectionSerializer() {
     }
 
+    /**
+     * 打包调色板的按 chunk 条带锁。
+     *
+     * <p>同一批 LevelChunkSection 在服务端有四个打包者：编码池上的 fsa 编码 SectionLifecycle.encodeNow、
+     * 主线程的 §5 段包 ChunkDataSender.flushPendingSections、主线程的 chunk 包构造与 biomes 包构造。四者都进
+     * PalettedContainer 的 ThreadingDetector，两个线程同时打包同一个容器就直接抛 Accessing
+     * PalettedContainer from multiple threads。编码搬到池上之前四者都在主线程，天然互斥，所以这四处在写
+     * 之前都要取同一把键的锁。
+     *
+     * <p>粒度按 chunk：不同 chunk 不互卡，只有同一 chunk 正在被编码时主线程才短暂等一次打包。
+     */
+    private static final Object[] PACK_LOCKS = new Object[64];
+
+    static {
+        for (int i = 0; i < PACK_LOCKS.length; i++) {
+            PACK_LOCKS[i] = new Object();
+        }
+    }
+
+    /** 取该 chunk 的打包锁。四处打包点必须用同一 key。 */
+    public static Object packLockFor(long chunkKey) {
+        return PACK_LOCKS[(int) (chunkKey & 63)];
+    }
+
     /** 编码：section 加两个光照层加 stage，产出含长度头的 fsa 条目字节。 */
     public static byte[] encode(LevelChunkSection section, DataLayer blockLight, DataLayer skyLight,
             int stage, PalettedContainerFactory containerFactory, int sectionY) {

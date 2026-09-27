@@ -466,10 +466,13 @@ public final class GenQueue {
      * 关服等待：等全局生成与光照在途收敛，有界。每轮唤醒消费，drainGen 消费不完不续唤醒，
      * 超时由 shutdownSyncFlush 的 isChunkBusy 跳过兜底。
      */
-    public static void awaitIdle(long timeoutMs) {
+    public static void awaitIdle(MinecraftServer server, long timeoutMs) {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline) {
             wakeConsumer();
+            // 关键：抽主执行器。群系填充收尾与读回完成都投回主线程跑，不抽它们，那些在途标志永远落不
+            // 下来，本等待就只会等满 timeout。
+            SectionIO.drainMainThreadTasks(server);
             if (!hasInflightWork()) {
                 return;
             }

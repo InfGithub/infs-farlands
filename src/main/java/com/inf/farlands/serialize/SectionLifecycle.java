@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.inf.farlands.FarlandsConfig;
@@ -76,8 +77,6 @@ public final class SectionLifecycle {
 
     /** 每 tick 清理入队上限。 */
     public static final int CLEANUP_BUDGET = 1024;
-    /** 每 tick 主线程 encode 上限，分摊预算，防卡 tick。 */
-    public static final int ENCODE_BUDGET = 256;
 
     /** 待编码单元。只存引用，编码时现取最新，主线程串行因此无竞态。mode 是 cleanup 语义。 */
     private record EncodeUnit(LevelChunk chunk, int sectionY, boolean cleanup) {
@@ -160,6 +159,7 @@ public final class SectionLifecycle {
                 });
             }
         }
+        wakeEncodeConsumer();
     }
 
     /** 卸载编码在途任务数，关服等待用，任务出口递减。 */
@@ -303,6 +303,7 @@ public final class SectionLifecycle {
                 pendingEncode.add(new EncodeUnit(lc, sy, false));
             }
         }
+        wakeEncodeConsumer();
     }
 
     /**
@@ -328,51 +329,132 @@ public final class SectionLifecycle {
                 }
             }
         }
+        wakeEncodeConsumer();
     }
 
-    // ---- 每 tick 编码消费：主线程 ----
+    // ---- 编码消费：池驱动 ----
 
-    /** 每 tick 在预算内 drain。现取，encode，prepare，再按文件与 mode 分组提交写。 */
+    /**
+     * 每 tick 唤醒编码消费者。主线程在这里不做编码，只把活交给 ENCODE_POOL，与 {@code GenQueue.tick} 同形。
+     * 名字保留 tick 是为了不动调用点；它同时是消费者被「写入者在途」挡回之后的唯一唤醒来源，所以延迟上限是
+     * 一 tick。
+     */
     public static void tick() {
-        Map<Path, List<SectionStorage.PendingWrite>> cleanupByFile = new LinkedHashMap<>();
-        Map<Path, List<CleanupUnit>> cleanupUnits = new LinkedHashMap<>();
-        Map<Path, List<SectionStorage.PendingWrite>> persistByFile = new LinkedHashMap<>();
-        Map<Path, List<CleanupUnit>> persistUnits = new LinkedHashMap<>();
-        Map<Path, ServerLevel> levelByPath = new HashMap<>();
+        wakeEncodeConsumer();
+    }
 
-        int budget = ENCODE_BUDGET;
-        while (budget-- > 0) {
-            EncodeUnit u = pendingEncode.poll();
-            if (u == null) {
-                break;
-            }
-            PalettedContainerFactory factory = ((WindowedChunk) u.chunk()).containerFactory();
-            byte[] entry = encodeNow(u.chunk(), u.sectionY(), factory);
-            if (entry == null) {
-                continue; // encode 失败，丢弃，dirty 保留，下次触发会重入队
-            }
-            ServerLevel level = (ServerLevel) u.chunk().getLevel();
-            ChunkPos cp = u.chunk().getPos();
-            Path path = SectionIO.filePath(level, cp.x(), cp.z(), u.sectionY());
-            SectionStorage st = SectionIO.getOrOpen(path);
-            SectionStorage.PendingWrite pw = st.prepareWrite(
-                    SectionStorage.slotIndex(cp.x() & 31, cp.z() & 31, u.sectionY() & 31), entry);
-            if (pw == null) {
-                continue;
-            }
-            levelByPath.put(path, level);
-            if (u.cleanup()) {
-                cleanupByFile.computeIfAbsent(path, k -> new ArrayList<>()).add(pw);
-                cleanupUnits.computeIfAbsent(path, k -> new ArrayList<>())
-                        .add(new CleanupUnit(u.chunk(), u.sectionY()));
-            } else {
-                persistByFile.computeIfAbsent(path, k -> new ArrayList<>()).add(pw);
-                persistUnits.computeIfAbsent(path, k -> new ArrayList<>())
-                        .add(new CleanupUnit(u.chunk(), u.sectionY()));
+    /** 编码消费者是否已在池上跑。CAS 保证同时只有一份 drain。 */
+    private static final AtomicBoolean encodeConsumerActive = new AtomicBoolean();
+
+    private static void wakeEncodeConsumer() {
+        if (encodeConsumerActive.compareAndSet(false, true)) {
+            try {
+                ENCODE_POOL.submit(SectionLifecycle::drainEncode);
+            } catch (RejectedExecutionException e) {
+                encodeConsumerActive.set(false); // 池已关闭，即关服，丢弃
             }
         }
-        submitBatches(levelByPath, cleanupByFile, cleanupUnits, true);
-        submitBatches(levelByPath, persistByFile, persistUnits, false);
+    }
+
+    /** 池线程产出的编码结果，主线程据此记账。 */
+    private record Encoded(LevelChunk chunk, int sectionY, boolean cleanup, byte[] entry) {
+    }
+
+    /**
+     * 池线程：出队、判写入者、编码，再按维度归批投回主线程记账。
+     *
+     * <p>编码搬到这里，依据是 encodeNow 自己的线程约定：主线程 tick 与编码池卸载共用，任意线程安全。
+     * 主线程只剩 getOrOpen、prepareWrite、commitWrite 与扇区分配，那些是主线程独占状态，不能搬。
+     *
+     * <p>整轮最多处理「进入时的队列长度」个单元，保证本轮必然结束。不满足写入者判据的单元放回队尾，留到
+     * 下一次唤醒。
+     */
+    /**
+     * 一轮 drain 最多编码的段数。编满就交接并立刻再唤醒一轮，把主线程每次吃的量钉在约 0.4 毫秒以内；
+     * 超过这个量的批次会让 map 分配与 LRU 命中率一起变差。
+     */
+    private static final int ENCODE_PASS_BUDGET = 256;
+
+    private static void drainEncode() {
+        boolean more = false;
+        try {
+            Map<ServerLevel, List<Encoded>> byLevel = new LinkedHashMap<>();
+            int remaining = Math.min(pendingEncode.size(), ENCODE_PASS_BUDGET);
+            while (remaining-- > 0) {
+                EncodeUnit u = pendingEncode.poll();
+                if (u == null) {
+                    break;
+                }
+                // 生成或群系在途：段内容还没定，此刻序列化会撞 PalettedContainer 的多线程检测。
+                if (TerrainHooks.isChunkBusy(u.chunk()) || TerrainHooks.isBiomeFilling(u.chunk())) {
+                    pendingEncode.addLast(u);
+                    continue;
+                }
+                PalettedContainerFactory factory = ((WindowedChunk) u.chunk()).containerFactory();
+                byte[] entry = encodeNow(u.chunk(), u.sectionY(), factory);
+                if (entry == null) {
+                    continue; // encode 失败或低于 LIGHTED，丢弃，dirty 保留，下次触发会重入队
+                }
+                if (!(u.chunk().getLevel() instanceof ServerLevel level)) {
+                    continue;
+                }
+                byLevel.computeIfAbsent(level, k -> new ArrayList<>())
+                        .add(new Encoded(u.chunk(), u.sectionY(), u.cleanup(), entry));
+            }
+            for (Map.Entry<ServerLevel, List<Encoded>> e : byLevel.entrySet()) {
+                ServerLevel level = e.getKey();
+                List<Encoded> encoded = e.getValue();
+                // 计数只覆盖到提交为止：后面的数据写由 awaitIODrain 的屏障负责等。
+                ENCODE_TASKS_IN_FLIGHT.incrementAndGet();
+                SectionIO.runOnMainThread(() -> applyEncoded(level, encoded), level);
+            }
+            // 只在本轮真有产出、且队列仍非空时续唤醒。全被写入者挡回时不能自旋，那些单元由每 tick 的
+            // tick() 兜底唤醒。唤醒放在 finally 之后，否则 CAS 会因本消费者仍在跑而失败。
+            more = !byLevel.isEmpty() && !pendingEncode.isEmpty();
+        } finally {
+            encodeConsumerActive.set(false);
+        }
+        if (more) {
+            wakeEncodeConsumer();
+        }
+    }
+
+    /**
+     * 主线程：把池上编好的结果记账并提交写批。onAllDone 的语义与搬池前一致：cleanup 是提交后删内存，
+     * persist 是提交后清脏。
+     */
+    private static void applyEncoded(ServerLevel level, List<Encoded> encoded) {
+        try {
+            Map<Path, List<SectionStorage.PendingWrite>> cleanupByFile = new LinkedHashMap<>();
+            Map<Path, List<CleanupUnit>> cleanupUnits = new LinkedHashMap<>();
+            Map<Path, List<SectionStorage.PendingWrite>> persistByFile = new LinkedHashMap<>();
+            Map<Path, List<CleanupUnit>> persistUnits = new LinkedHashMap<>();
+            Map<Path, ServerLevel> levelByPath = new HashMap<>();
+            for (Encoded e : encoded) {
+                ChunkPos cp = e.chunk().getPos();
+                Path path = SectionIO.filePath(level, cp.x(), cp.z(), e.sectionY());
+                SectionStorage st = SectionIO.getOrOpen(path);
+                SectionStorage.PendingWrite pw = st.prepareWrite(
+                        SectionStorage.slotIndex(cp.x() & 31, cp.z() & 31, e.sectionY() & 31), e.entry());
+                if (pw == null) {
+                    continue;
+                }
+                levelByPath.put(path, level);
+                if (e.cleanup()) {
+                    cleanupByFile.computeIfAbsent(path, k -> new ArrayList<>()).add(pw);
+                    cleanupUnits.computeIfAbsent(path, k -> new ArrayList<>())
+                            .add(new CleanupUnit(e.chunk(), e.sectionY()));
+                } else {
+                    persistByFile.computeIfAbsent(path, k -> new ArrayList<>()).add(pw);
+                    persistUnits.computeIfAbsent(path, k -> new ArrayList<>())
+                            .add(new CleanupUnit(e.chunk(), e.sectionY()));
+                }
+            }
+            submitBatches(levelByPath, cleanupByFile, cleanupUnits, true);
+            submitBatches(levelByPath, persistByFile, persistUnits, false);
+        } finally {
+            ENCODE_TASKS_IN_FLIGHT.decrementAndGet();
+        }
     }
 
     /**
@@ -490,7 +572,10 @@ public final class SectionLifecycle {
             if (stage < SectionStage.LIGHTED) {
                 return null;
             }
-            return SectionSerializer.encode(section, bl, sl, stage, factory, sy);
+            // 与主线程的三处段打包互斥，见 SectionSerializer.packLockFor。
+            synchronized (SectionSerializer.packLockFor(lc.getPos().pack())) {
+                return SectionSerializer.encode(section, bl, sl, stage, factory, sy);
+            }
         } catch (Exception e) {
             // encode 失败就静默返回，数据不写盘也就是丢失，但 dirty 保留，之后重试
             if (ENCODE_FAIL_LOGGED.getAndIncrement() < 20) {

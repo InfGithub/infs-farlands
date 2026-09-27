@@ -15,6 +15,7 @@ import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.network.expand.y.ChunkDataPacket;
 import com.inf.farlands.network.expand.y.LightUpdatePacket;
 import com.inf.farlands.serialize.SectionLifecycle;
+import com.inf.farlands.serialize.SectionSerializer;
 import com.inf.farlands.serialize.TerrainHooks;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
@@ -358,7 +359,10 @@ public final class ChunkDataSender {
                     continue;
                 }
                 FriendlyByteBuf tmp = new FriendlyByteBuf(Unpooled.buffer());
-                section.write(tmp);
+                // 与编码池的 fsa 编码互斥：同一批段可能正被池打包，两个线程同时进 PalettedContainer 会抛。
+                synchronized (SectionSerializer.packLockFor(lc.getPos().pack())) {
+                    section.write(tmp);
+                }
                 byte[] data = new byte[tmp.readableBytes()];
                 tmp.readBytes(data);
                 int est = 24 + data.length;

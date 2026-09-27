@@ -147,7 +147,8 @@ public class FarlandsTick {
         if (tickCount % 5 == 0) {
             SectionLifecycle.retryPendingReads(server);
         }
-        // 每 tick 编码消费：主线程现取现编码，预算 ENCODE_BUDGET。
+        // 每 tick 唤醒编码消费者：编码在 ENCODE_POOL 上做，主线程只做唤醒与记账。这里同时是被「写入者
+        // 在途」挡回的单元的兜底唤醒来源，延迟上限一 tick。
         SectionLifecycle.tick();
 
         // 地形管线：每 tick 唤醒生成消费，不超过 maxGenTasksPerTick。

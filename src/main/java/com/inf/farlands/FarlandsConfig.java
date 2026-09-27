@@ -131,13 +131,17 @@ public class FarlandsConfig {
                         .build();
         public static final int parallelLightThreads;
 
+        // 本值是光照任务的放行速率，不是并行度：并行度由 parallelLightThreads 决定，本值是每 50 毫秒
+        // 最多放行多少个 chunk 的光照任务。它在加载关键路径上：chunk 光照在途时 isChunkBusy 为真，
+        // ChunkReadiness 因此不补 FULL、WindowSendState 因此不发段包，所以调小会让地形下发与存档退出
+        // 一起退化。32 是按「飞行时地形跟得上」定的。
         public static final ConfigEntry<Integer> MAX_LIGHT_TASKS_PER_TICK = Config.setInt("maxLightTasksPerTick")
                         .comment("en_us",
-                                        "Max light propagation tasks submitted per wake")
+                                        "Light tasks admitted per 50ms wake, on the chunk delivery critical path")
                         .comment("zh_cn",
-                                        "每次唤醒提交的光照传播任务上限")
+                                        "每 50 毫秒放行的光照传播任务上限，压在 chunk 下发关键路径上")
                         .range(1, 64)
-                        .define(4)
+                        .define(32)
                         .build();
         public static final int maxLightTasksPerTick;
 
