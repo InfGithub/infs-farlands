@@ -16,7 +16,7 @@
 
 ## Features
 
-- Extends the game's X/Y/Z coordinate limits to ±2,147,483,647 blocks.
+- Extends the game's X/Y/Z coordinate limits to [-2147483648, 2147483647].
 - Implements an independent **lighting engine** and **terrain generation pipeline** for the entire Y-axis.
 - Fixes some abnormal game behavior at high coordinates.
 
