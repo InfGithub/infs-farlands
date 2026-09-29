@@ -10,6 +10,8 @@
 
 [English](README.EN_US.md)
 
+**Wiki**: [Wiki](docs/wiki.md)
+
 ## 构建
 
 ```bash
