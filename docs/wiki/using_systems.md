@@ -8,4 +8,4 @@
 
 如下图：
 
-![“边境之地”页面](../screenshots/farlands-page.EN_US.png)
+![“边境之地”页面](../screenshots/farlands-page.png)
