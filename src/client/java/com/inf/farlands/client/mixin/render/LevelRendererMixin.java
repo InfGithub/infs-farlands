@@ -1,8 +1,10 @@
 package com.inf.farlands.client.mixin.render;
 
+import com.inf.farlands.client.compat.sodium.SodiumWindowSync;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.ViewArea;
@@ -34,6 +36,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * 只枚举已加载 chunk：未加载的没有数据可显示，等它加载时构造路径会自己建窗口。buildWindow 在
  * 窗口未变时早退，因此每帧调用在相机不跨 section 时零开销。
+ *
+ * <p>
+ * 同一个钩子还驱动 Sodium 侧的 section 集合同步：Sodium 的集合由 XZ 驱动，竖直滑动不产生事件，必须在
+ * 窗口拉正之后按 chunk 比对并通知它。门控与实现在 client/compat/sodium 里，未装 Sodium 时零开销。
+ *
+ * <p>
+ * 半径取自客户端选项而不是 ViewArea：Sodium 在 allChanged 上把喂给 ViewArea 构造的那次渲染距离重定向
+ * 为 0，它的注释是不允许分配任何资源，ViewArea.getViewDistance() 因此在 Sodium 下恒为 0，拿它当半径会
+ * 把枚举退化成 1x1，只有相机所在的 chunk 被拉正。该选项是 vanilla 与 Sodium 共用的那个值，旧版 Sodium
+ * 路径也取自它。
  */
 @Mixin(LevelRenderer.class)
 public class LevelRendererMixin {
@@ -51,15 +63,22 @@ public class LevelRendererMixin {
         }
         SectionPos camSection = SectionPos.of(camera.blockPosition());
         int camSecY = camSection.y();
-        int radius = this.viewArea.getViewDistance();
+        int radius = Minecraft.getInstance().options.getEffectiveRenderDistance();
         ChunkPos cpos = camSection.chunk();
+        boolean sodium = SodiumWindowSync.beginFrame(this.level);
         for (int cx = cpos.x() - radius; cx <= cpos.x() + radius; cx++) {
             for (int cz = cpos.z() - radius; cz <= cpos.z() + radius; cz++) {
                 LevelChunk chunk = (LevelChunk) this.level.getChunk(cx, cz, ChunkStatus.FULL, false);
                 if (chunk != null && !(chunk instanceof EmptyLevelChunk)) {
                     ((WindowedChunk) chunk).moveWindowTo(camSecY);
+                    if (sodium) {
+                        SodiumWindowSync.onChunk(chunk);
+                    }
                 }
             }
+        }
+        if (sodium) {
+            SodiumWindowSync.endFrame();
         }
     }
 }

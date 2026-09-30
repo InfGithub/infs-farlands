@@ -121,11 +121,14 @@ public abstract class ClientPacketListenerMixin {
         ChunkPos chunkPos = chunk.getPos();
         // 先只更新光照状态并收集有内容的段区间，标脏延到循环外一次做。
         // setSectionDirtyWithNeighbors 一次连带 3x3x3 共 27 个段（LevelRenderer:1343-1345），
-        // 逐段调用会让同一个 27 格盒被重复标几十遍；而同一 chunk 各段的盒子的并集正好是一个连续
-        // 区间，所以按区间发一次 setSectionRangeDirty 即可，盒内每个目标恰好一次。
+        // 逐段调用会让同一个 27 格盒被重复标几十遍；而窗口内各段的盒子的并集正好是一个连续区间，
+        // 所以按区间发一次 setSectionRangeDirty 即可，盒内每个目标恰好一次。区间必须以窗口为界。
+        WindowedChunk windowed = (WindowedChunk) chunk;
+        int winMin = windowed.getWindowMinY();
+        int winMax = windowed.getWindowMaxY();
         int minSy = Integer.MAX_VALUE;
         int maxSy = Integer.MIN_VALUE;
-        for (Map.Entry<Integer, LevelChunkSection> e : ((WindowedChunk) chunk).windowedAllSections().entrySet()) {
+        for (Map.Entry<Integer, LevelChunkSection> e : windowed.windowedAllSections().entrySet()) {
             LevelChunkSection section = e.getValue();
             if (section == null) {
                 continue;
@@ -134,11 +137,18 @@ public abstract class ClientPacketListenerMixin {
             SectionPos secPos = SectionPos.of(chunkPos, sectionY);
             boolean air = section.hasOnlyAir();
             lightEngine.updateSectionStatus(secPos, air);
-            if (sectionY < minSy) {
-                minSy = sectionY;
-            }
-            if (sectionY > maxSy) {
-                maxSy = sectionY;
+            // 并集是历次窗口的并集，tp 后跨度可达上亿；有 Sodium 时每格还会写一次侧信道表并与 trim
+            // 抢段锁。窗口内的段收进区间一次标；窗口外的段逐条标，否则数据到位后不会再有人标它，
+            // Sodium 对已在集合里的段直接早退，那一段就永远不重建。
+            if (sectionY >= winMin && sectionY <= winMax) {
+                if (sectionY < minSy) {
+                    minSy = sectionY;
+                }
+                if (sectionY > maxSy) {
+                    maxSy = sectionY;
+                }
+            } else {
+                Minecraft.getInstance().levelRenderer.setSectionDirty(x, sectionY, z);
             }
         }
         if (minSy <= maxSy) {

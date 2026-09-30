@@ -45,7 +45,14 @@
     "worldselection.WorldOpenFlowsMixin",
     "tick.MinecraftMixin",
     "outside.GuiMixin",
-    "outside.WorldBorderRendererMixin"
+    "outside.WorldBorderRendererMixin",
+    "compat.sodium.ClonedChunkSectionCacheMixin",
+    "compat.sodium.LevelSliceMixin",
+    "compat.sodium.RenderSectionManagerMixin",
+    "compat.sodium.OcclusionCullerMixin",
+    "compat.sodium.SodiumWorldRendererAccessor",
+    "compat.sodium.TaskCollectingTreeMixin",
+    "compat.sodium.DeferredTaskListMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -9,6 +9,17 @@ def baseVersion = project.properties.get("version", "0.0.3-alpha")
 version = baseVersion + "." + buildTime
 
 repositories {
+	exclusiveContent {
+		forRepository {
+			maven {
+				name = "Modrinth"
+				url = "https://api.modrinth.com/maven"
+			}
+		}
+		filter {
+			includeGroup "maven.modrinth"
+		}
+	}
 }
 
 loom {
@@ -32,7 +43,15 @@ dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
-	// 本 Mod 不使用 Fabric API
+	compileOnly "io.github.llamalad7:mixinextras-fabric:0.5.4"
+	annotationProcessor "io.github.llamalad7:mixinextras-fabric:0.5.4"
+
+	// Sodium: mc26.1.2-0.9.2-fabric
+	compileOnly "maven.modrinth:AANobbMI:tZQ3jqnf"
+	localRuntime "maven.modrinth:AANobbMI:tZQ3jqnf"
+
+	// Fabric API 挂开发运行环境
+	localRuntime "net.fabricmc.fabric-api:fabric-api:0.155.2+26.1.2"
 }
 
 processResources {

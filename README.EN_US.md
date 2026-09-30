@@ -52,4 +52,4 @@ If you find a bug or would like to make a suggestion, please create an Issue or 
 
 ### Known Compatible Mods
 
-- None
+- **Sodium 0.9.2**

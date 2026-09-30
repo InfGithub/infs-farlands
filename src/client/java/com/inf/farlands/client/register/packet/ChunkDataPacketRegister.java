@@ -55,6 +55,8 @@ public class ChunkDataPacketRegister {
                     // 3x3x3 盒重复标几十遍，详见 flushSectionDirty。
                     int curCx = Integer.MIN_VALUE;
                     int curCz = Integer.MIN_VALUE;
+                    int curWinMin = 0;
+                    int curWinMax = 0;
                     int dirtyMinSy = Integer.MAX_VALUE;
                     int dirtyMaxSy = Integer.MIN_VALUE;
                     for (ChunkDataPacket.SectionEntry e : payload.sections()) {
@@ -63,17 +65,25 @@ public class ChunkDataPacketRegister {
                         if (ca instanceof LevelChunk lc) {
                             applySectionData(level, le, lc, e, minY);
                             if (e.chunkX() != curCx || e.chunkZ() != curCz) {
-                                flushSectionDirty(level, curCx, curCz, dirtyMinSy, dirtyMaxSy);
+                                flushSectionDirty(level, curCx, curCz, dirtyMinSy, dirtyMaxSy,
+                                        curWinMin, curWinMax);
                                 curCx = e.chunkX();
                                 curCz = e.chunkZ();
+                                WindowedChunk wc = (WindowedChunk) lc;
+                                curWinMin = wc.getWindowMinY();
+                                curWinMax = wc.getWindowMaxY();
                                 dirtyMinSy = Integer.MAX_VALUE;
                                 dirtyMaxSy = Integer.MIN_VALUE;
                             }
-                            if (e.sectionY() < dirtyMinSy) {
-                                dirtyMinSy = e.sectionY();
-                            }
-                            if (e.sectionY() > dirtyMaxSy) {
-                                dirtyMaxSy = e.sectionY();
+                            int entrySy = e.sectionY();
+                            if (entrySy < curWinMin || entrySy > curWinMax) {
+                                // 窗口外的段不进区间，但必须逐条标脏：区间跨到窗口外时跨度会随会话历史
+                                // 涨到上亿，而不标就会让数据到位后永不重建，Sodium 对已在集合里的段早退。
+                                Minecraft.getInstance().levelRenderer.setSectionDirty(e.chunkX(), entrySy, e.chunkZ());
+                            } else if (entrySy < dirtyMinSy) {
+                                dirtyMinSy = entrySy;
+                            } else if (entrySy > dirtyMaxSy) {
+                                dirtyMaxSy = entrySy;
                             }
                         } else {
                             // chunk 未加载 → 缓存，chunk 加载后由 applyPendingSectionData 补应用
@@ -81,7 +91,7 @@ public class ChunkDataPacketRegister {
                                     e.chunkX(), e.chunkZ(), minY, e);
                         }
                     }
-                    flushSectionDirty(level, curCx, curCz, dirtyMinSy, dirtyMaxSy);
+                    flushSectionDirty(level, curCx, curCz, dirtyMinSy, dirtyMaxSy, curWinMin, curWinMax);
                 });
     }
 
@@ -102,28 +112,43 @@ public class ChunkDataPacketRegister {
             return; // 仍未加载；补应用挂在 chunk 加载之后，理论不触发
         }
         LevelLightEngine le = level.getChunkSource().getLightEngine();
+        WindowedChunk wc = (WindowedChunk) lc;
+        int winMin = wc.getWindowMinY();
+        int winMax = wc.getWindowMaxY();
         int dirtyMinSy = Integer.MAX_VALUE;
         int dirtyMaxSy = Integer.MIN_VALUE;
         for (ChunkDataPacket.SectionEntry e : pending.entries) {
             applySectionData(level, le, lc, e, pending.minY);
-            if (e.sectionY() < dirtyMinSy) {
-                dirtyMinSy = e.sectionY();
-            }
-            if (e.sectionY() > dirtyMaxSy) {
-                dirtyMaxSy = e.sectionY();
+            int entrySy = e.sectionY();
+            if (entrySy < winMin || entrySy > winMax) {
+                // 同 §5 主处理：窗口外的段逐条标，不进区间。
+                Minecraft.getInstance().levelRenderer.setSectionDirty(cx, entrySy, cz);
+            } else if (entrySy < dirtyMinSy) {
+                dirtyMinSy = entrySy;
+            } else if (entrySy > dirtyMaxSy) {
+                dirtyMaxSy = entrySy;
             }
         }
-        flushSectionDirty(level, cx, cz, dirtyMinSy, dirtyMaxSy);
+        flushSectionDirty(level, cx, cz, dirtyMinSy, dirtyMaxSy, winMin, winMax);
     }
 
     /**
      * 按 chunk 的段区间标脏一次。
      *
      * <p>{@code setSectionDirtyWithNeighbors} 一次连带 3x3x3 共 27 个段（{@code LevelRenderer:1343-1345}），
-     * 逐段调用会把同一个盒子重复标几十遍；而同一 chunk 各段的盒子并集正好是这段连续区间，所以区间调一次
+     * 逐段调用会把同一个盒子重复标几十遍；而窗口内各段的盒子并集正好是这段连续区间，所以区间调一次
      * 即可，盒内每个目标恰好一次。minSy 大于 maxSy 表示本批没有可标的段（含 chunk 切换时的空批）。
      */
-    private static void flushSectionDirty(ClientLevel level, int cx, int cz, int minSy, int maxSy) {
+    private static void flushSectionDirty(ClientLevel level, int cx, int cz, int minSy, int maxSy,
+            int winMin, int winMax) {
+        if (minSy > maxSy) {
+            return;
+        }
+        // 标脏区间以目标 chunk 的当前窗口为界。若让区间跨到窗口外，待应用条目按 (维度, chunkPos) 累积、
+        // tp 前后两段 Y 并存时跨度可达上亿；有 Sodium 时每格写一次侧信道表并与 trim 抢段锁，表会涨到
+        // 千万级、渲染线程停等。窗口外的条目由调用方逐条 setSectionDirty 标，这里只负责窗口内那一段。
+        minSy = Math.max(minSy, winMin);
+        maxSy = Math.min(maxSy, winMax);
         if (minSy > maxSy) {
             return;
         }
