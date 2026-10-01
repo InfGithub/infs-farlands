@@ -7,7 +7,7 @@ import java.util.function.LongFunction;
 import java.util.function.Predicate;
 
 /**
- * 无装箱分段 map：fastutil Long2ObjectOpenHashMap × 64 段 + StampedLock。
+ * 无装箱分段 map：fastutil Long2ObjectOpenHashMap × 256 段 + StampedLock。
  */
 public final class Long2ObjectStripedMap<V> {
 
@@ -18,7 +18,7 @@ public final class Long2ObjectStripedMap<V> {
     private final Long2ObjectOpenHashMap<V>[] segments;
     private final StampedLock[] locks;
 
-    /** expectedCapacity = 预期条目峰值；每段容量 = peak/64，预分配防扩容。 */
+    /** expectedCapacity = 预期条目峰值；每段容量 = peak/256，下限 16，预分配防扩容。 */
     @SuppressWarnings("unchecked")
     public Long2ObjectStripedMap(int expectedCapacity) {
         int perSeg = Math.max(16, (expectedCapacity >> SEG_BITS) + 1);
@@ -30,7 +30,7 @@ public final class Long2ObjectStripedMap<V> {
         }
     }
 
-    /** 分段：key 高/低位混合后取低 6 位，与 CHM spread 同思路，均匀。 */
+    /** 分段：key 高/低位混合后取低 8 位，与 CHM spread 同思路，均匀。 */
     private int seg(long key) {
         return (int) ((key ^ (key >>> 32)) & SEG_MASK);
     }
