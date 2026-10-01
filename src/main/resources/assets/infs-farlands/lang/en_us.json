@@ -8,6 +8,8 @@
   "advancements.infs-farlands.int-block-pos.description": "Swapped BlockUtil.lookup.",
   "advancements.infs-farlands.new-vanilla-noise-system.title": "new VanillaNoiseSystem();",
   "advancements.infs-farlands.new-vanilla-noise-system.description": "Hello, Overworld (noise).",
+  "advancements.infs-farlands.skys-the-limit.title": "Sky's the Limit",
+  "advancements.infs-farlands.skys-the-limit.description": "Nothing here.",
   "commands.infs-farlands.section.light.dump": "Section light dump written to server log.",
   "commands.infs-farlands.client.section.light.dump": "Section light dump written to client log.",
   "commands.infs-farlands.section.biome.dump": "Section biome dump written to server log.",

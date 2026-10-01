@@ -44,4 +44,11 @@ public final class Beta173NoiseSystem implements NoiseSystem {
     public DensityFunction createFinalDensity(NoiseRouter router) {
         return new BetaDensityFunction(this.noise, this.topFadeEnabled);
     }
+
+    /**
+     * 顶部渐消项的取值。构造后不变，供外部按当前系统参数判定。
+     */
+    public boolean topFadeEnabled() {
+        return this.topFadeEnabled;
+    }
 }
