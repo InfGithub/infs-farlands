@@ -10,6 +10,8 @@
   "advancements.infs-farlands.new-vanilla-noise-system.description": "你好，主世界（噪声）。",
   "advancements.infs-farlands.skys-the-limit.title": "天空即为极限",
   "advancements.infs-farlands.skys-the-limit.description": "这里没有东西。",
+  "advancements.infs-farlands.core-dweller.title": "地心人",
+  "advancements.infs-farlands.core-dweller.description": "怪异的噪声。",
   "commands.infs-farlands.section.light.dump": "Section 光照数据已写入服务端日志。",
   "commands.infs-farlands.client.section.light.dump": "Section 光照数据已写入客户端日志。",
   "commands.infs-farlands.section.biome.dump": "Section 生物群系数据已写入服务端日志。",

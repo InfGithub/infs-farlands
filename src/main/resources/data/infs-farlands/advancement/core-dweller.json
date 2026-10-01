@@ -1,0 +1,66 @@
+{
+  "parent": "infs-farlands:root",
+  "criteria": {
+    "deep_jukebox": {
+      "trigger": "minecraft:item_used_on_block",
+      "conditions": {
+        "player": [
+          {
+            "condition": "minecraft:entity_properties",
+            "entity": "this",
+            "predicate": {
+              "location": {
+                "position": {
+                  "y": {
+                    "max": -2049
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "location": [
+          {
+            "condition": "minecraft:location_check",
+            "predicate": {
+              "block": {
+                "blocks": "minecraft:jukebox"
+              }
+            }
+          },
+          {
+            "condition": "minecraft:match_tool",
+            "predicate": {
+              "predicates": {
+                "minecraft:jukebox_playable": {}
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "description": {
+      "translate": "advancements.infs-farlands.core-dweller.description"
+    },
+    "hidden": false,
+    "icon": {
+      "id": "minecraft:magma_block"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancements.infs-farlands.core-dweller.title"
+    }
+  },
+  "rewards": {
+    "experience": 1999
+  },
+  "requirements": [
+    [
+      "deep_jukebox"
+    ]
+  ],
+  "sends_telemetry_event": false
+}
