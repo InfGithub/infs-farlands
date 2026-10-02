@@ -2,14 +2,12 @@ package com.inf.farlands.terrain.system.terrain.noise.overworld.Vanilla;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 
 import com.inf.farlands.terrain.NoiseSystem;
 import com.inf.farlands.terrain.registry.SystemArgs;
 import com.inf.farlands.terrain.registry.SystemDefaultParams;
-import com.inf.farlands.terrain.registry.SystemParamSpec;
 import com.inf.farlands.terrain.registry.SystemParams;
-import com.inf.farlands.terrain.registry.SystemsData.Arg;
+import com.inf.farlands.terrain.system.common.overworld.Vanilla.VanillaFamilySeed;
 
 import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
@@ -28,13 +26,12 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
  */
 public final class VanillaNoiseSystem implements NoiseSystem {
 
-    /** 声明：seed 只有一条映射，左端是空串，求值一次得到一个随机 long。 */
+    /**
+     * 声明：seed 用四族共用的空框取值源，见 {@link VanillaFamilySeed}。本系统的 seed 只驱动密度
+     * 节点重建，aquifer 与矿脉的随机源仍取该 level 的 RandomState。
+     */
     @SystemDefaultParams
-    public static final SystemParams DEFAULT_PARAMS = SystemParams.of(
-            SystemParamSpec.ofLong("seed")
-                    .keyword("", () -> Arg.ofLong(ThreadLocalRandom.current().nextLong()),
-                            "createWorld.tab.infs-farlands.param.seed.random")
-                    .build());
+    public static final SystemParams DEFAULT_PARAMS = SystemParams.of(VanillaFamilySeed.seedParam());
 
     /** BlendedNoise 随机源的哈希名。 */
     private static final Identifier TERRAIN = Identifier.withDefaultNamespace("terrain");

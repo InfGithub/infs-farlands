@@ -9,6 +9,7 @@ import com.inf.farlands.client.gui.demo.DropdownSelect;
 import com.inf.farlands.client.gui.demo.ParamGroup;
 import com.inf.farlands.terrain.registry.FamilyKind;
 import com.inf.farlands.terrain.registry.SystemId;
+import com.inf.farlands.terrain.registry.SystemPageHooks;
 import com.inf.farlands.terrain.registry.SystemRegistries;
 import com.inf.farlands.terrain.registry.SystemParams;
 import com.inf.farlands.terrain.registry.SystemsIO;
@@ -113,8 +114,8 @@ public class FarlandsTab implements Tab {
             LinearLayout body = this.familyBody(font, dimension, layer, bottom -> this.reveal(pageIndex, bottom));
             GridLayout content = new GridLayout();
             content.addChild(body, 0, 0);
-            this.pages.add(new DemoPage(pageTitle(dimension), new ScrollableLayout(minecraft, content, 0),
-                    layer));
+            this.pages.add(new DemoPage(dimension, pageTitle(dimension),
+                    new ScrollableLayout(minecraft, content, 0), layer));
         }
 
         int[] tabWidths = new int[dimensions.size()];
@@ -461,23 +462,33 @@ public class FarlandsTab implements Tab {
 
         @Override
         public void onClick(MouseButtonEvent event, boolean doubleClick) {
+            // 点已选中的那格不是进页，与原版一样不发声也不发事件。真换页才算一次进页。
+            if (this.manager.getCurrentTab() == this.tab()) {
+                return;
+            }
             this.manager.setCurrentTab(this.tab(), true);
+            SystemPageHooks.fireEntered(((DemoPage) this.tab()).dimension);
         }
     }
 
     /**
-     * 一页：标题、本页的滚动容器、本页的浮层。内容随本页一次性挂上屏幕，切页只改这一页全部叶子的
-     * visible。滚动量属于本页的 {@link ScrollableLayout}，与其余页无关。
+     * 一页：维度、标题、本页的滚动容器、本页的浮层。内容随本页一次性挂上屏幕，切页只改这一页全部
+     * 叶子的 visible。滚动量属于本页的 {@link ScrollableLayout}，与其余页无关。
+     *
+     * <p>维度只用于进页钩子的载荷：点这一格换页时把维度 id 交给登记过的动作。
      */
     private static final class DemoPage implements Tab {
 
+        private final Identifier dimension;
         private final Component title;
         private final ScrollableLayout scroll;
         private final DropdownSelect.Layer layer;
         private final List<AbstractWidget> leaves = new ArrayList<>();
         private final AbstractScrollArea viewport;
 
-        private DemoPage(Component title, ScrollableLayout scroll, DropdownSelect.Layer layer) {
+        private DemoPage(Identifier dimension, Component title, ScrollableLayout scroll,
+                DropdownSelect.Layer layer) {
+            this.dimension = dimension;
             this.title = title;
             this.scroll = scroll;
             this.layer = layer;

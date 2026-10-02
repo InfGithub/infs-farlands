@@ -10,6 +10,7 @@ import com.inf.farlands.terrain.system.biome.overworld.Oct.OctBiomeSystem;
 import com.inf.farlands.terrain.system.biome.overworld.Vanilla.VanillaBiomeSystem;
 import com.inf.farlands.terrain.system.carver.misc.Void.VoidCarverSystem;
 import com.inf.farlands.terrain.system.carver.overworld.Vanilla.VanillaCarverSystem;
+import com.inf.farlands.terrain.system.common.overworld.Vanilla.VanillaFamilySeed;
 import com.inf.farlands.terrain.system.surface.misc.Void.VoidSurfaceSystem;
 import com.inf.farlands.terrain.system.surface.overworld.Vanilla.VanillaSurfaceSystem;
 import com.inf.farlands.terrain.system.terrain.block.misc.Sierpinski.SierpinskiPyramidBlockSystem;
@@ -30,6 +31,8 @@ public class FarlandsRegister {
     public static void registerStatic() {
         registerPayloadTypes("mod-init");
         registerSystems();
+        // 空框 seed 的会话边界是进页。登记由状态的所有者自己发起，界面只负责发那个公开钩子。
+        VanillaFamilySeed.registerPageHook();
     }
 
     /**

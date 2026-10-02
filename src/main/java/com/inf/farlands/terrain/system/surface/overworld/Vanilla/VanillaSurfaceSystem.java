@@ -4,6 +4,8 @@ import com.inf.farlands.terrain.SurfaceSystem;
 import com.inf.farlands.terrain.registry.SystemArgs;
 import com.inf.farlands.terrain.registry.SystemDefaultParams;
 import com.inf.farlands.terrain.registry.SystemParams;
+import com.inf.farlands.terrain.system.common.overworld.Vanilla.VanillaFamilyRandom;
+import com.inf.farlands.terrain.system.common.overworld.Vanilla.VanillaFamilySeed;
 import com.inf.farlands.terrain.terrainFiller.AbstractTerrainFiller;
 import com.inf.farlands.util.window.WindowedChunk;
 
@@ -23,29 +25,38 @@ import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
 
 /**
- * vanilla 主世界地表系统：settings.surfaceRule() 的草皮/泥土/石头分层等。
+ * vanilla 主世界地表系统：settings.surfaceRule() 的草皮/泥土/石头分层等，随机性取本系统的 seed。
  *
+ * <p>
  * 依赖四样东西。vanilla SurfaceSystem，其全高适配由 SurfaceSystemMixin 的 @Overwrite 提供，
  * 列扫描下界到 maxCapIter；维度全高 NoiseChunk，其 preliminarySurfaceLevel 在极端 Y 列约等于
  * vanilla 地表，abovePreliminarySurface 恒 true 自动放行；自定义 NoiseBiomeSource，直查本 port
  * section 的 4×4×4 biome 网格，绕开 @Overwrite getNoiseBiome 的维度 clamp，极端 Y 才正确；
- * BiomeManager.obfuscateSeed(世界种子)，复刻 vanilla WorldGenRegion fiddle 语义。
+ * BiomeManager.obfuscateSeed(本系统 seed)，复刻 vanilla WorldGenRegion fiddle 语义。
  *
+ * <p>
+ * surfaceSystem 与 buildSurface 的首参必须来自同一份 RandomState：SurfaceSystem 的噪声在构造时
+ * 就从它取定，混用两份即等于两个种子。preliminarySurfaceLevel 不在这里取，它跟地形族的 router 走。
+ *
+ * <p>
  * 幂等：surfaceRule.tryApply 只替换 defaultBlock 即 stone，已替换的草皮不会重替换，多段 fill
  * 后重复跑无害。NoiseChunk 经 chunk.getOrCreateNoiseChunk 缓存，走 vanilla 字段，首次构造后复用。
  * 跑在 genPool 线程，即 GenTask.execute 内；构造期的 TerrainSystemContext 由
  * createDimensionNoiseChunk 自己收口，这里不再管。
  *
+ * <p>
  * 无状态：全部局部构造，实例随 level 走、可跨线程共享。
  */
 public final class VanillaSurfaceSystem implements SurfaceSystem {
 
-    /** 声明：无参数，界面给 0 个框。 */
+    /** 声明：seed 由四族共用，见 {@link VanillaFamilySeed}。 */
     @SystemDefaultParams
-    public static final SystemParams DEFAULT_PARAMS = SystemParams.EMPTY;
+    public static final SystemParams DEFAULT_PARAMS = SystemParams.of(VanillaFamilySeed.seedParam());
 
-    /** 统一构造签名，本系统不读任何参数。 */
+    private final long seed;
+
     public VanillaSurfaceSystem(SystemArgs args) {
+        this.seed = args.getLong("seed");
     }
 
     @Override
@@ -55,7 +66,7 @@ public final class VanillaSurfaceSystem implements SurfaceSystem {
         if (!(level.getChunkSource().getGenerator() instanceof NoiseBasedChunkGenerator gen)) {
             return;
         }
-        RandomState random = level.getChunkSource().randomState();
+        RandomState random = VanillaFamilyRandom.forSeed(level, this.seed, gen);
         NoiseGeneratorSettings settings = gen.generatorSettings().value();
         // 维度全高 NoiseChunk，经 getOrCreateNoiseChunk 缓存到 vanilla 字段。SURFACE 只用
         // preliminarySurfaceLevel，但构造本身会走 NoiseChunkMixin 那两处 @Redirect
@@ -63,10 +74,10 @@ public final class VanillaSurfaceSystem implements SurfaceSystem {
                 p -> AbstractTerrainFiller.createDimensionNoiseChunk(level, chunk));
         Registry<Biome> biomes = level.registryAccess().lookupOrThrow(Registries.BIOME);
         // 自定义 source 直查 section 的 4×4×4 biome 网格，绕开 clamp；seed 用
-        // obfuscateSeed(世界种子) 复刻 vanilla WorldGenRegion fiddle 语义
+        // obfuscateSeed(本系统 seed) 复刻 vanilla WorldGenRegion fiddle 语义
         BiomeManager biomeManager = new BiomeManager(
                 (qx, qy, qz) -> biomeAt(chunk, biomes, qx, qy, qz),
-                BiomeManager.obfuscateSeed(level.getSeed()));
+                BiomeManager.obfuscateSeed(this.seed));
         WorldGenerationContext context = new WorldGenerationContext(gen, chunk);
         random.surfaceSystem().buildSurface(
                 random, biomeManager, biomes, settings.useLegacyRandomSource(),
