@@ -44,6 +44,7 @@ import it.unimi.dsi.fastutil.objects.ObjectArraySet;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 @Mixin(ChunkGenerator.class)
 public abstract class ChunkGeneratorMixin {
@@ -57,6 +58,32 @@ public abstract class ChunkGeneratorMixin {
     @Shadow
     private Function<Holder<Biome>, BiomeGenerationSettings> generationSettingsGetter;
 
+    /**
+     * 结构按生成步分组，惰性缓存。原版每个 chunk 都重建一次，见 {@code ChunkGenerator} 的
+     * {@code applyBiomeDecoration}。
+     *
+     * <p>分组只由 {@link Structure#step()} 与结构注册表的内容决定，而注册表在
+     * {@code BuiltInRegistries.bootStrap} 末尾冻结，之后不再变。
+     *
+     * <p>装饰任务跑在 farlands-gen 上，不同 chunk 可以并发，所以缓存字段是 volatile，建的过程
+     * 放同步方法里，两个线程同时进也只建一份。
+     */
+    @Unique
+    private volatile Map<Integer, List<Structure>> farlandsStructuresByStep;
+
+    @Unique
+    private synchronized Map<Integer, List<Structure>> farlandsStructureGroups(Registry<Structure> registry) {
+        Map<Integer, List<Structure>> cached = this.farlandsStructuresByStep;
+        if (cached != null) {
+            return cached;
+        }
+        // 注册表在 BuiltInRegistries.bootStrap 末尾冻结，此处之后内容不变，所以建一次即可。
+        Map<Integer, List<Structure>> built = registry.stream()
+                .collect(Collectors.groupingBy(s -> s.step().ordinal()));
+        this.farlandsStructuresByStep = built;
+        return built;
+    }
+
     @Overwrite
     public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager) {
         ChunkPos chunkpos = chunk.getPos();
@@ -65,8 +92,8 @@ public abstract class ChunkGeneratorMixin {
             BlockPos blockpos = sectionpos.origin();
             Registry<Structure> registry = level.registryAccess()
                     .lookupOrThrow(Registries.STRUCTURE);
-            Map<Integer, List<Structure>> map = registry.stream()
-                    .collect(Collectors.groupingBy(s -> s.step().ordinal()));
+            // 结构按步分组只与冻结的注册表内容有关，按实例缓存一次，见 farlandsStructureGroups。
+            Map<Integer, List<Structure>> map = this.farlandsStructureGroups(registry);
             List<FeatureSorter.StepFeatureData> list = this.featuresPerStep.get();
             WorldgenRandom worldgenrandom = new WorldgenRandom(
                     new XoroshiroRandomSource(RandomSupport.generateUniqueSeed()));

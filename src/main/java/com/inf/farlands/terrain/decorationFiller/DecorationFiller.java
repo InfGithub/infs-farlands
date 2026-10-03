@@ -13,7 +13,6 @@ import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.LevelSystems;
-import com.inf.farlands.terrain.carverFiller.CarverFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.terrain.terrainFiller.TerrainSystemContext;
@@ -139,7 +138,9 @@ public final class DecorationFiller {
         }
         java.util.Set<Integer> sections = PENDING_SECTIONS.computeIfAbsent(keyOf(chunk),
                 k -> java.util.concurrent.ConcurrentHashMap.newKeySet());
-        LAST_EVAL_EPOCH.remove(keyOf(chunk)); // 新登记：段集合变了，门的结论要重判
+        // 段集合只增，所以「变大」与「有新增」等价。本方法由 farlands-gen 上的 GenTask 与服务端
+        // 主线程的扫描路径两处调，两次 size 之间可能有别的线程写入，那只让判据更容易成立，方向安全。
+        int before = sections.size();
         if (carvedSections != null) {
             for (int sy : carvedSections) {
                 sections.add(sy);
@@ -150,6 +151,11 @@ public final class DecorationFiller {
                     sections.add(sy);
                 }
             });
+        }
+        // 只有段集合真的变了才让门的结论作废。无条件清会让扫描路径每 tick 的重复登记把上一条记下的
+        // 结论反复丢掉，那时这一项每 tick 都要重跑一次整门。
+        if (sections.size() > before) {
+            LAST_EVAL_EPOCH.remove(keyOf(chunk));
         }
         if (!hasDecorationPending(chunk, sections)) {
             PENDING_SECTIONS.remove(keyOf(chunk));
@@ -192,6 +198,14 @@ public final class DecorationFiller {
             if (conflicts) {
                 continue; // 与本轮刚认领的中心域相交：tryClaim 必失败，省下整门
             }
+            // 纪元未变，说明写域九格的输入没变过，上次门的结论仍然成立，整门可省。这一条判在最前，
+            // 连中心那次取数也一起省掉：它只读两个静态字段，不碰 chunk。纪元是全局单值，任意一格
+            // 变化都会让全部待装饰项重判，所以这一句的次序就是本驱动层的主要成本所在。
+            long epoch = cellEpoch.get();
+            Long lastEval = LAST_EVAL_EPOCH.get(key);
+            if (lastEval != null && lastEval.longValue() == epoch) {
+                continue;
+            }
             LevelChunk center = SectionLifecycle.latestChunk(level, ChunkPos.getX(key.chunkPos()),
                     ChunkPos.getZ(key.chunkPos()));
             if (center == null) {
@@ -201,12 +215,6 @@ public final class DecorationFiller {
             }
             if (!hasDecorationPending(center)) {
                 PENDING.remove(key);
-                continue;
-            }
-            // 纪元未变，说明写域九格的输入没变过，上次门的结论仍然成立，整门可省。
-            long epoch = cellEpoch.get();
-            Long lastEval = LAST_EVAL_EPOCH.get(key);
-            if (lastEval != null && lastEval.longValue() == epoch) {
                 continue;
             }
             // 中心有引用，即有结构的包围盒与它相交时，结构放置会读到 ±8；没有引用就没有结构放置，
@@ -326,7 +334,6 @@ public final class DecorationFiller {
                 }
                 DecorationContext.enter();
                 try {
-                    CarverFiller.primeFinalHeightmaps(this.center);
                     region = new DecorationRegion(this.level, this.center, this.handles, this.readRadius);
                     // 结构起点的 Y 锚会经 getFirstOccupiedHeight 构造 NoiseChunk，而 NoiseChunk 的
                     // 构造点要求 TerrainSystemContext 已设，否则抛。夹法照 fill 的形状。
