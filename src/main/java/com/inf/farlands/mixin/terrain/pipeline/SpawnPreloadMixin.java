@@ -9,8 +9,10 @@ import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
+import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.terrain.pipeline.SpawnPreload;
+import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.util.world.WorldBounds;
 
 import net.minecraft.core.BlockPos;
@@ -64,6 +66,21 @@ public abstract class SpawnPreloadMixin {
     @Unique
     private static final int FARLANDS_PRELOAD_RADIUS = 4;
 
+    /**
+     * 票与生成的半径：比判据半径大 2。
+     *
+     * <p>
+     * 装饰的门要求写域九宫格都在且都过雕刻，判据圈半径 4 的每一格都要它的外邻满足这一条，
+     * 那一圈落在半径 5；而装饰的读域到写域外一格，即半径 6。不带到 6，判据圈的段会永远过不了装饰
+     * 的门，或者每遍都因读不到外环而放弃，循环都等不到收敛。
+     *
+     * <p>
+     * 再外面那圈（7 到 14）不在这里铺票：结构引用相要读的 ±8 由 StructureDriver 按需拉，只对
+     * 「真的要 fill」的 chunk 发起；被拉起来的邻居只当壳，不会再往外拉，一圈即止。
+     */
+    @Unique
+    private static final int FARLANDS_PRELOAD_GEN_RADIUS = FARLANDS_PRELOAD_RADIUS + 2;
+
     /** 竖直半高，与上一版本一致。 */
     @Unique
     private static final int FARLANDS_PRELOAD_HALF_Y = 3;
@@ -82,6 +99,15 @@ public abstract class SpawnPreloadMixin {
     @Shadow
     private long nextTickTimeNanos;
 
+    /**
+     * 与 {@link #nextTickTimeNanos} 一起构成 haveTime() 的判据：mayHaveDelayedTasks
+     * 为真时，haveTime()
+     * 读的是本字段。它只在服务器 tick 循环里被刷新，而 prepareLevels 跑在 tick 循环之前，所以本类
+     * 每轮同步推一次，见循环末尾。
+     */
+    @Shadow
+    private long delayedTasksMaxNextTickTimeNanos;
+
     @Shadow
     @Final
     private static long PREPARE_LEVELS_DEFAULT_DELAY_NANOS;
@@ -89,7 +115,6 @@ public abstract class SpawnPreloadMixin {
     @Shadow
     protected abstract void waitUntilNextTick();
 
-    @SuppressWarnings("resource")
     @Inject(method = "prepareLevels", at = @At("TAIL"))
     private void farlands$preloadSpawnArea(CallbackInfo ci) {
         MinecraftServer server = (MinecraftServer) (Object) this;
@@ -120,8 +145,8 @@ public abstract class SpawnPreloadMixin {
 
         ServerChunkCache cache = level.getChunkSource();
         Set<Long> issued = new HashSet<>();
-        for (int dx = -FARLANDS_PRELOAD_RADIUS; dx <= FARLANDS_PRELOAD_RADIUS; dx++) {
-            for (int dz = -FARLANDS_PRELOAD_RADIUS; dz <= FARLANDS_PRELOAD_RADIUS; dz++) {
+        for (int dx = -FARLANDS_PRELOAD_GEN_RADIUS; dx <= FARLANDS_PRELOAD_GEN_RADIUS; dx++) {
+            for (int dz = -FARLANDS_PRELOAD_GEN_RADIUS; dz <= FARLANDS_PRELOAD_GEN_RADIUS; dz++) {
                 ChunkPos pos = new ChunkPos(spawnCx + dx, spawnCz + dz);
                 cache.addTicketWithRadius(GenQueue.GEN_WORK_TICKET, pos, 0);
                 SpawnPreload.register(level.dimension(), pos);
@@ -137,8 +162,8 @@ public abstract class SpawnPreloadMixin {
             this.waitUntilNextTick();
             // 每轮补一次 FULL：出生区里已就绪的 chunk 越早拿到 FULL，入场前那次阻塞读越早不会撞上。
             ChunkReadiness.drive();
-            for (int dx = -FARLANDS_PRELOAD_RADIUS; dx <= FARLANDS_PRELOAD_RADIUS; dx++) {
-                for (int dz = -FARLANDS_PRELOAD_RADIUS; dz <= FARLANDS_PRELOAD_RADIUS; dz++) {
+            for (int dx = -FARLANDS_PRELOAD_GEN_RADIUS; dx <= FARLANDS_PRELOAD_GEN_RADIUS; dx++) {
+                for (int dz = -FARLANDS_PRELOAD_GEN_RADIUS; dz <= FARLANDS_PRELOAD_GEN_RADIUS; dz++) {
                     ChunkPos pos = new ChunkPos(spawnCx + dx, spawnCz + dz);
                     LevelChunk chunk = ChunkReadiness.chunkAt(level, pos);
                     if (chunk == null) {
@@ -158,6 +183,16 @@ public abstract class SpawnPreloadMixin {
                     }
                 }
             }
+            // 装饰在这里驱动：它由 tick 驱动，而预加载跑在 tick 之前。不补这一步，判据圈的段会
+            // 永远停在 CARVERS，本循环的退出条件，即范围内全部点亮，也就永远等不到。
+            DecorationFiller.tick();
+            // 抽一次主线程执行器。装饰的收尾把升段与撤认领投在这里，fsa 的编码提交也在这里，
+            // 而 prepareLevels 期间的 waitUntilNextTick 可能不再抽各 level 的 chunk 执行器，
+            // 与 GenQueue.awaitIdle 的同形处理一致。不抽它，收尾永远落不下来，认领被一直持有。
+            SectionIO.drainMainThreadTasks(server);
+            // 结构相驱动：与装饰同理——它由 tick 驱动，而预加载跑在 tick 之前。排在抽主线程之后，
+            // 本迭代里被 GenTask 投出的 pullDependencies 这一轮就能把挂起项提升掉。
+            StructureDriver.tick();
             ready = farlands$countReady(level, spawnCx, spawnCz, minSy, maxSy);
             long now = System.currentTimeMillis();
             if (ready != lastReady) {
@@ -171,6 +206,10 @@ public abstract class SpawnPreloadMixin {
                 lastProgressAt = now;
             }
             this.nextTickTimeNanos = Util.getNanos() + PREPARE_LEVELS_DEFAULT_DELAY_NANOS;
+            // 与上面同一判据的另一半：mayHaveDelayedTasks 在 prepareLevels 期间会被 pollTask 置真，
+            // 之后 haveTime() 只读 delayedTasksMaxNextTickTimeNanos。不同步推它，haveTime() 恒假，
+            // waitUntilNextTick 既不抽 chunk 执行器，也不让出 tick，本循环退化成热自旋。
+            this.delayedTasksMaxNextTickTimeNanos = this.nextTickTimeNanos;
             this.waitUntilNextTick();
         }
 

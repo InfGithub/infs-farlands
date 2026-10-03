@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.light.FarLandsLightEngine;
+import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
 import com.inf.farlands.util.window.WindowedChunk;
@@ -194,6 +195,8 @@ public final class SectionLifecycle {
         pendingWindowRead.remove(lc);
         ServerLevel level = (ServerLevel) lc.getLevel();
         ChunkReadiness.discard(level, lc.getPos());
+        // 起点标记与结构相的挂起项也随卸载一起丢：重载时起点由读盘填回，标记重算。
+        StructureDriver.clearChunk(level.dimension(), lc.getPos().pack());
         if (TerrainHooks.isChunkBusy(lc)) {
             return;
         }

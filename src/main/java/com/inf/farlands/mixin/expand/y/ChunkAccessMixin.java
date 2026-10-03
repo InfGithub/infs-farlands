@@ -380,6 +380,18 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
         this.farlandsBeardifier = beardifier;
     }
 
+    /**
+     * 是否已设 {@code Beardifier}。**生成侧的门读它**：没有就不许 fill。
+     *
+     * <p>判据落在不变量本身，而不是「有没有被登记为等结构相」那个代理上——登记晚于这个 chunk 对
+     * {@code latestChunk} 可见的那一刻，中间那道窗口会让只看代理的门放行，而 fill 取数即抛。
+     * 字段是 volatile，池上读安全。
+     */
+    @Override
+    public boolean hasBeardifier() {
+        return this.farlandsBeardifier != null;
+    }
+
     @Override
     public Beardifier getBeardifier() {
         Beardifier beardifier = this.farlandsBeardifier;

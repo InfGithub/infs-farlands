@@ -15,16 +15,24 @@ import net.minecraft.world.level.chunk.LevelChunk;
  *   1 BIOMES       群系已填
  *   2 TERRAIN      该段已 fill
  *   3 SURFACE      地表已应用
- *   4 CARVERS      雕刻已完成
- *   5 LIGHTED      光照已完成
+ *   4 CARVERS      雕刻已完成，地物未放
+ *   5 DECORATED    该 chunk 作为中心的那一遍装饰已跑完
+ *   6 LIGHTED      光照已完成
+ *
+ * <p>不变式：装饰先于点亮，即 LIGHTED 蕴含 DECORATED。fsa 只写 stage >= LIGHTED 的段，所以
+ * DECORATED 只活在内存里，磁盘上不会出现它。
  *
  * 载体。旧仓库在 NeoForge 1.21.1 上用 attachment 挂在 ChunkAccess 上，与 terrain 的
  * GenQueue 共用，属于 fsa 与 terrain 的共享数据面。本 port 不用 Fabric API，stage 由 fsa
  * 自己承载，即 chunkPos 到 sectionY 到 stage 的无装箱分段 map，全 port 只有这一份状态。
  *
  * 推进点。BIOMES 在 BiomeFiller，TERRAIN 在 GenTask 的 fill 之后，SURFACE 在 SurfaceFiller，
- * CARVERS 在 CarverFiller，LIGHTED 在 GenQueue.triggerLight 的 whenComplete 里由
- * promoteAllGenToLighted 一次升段。
+ * CARVERS 在 CarverFiller，DECORATED 在 DecorationFiller 的收尾，LIGHTED 在
+ * GenQueue.triggerLight 的 whenComplete 里由 promoteAllGenToLighted 一次升段。
+ *
+ * <p>「光照会升的三档」由 {@link #isAwaitingLight(int)} 一处给出：promoteAllGenToLighted、
+ * hasAwaitingLight 与 GenTask 的补触发判据都走它，避免三处各写一份而失同步。CARVERS 不在其中，
+ * 它的出路是装饰；若光照回调把它一并升 LIGHTED，未装饰的段会被标成完成并落盘。
  *
  * 生命周期。chunk 卸载时由 SectionLifecycle.flushChunk 在编码完成后 clear，内存有界。
  * 并发。写点在主线程、genPool 或 lightPool，值容器是 ConcurrentHashMap，读点 encodeNow
@@ -37,7 +45,8 @@ public final class SectionStage {
     public static final int TERRAIN = 2;
     public static final int SURFACE = 3;
     public static final int CARVERS = 4;
-    public static final int LIGHTED = 5;
+    public static final int DECORATED = 5;
+    public static final int LIGHTED = 6;
 
     private static final Long2ObjectStripedMap<ConcurrentHashMap<Integer, Integer>> STAGES =
             new Long2ObjectStripedMap<>(1 << 12);
@@ -77,31 +86,44 @@ public final class SectionStage {
     }
 
     /**
-     * 光照完成回调：该 chunk 全部 TERRAIN、SURFACE、CARVERS 升 LIGHTED。光照覆盖全 chunk，
-     * 含已地表与雕刻处理的 section，CHM.replaceAll 线程安全。
+     * 光照会升的三档：一次光照跑完，这三档的段都能升到 LIGHTED。CARVERS 不在其中，它的出路是
+     * 装饰；把它算进来会让光照回调升完段后仍判为「还有活」，无限续接下一轮。
+     */
+    public static boolean isAwaitingLight(int stage) {
+        return stage == TERRAIN || stage == SURFACE || stage == DECORATED;
+    }
+
+    /**
+     * 光照完成回调：该 chunk 全部在 {@link #isAwaitingLight(int)} 里的段升 LIGHTED。光照覆盖
+     * 全 chunk，含已地表、已雕刻与已装饰的 section，CHM.replaceAll 线程安全。
      */
     public static void promoteAllGenToLighted(LevelChunk chunk) {
         ConcurrentHashMap<Integer, Integer> m = STAGES.get(chunk.getPos().pack());
         if (m != null) {
-            m.replaceAll((k, v) -> (v == TERRAIN || v == SURFACE || v == CARVERS) ? LIGHTED : v);
+            m.replaceAll((k, v) -> isAwaitingLight(v) ? LIGHTED : v);
         }
     }
 
-    /** 该 chunk 是否还有 TERRAIN 未 LIGHTED 的 section。光照完成后再检查，驱动下一批。 */
-    public static boolean hasAnyGen(LevelChunk chunk) {
+    /**
+     * 该 chunk 是否还有光照能升、但还没升的 section。光照完成后再检查，驱动下一批。
+     *
+     * <p>判据与 {@link #promoteAllGenToLighted} 的匹配面同源，两处都由 {@link #isAwaitingLight(int)}
+     * 给出。放宽到「全体 belowLighted」会把 CARVERS 也算进来，回调因此永远为真。
+     */
+    public static boolean hasAwaitingLight(LevelChunk chunk) {
         ConcurrentHashMap<Integer, Integer> m = STAGES.get(chunk.getPos().pack());
         if (m == null) {
             return false;
         }
         for (int v : m.values()) {
-            if (v == TERRAIN) {
+            if (isAwaitingLight(v)) {
                 return true;
             }
         }
         return false;
     }
 
-    /** 段是否做过但没点亮，即 stage 落在 TERRAIN 到 LIGHTED 之间。 */
+    /** 段是否做过但没点亮，即 stage 落在 TERRAIN 到 LIGHTED 之间，含 DECORATED。 */
     public static boolean isBelowLighted(int stage) {
         return stage >= TERRAIN && stage < LIGHTED;
     }

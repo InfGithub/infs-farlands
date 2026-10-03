@@ -5,7 +5,9 @@ import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
 import com.inf.farlands.terrain.carverFiller.CarverFiller;
+import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.surfaceFiller.SurfaceFiller;
+import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
 import com.inf.farlands.util.window.WindowedChunk;
@@ -82,6 +84,16 @@ public final class GenTask {
             if (!(level instanceof ServerLevel serverLevel)) {
                 return;
             }
+            // 门查不变量本身：**没有 Beardifier 就不许 fill**。fill 读它（AbstractTerrainFiller:129），
+            // 未设即抛。只看 isAwaiting 不够——登记的落点晚于这个 chunk 对 latestChunk 可见的那一刻，
+            // 中间那道窗口里进池的任务会撞上未设的 Beardifier。这个门也不能挪进就绪判据：FULL 若等
+            // 结构相，setInitialSpawn 那条阻塞读会与「造出 ±8 的壳」互为条件死等。
+            if (!((com.inf.farlands.terrain.ChunkBeardifier) chunk).hasBeardifier()) {
+                // 拉依赖必须在主线程（票操作非线程安全，latestChunk 也只在主线程），而本任务在池上：
+                // 排一笔回主线程，早退保持即时。不是挂起项时 pullDependencies 自己会早退。
+                SectionIO.runOnMainThread(() -> StructureDriver.pullDependencies(serverLevel, chunk), serverLevel);
+                return;
+            }
             List<int[]> segments = collectSegments();
             for (int[] seg : segments) {
                 // 先补 biome 再推 TERRAIN。本方法是全流程唯一把 stage 推到 TERRAIN 的地方，放这里就与
@@ -126,14 +138,18 @@ public final class GenTask {
                 InfsFarlands.LOGGER.error("GENTASK carvers ex chunk={},{} {}",
                         chunk.getPos().x(), chunk.getPos().z(), e.toString());
             }
-            // 光照触发条件：carvers 产出了东西，或读回后停在 TERRAIN 到 CARVERS 之间的段。
-            // 后者是 fsa 恢复路径的稳定态，三条 pending 判据都不认它，carvers 因此为空，
-            // 只按 carvers 判会永远等不到光照。
-            int[] belowLighted = belowLightedSections();
-            if (carved.length > 0 || belowLighted.length > 0) {
+            // 雕刻完成即登记装饰：这一步的段是 CARVERS，装饰的门要九宫格，判据与重试都在
+            // DecorationFiller。门没过只留表，不影响本任务收尾；扫描路径另有兜底登记。
+            if (carved.length > 0) {
+                DecorationFiller.register(chunk);
+            }
+            // 光照触发条件：carvers 产出了东西，或已有光照能升、但还没升的段。CARVERS 不在判据内：
+            // 那一段的下一步是装饰而不是光照，promote 也不升它，算进来只会每 tick 白跑一次光照。
+            int[] awaitingLight = awaitingLightSections();
+            if (carved.length > 0 || awaitingLight.length > 0) {
                 // 恢复的段不脏，applyDecoded 只恢复 stage。不标脏则 persistChunkDirty 写不到它，
                 // stage 会一直停在盘上的旧值，每次重进都要重算一遍光照。
-                for (int sy : belowLighted) {
+                for (int sy : awaitingLight) {
                     ((WindowedChunk) chunk).markSectionDirty(sy);
                 }
                 GenQueue.notifyGenerated(chunk);
@@ -150,20 +166,20 @@ public final class GenTask {
     }
 
     /**
-     * 做过但没点亮的 section，即 stage 落在 TERRAIN 到 CARVERS 之间的段，光照补触发的判据。
+     * 光照会升、但还没升的 section，即 SectionStage.isAwaitingLight 认的三档：TERRAIN、SURFACE、
+     * DECORATED。它是本任务补触发光照的判据；判据的出处只有 SectionStage 那一处，避免与
+     * promoteAllGenToLighted 的匹配面失同步。
      *
-     * <p>它是 fsa 恢复路径的稳定态：collectSegments 跳过 isOrAfter 为 TERRAIN 的段，SurfaceFiller
-     * 只认 TERRAIN 未 SURFACE 的段，CarverFiller 只认 SURFACE 未 CARVERS 的段，三条 pending 判据
-     * 都不认 stage 已是 CARVERS 的段，carvers 因此为空，光照永远不会被触发。UNPROCESSED 与 BIOMES
-     * 不在判据内：窗口内的由生成收口，窗口外的永不处理。
+     * <p>CARVERS 不在判据内：它的出路是装饰，光照不会升它。UNPROCESSED 与 BIOMES 也不在：
+     * 窗口内的由生成收口，窗口外的永不处理。
      *
      * <p>按 stage 载体取，不按 allSections 取：非噪声生成器的维度里 fill 会早退、段没被建出来，
      * 而 GenTask 已经推进了 stage，按 allSections 会漏掉它们。
      */
-    private int[] belowLightedSections() {
+    private int[] awaitingLightSections() {
         List<Integer> out = new ArrayList<>();
         SectionStage.forEachStage(chunk, (sy, stage) -> {
-            if (SectionStage.isBelowLighted(stage)) {
+            if (SectionStage.isAwaitingLight(stage)) {
                 out.add(sy);
             }
         });

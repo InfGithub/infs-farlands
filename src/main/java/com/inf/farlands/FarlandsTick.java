@@ -5,7 +5,9 @@ import com.inf.farlands.serialize.ChunkReadiness;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.terrain.LevelSystems;
+import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
+import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.terrain.system.terrain.noise.overworld.Beta173.Beta173NoiseSystem;
 import com.inf.farlands.terrain.system.terrain.noise.overworld.Vanilla.VanillaNoiseSystem;
 import com.inf.farlands.util.maps.AquiferUtil;
@@ -201,6 +203,10 @@ public class FarlandsTick {
         GenQueue.tick();
         // 动态扫描：每 tick 从玩家当前位置螺旋扫描视距内未生成的 chunk 补入队。
         GenQueue.scanAndEnqueue(server);
+        // 装饰驱动：判门、认领、提交到 farlands-gen。排在扫描之后，本 tick 新登记的项当轮就能走。
+        DecorationFiller.tick();
+        // 结构相驱动：重试那些在等 ±8 壳齐的 chunk，过了就跑挂起的续作。
+        StructureDriver.tick();
         // 数据就绪驱动：当 tick 变成就绪的 chunk 在同一 tick 放行 promotion 的两个 future。
         ChunkReadiness.drive();
     }

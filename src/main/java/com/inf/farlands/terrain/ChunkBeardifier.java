@@ -26,4 +26,13 @@ public interface ChunkBeardifier {
      * 把结构上的地形适配丢掉。
      */
     Beardifier getBeardifier();
+
+    /**
+     * 是否已设置。**生成侧的门读它**：没有就不许 fill。
+     *
+     * <p>门要判的是不变量本身（有适配数据才允许生成），而不是「有没有被登记为等结构相」那个代理：
+     * 登记的落点晚于 chunk 对 {@code latestChunk} 可见的那一刻，中间那道窗口会让只看代理的门放行，
+     * 而 fill 取数即抛。字段是 volatile，池上读安全。
+     */
+    boolean hasBeardifier();
 }

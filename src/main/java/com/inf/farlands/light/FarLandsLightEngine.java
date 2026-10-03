@@ -177,7 +177,7 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
         this.skyEngine = skyLight ? new FarLandsSkyLightEngine(chunkSource, sharedSkyStorage, sharedSkyTopSections)
                 : null;
         this.queue = new FarLandsLightQueue();
-        this.taskLock = new LightTaskLock();
+        this.taskLock = new LightTaskLock(((ServerLevel) chunkSource.getLevel()).dimension());
         // 已由 FarlandsConfig 解析：显式值受 range(1,64) 约束，"auto" 由取值器算出，恒 >= 1
         int parallelism = FarlandsConfig.parallelLightThreads;
         this.lightPool = Executors.newFixedThreadPool(parallelism, r -> {
@@ -370,6 +370,24 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
             blockEngine.removeDataLayer(key, chunkKey);
         } else if (skyEngine != null) {
             skyEngine.removeDataLayer(key, chunkKey);
+        }
+    }
+
+    /**
+     * 装饰侧取光照域锁：半径 2，覆盖它的 3×3 写域。主线程调用，失败即放弃本次、留表重试。
+     *
+     * <p>这把锁与 {@link LightTaskLock#tryLock} 共用同一份 per-chunk 锁：光照侧在那里的 25 格
+     * 循环里查装饰认领表，装饰侧直接取锁，于是两个方向互为排除。客户端构造下 taskLock 为 null，
+     * 装饰是纯服务端，返回假即可。
+     */
+    public boolean tryLockDomain(int chunkX, int chunkZ) {
+        return this.taskLock != null && this.taskLock.tryLockDomain(chunkX, chunkZ);
+    }
+
+    /** 装饰侧释放光照域锁。与 {@link #tryLockDomain} 配对，收尾调用。 */
+    public void unlockDomain(int chunkX, int chunkZ) {
+        if (this.taskLock != null) {
+            this.taskLock.unlock(chunkX, chunkZ);
         }
     }
 

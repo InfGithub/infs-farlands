@@ -162,56 +162,110 @@ public abstract class GenerationChunkHolderMixin {
             }
             ChunkReadiness.watch((GenerationChunkHolder) (Object) this, levelchunk);
 
-            // 结构性地形适配数据在这里算，不能在生成线程上算：Beardifier.forStructuresInChunk 会经
-            // StructureManager 走 ServerChunkCache 的取 chunk，非主线程上那条路把活踢回主线程并阻塞
-            // 等待，而主线程可能在关服时正等生成收尾，两边互为条件。此处已在主线程，且 chunk 的
-            // 结构表已就位：旧存档由 parse 线程在 SerializableChunkData 里填进 proto，
-            // LevelChunk 构造时经 setAllStarts/setAllReferences 拷入；新建世界为空，结果同 vanilla 的
-            // 空表分支。它是幂等的，重复写入无害。
-            ((ChunkBeardifier) levelchunk).setBeardifier(
-                    Beardifier.forStructuresInChunk(level.structureManager(), levelchunk.getPos()));
-
-            // biome 阶段独立：后台按窗口并集填 biome 并升 BIOMES，完成后回主线程做 fsa 读回，
-            // 读回完成再入生成队列。读回与入队必须回主线程，thenAccept 在后台线程执行。
+            // 结构相早于 Beardifier，Beardifier 早于 fill：这是铁的顺序，但它只约束 fill，不约束就绪。
+            // 所以这里只挂起「引用相 + Beardifier」那一小段，尾部（biome、读回、入队、drive）照跑 ——
+            // setInitialSpawn 那条阻塞 FULL 早于预加载循环，加载期没有第二次 drive 的机会。
             //
-            // biome 阶段不在生成与光照两张标志内，而它同样会换掉 section 的 biomes 容器，发送侧
-            // 据此另查 isBiomeFilling。begin 必须在提交之前由本线程落下，end 必须在填充的最后一笔
-            // 写之后：填充抛异常或提交本身失败都要清，否则该 chunk 永久为忙。
-            GenQueue.beginBiomeFill(levelchunk);
-            try {
-                CompletableFuture.runAsync(
-                        () -> {
-                            boolean filled = false;
-                            try {
-                                BiomeFiller.fillChunkBiomes(level, levelchunk);
-                                filled = true;
-                            } finally {
-                                if (!filled) {
-                                    GenQueue.endBiomeFill(levelchunk);
-                                }
-                            }
-                        },
-                        Util.backgroundExecutor())
-                        .thenAccept(v -> SectionIO.runOnMainThread(() -> {
-                            // 群系在途标志与读回在同一次主线程任务里交接。若在后台线程就清掉标志，
-                            // 从清掉到 loadChunkSections 落下读回标记之间会出现一个既无在途也无读回的
-                            // 缝，ChunkReadiness 会把这个缝判成就绪。
-                            GenQueue.endBiomeFill(levelchunk);
-                            // 群系标志清掉后，一个已读回且已点亮的 chunk 可能刚好就绪，这里补一次。
-                            ChunkReadiness.drive();
-                            // fsa 读回：先查磁盘窗口内 section，有则读回恢复数据、光照、stage 并补发。
-                            // 完成后才 enqueueChunk，collectSegments 的 isOrAfter(TERRAIN) 自动跳过已读回的，
-                            // 磁盘没有的 section 正常入生成队列。
-                            SectionLifecycle.loadChunkSections(levelchunk,
-                                    () -> GenQueue.enqueueChunk(levelchunk));
-                        }, level));
-            } catch (RuntimeException e) {
-                GenQueue.endBiomeFill(levelchunk);
-                throw e;
+            // 顺序由 GenTask.execute 的门保证，而那道门查的是不变量本身（**没有 Beardifier 就不填**），
+            // 不是「有没有登记为等结构相」这个代理：登记的落点晚于本 chunk 对 latestChunk 可见的那一刻。
+            com.inf.farlands.terrain.structure.StructureDriver.ensureStarts(level, levelchunk);
+            if (com.inf.farlands.terrain.structure.StructureDriver.referencesBuildable(level, levelchunk)) {
+                farlandsStructureReady(level, levelchunk);
+            } else {
+                com.inf.farlands.terrain.structure.StructureDriver.await(level, levelchunk,
+                        () -> farlandsStructureReady(level, levelchunk));
             }
+            farlandsGenerateTail(level, levelchunk);
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("farlands: existence flow failed chunk={}", proto.getPos(), e);
             throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 结构相：引用相 → {@code Beardifier} → 补一次生成入队。
+     *
+     * <p>与挂起标记的摘除同线程、同一次调用内相邻完成（{@code StructureDriver.tick} 先摘再跑），
+     * 所以不存在「门已开、Beardifier 未设」的窗口。
+     *
+     * <p>末尾必须补一次入队：存在流程尾部那次 {@code enqueueChunk} 会被 GenTask 的门早退掉，而挂起
+     * 期的 chunk 在扫描里也重排不上（预加载期没有窗口段，`hasUnprocessed` 迭代不到任何段）。
+     */
+    @Unique
+    private void farlandsStructureReady(ServerLevel level, LevelChunk levelchunk) {
+        // 引用相：读中心 ±8 的起点表，写中心自己的引用表。主线程调，且必须先于 Beardifier。
+        com.inf.farlands.terrain.structure.StructureDriver.buildReferences(level, levelchunk);
+
+        // 结构性地形适配数据：Beardifier.forStructuresInChunk 读中心的引用表，再按引用取各 chunk 的
+        // 起点，所以必须在引用相之后。它经 StructureManager 走 ServerChunkCache 的取 chunk，非主线程
+        // 上那条路把活踢回主线程并阻塞等待，所以必须在主线程算 —— 此处就是主线程。
+        ((ChunkBeardifier) levelchunk).setBeardifier(
+                Beardifier.forStructuresInChunk(level.structureManager(), levelchunk.getPos()));
+
+        // 补一次生成入队。三个入口只有 preload 能用：
+        //   enqueueChunk 的首句是 isNearPlayer 过滤，预加载期没有玩家，会被直接挡回；
+        //   enqueue(chunk, sy) 走窗口并集，预加载期窗口为空，扫不出任何段；
+        //   preload(chunk, min, max) 走显式段范围，正是走查那一路用的入口。
+        // 范围取该 chunk 已物化过的段（走查的 biome 阶段已经把它们建出来了）。
+        int[] range = { Integer.MAX_VALUE, Integer.MIN_VALUE };
+        com.inf.farlands.serialize.SectionStage.forEachStage(levelchunk, (sy, stage) -> {
+            if (sy < range[0]) {
+                range[0] = sy;
+            }
+            if (sy > range[1]) {
+                range[1] = sy;
+            }
+        });
+        if (range[0] <= range[1]) {
+            GenQueue.preload(levelchunk, range[0], range[1]);
+        }
+    }
+
+    /**
+     * 结构相之后照跑的那一支：biome → fsa 读回 → 入队。
+     *
+     * <p>它不依赖 {@code Beardifier}，所以结构相被延后时也照跑 —— 加载期的 FULL 就靠它末尾那次
+     * {@code ChunkReadiness.drive()} 补上，而 {@code setInitialSpawn} 的阻塞读早于预加载循环。
+     */
+    @Unique
+    private void farlandsGenerateTail(ServerLevel level, LevelChunk levelchunk) {
+        // biome 阶段独立：后台按窗口并集填 biome 并升 BIOMES，完成后回主线程做 fsa 读回，
+        // 读回完成再入生成队列。读回与入队必须回主线程，thenAccept 在后台线程执行。
+        //
+        // biome 阶段不在生成与光照两张标志内，而它同样会换掉 section 的 biomes 容器，发送侧
+        // 据此另查 isBiomeFilling。begin 必须在提交之前由本线程落下，end 必须在填充的最后一笔
+        // 写之后：填充抛异常或提交本身失败都要清，否则该 chunk 永久为忙。
+        GenQueue.beginBiomeFill(levelchunk);
+        try {
+            CompletableFuture.runAsync(
+                    () -> {
+                        boolean filled = false;
+                        try {
+                            BiomeFiller.fillChunkBiomes(level, levelchunk);
+                            filled = true;
+                        } finally {
+                            if (!filled) {
+                                GenQueue.endBiomeFill(levelchunk);
+                            }
+                        }
+                    },
+                    Util.backgroundExecutor())
+                    .thenAccept(v -> SectionIO.runOnMainThread(() -> {
+                        // 群系在途标志与读回在同一次主线程任务里交接。若在后台线程就清掉标志，
+                        // 从清掉到 loadChunkSections 落下读回标记之间会出现一个既无在途也无读回的
+                        // 缝，ChunkReadiness 会把这个缝判成就绪。
+                        GenQueue.endBiomeFill(levelchunk);
+                        // 群系标志清掉后，一个已读回且已点亮的 chunk 可能刚好就绪，这里补一次。
+                        ChunkReadiness.drive();
+                        // fsa 读回：先查磁盘窗口内 section，有则读回恢复数据、光照、stage 并补发。
+                        // 完成后才 enqueueChunk，collectSegments 的 isOrAfter(TERRAIN) 自动跳过已读回的，
+                        // 磁盘没有的 section 正常入生成队列。
+                        SectionLifecycle.loadChunkSections(levelchunk,
+                                () -> GenQueue.enqueueChunk(levelchunk));
+                    }, level));
+        } catch (RuntimeException e) {
+            GenQueue.endBiomeFill(levelchunk);
+            throw e;
         }
     }
 

@@ -353,6 +353,12 @@ public final class ChunkDataSender {
                     it.remove(); // 段不存在：剪掉
                     continue;
                 }
+                // 与落盘同门：未点亮的段是中间态，不发，留队列；它升到 LIGHTED 时由 GenQueue.triggerLight
+                // 的完成回调补一次内容变化标记，那时这一笔才出队。
+                if (!com.inf.farlands.serialize.SectionStage.isOrAfter(lc, sy,
+                        com.inf.farlands.serialize.SectionStage.LIGHTED)) {
+                    continue;
+                }
                 // 纯空气段照发：群系存在段里，不发客户端就没有那份群系，读到的是工厂默认群系
                 if (GenQueue.isLightInFlight(lc) && ((WindowedChunk) lc).isSectionDirty(sy)) {
                     // 生成 fill 的 section 光照播种未完成，留队列等光照。读回的 section 未脏，放行发送。

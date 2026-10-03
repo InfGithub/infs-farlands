@@ -62,7 +62,12 @@ public final class WindowSendState {
         for (Map.Entry<Integer, LevelChunkSection> e : ((WindowedChunk) chunk).windowedAllSections().entrySet()) {
             int sy = e.getKey();
             LevelChunkSection s = e.getValue();
-            if (sy >= minY && sy <= maxY && s != null) {
+            // 与落盘同门：只有 stage >= LIGHTED 的段才是最终内容。中间态（fill 到 carvers 之间）发出去
+            // 就是让客户端显示一份随后要被推翻的地形，而服务端仍按未就绪拒绝放置与破坏 —— 那正是
+            // 「看得见地形却动不了」的来源。空段照发：群系存在段里，不发客户端就没有那份群系。
+            if (sy >= minY && sy <= maxY && s != null
+                    && com.inf.farlands.serialize.SectionStage.isOrAfter(chunk, sy,
+                            com.inf.farlands.serialize.SectionStage.LIGHTED)) {
                 out.add(e);
             }
         }

@@ -5,8 +5,11 @@ import com.inf.farlands.serialize.ChunkReadiness;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
+import com.inf.farlands.terrain.decorationFiller.DecorationClaim;
+import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.terrain.pipeline.SpawnPreload;
+import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.network.SystemsSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
@@ -66,6 +69,9 @@ public abstract class MinecraftServerMixin {
     private void farlands$clearWorldState(CallbackInfo ci) {
         SectionLifecycle.clearWorldState();
         GenQueue.clearWorldState();
+        DecorationFiller.clearWorldState();
+        DecorationClaim.clearWorldState();
+        StructureDriver.clearWorldState();
         ChunkDataSender.clearWorldState();
         SpawnPreload.clearAll();
         SystemsSender.clearWorldState();

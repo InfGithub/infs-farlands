@@ -9,6 +9,8 @@ import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.terrain.carverFiller.CarverFiller;
+import com.inf.farlands.terrain.decorationFiller.DecorationClaim;
+import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.terrainFiller.TerrainFiller;
 import com.inf.farlands.terrain.surfaceFiller.SurfaceFiller;
 import com.inf.farlands.util.network.ChunkDataSender;
@@ -25,6 +27,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -45,7 +48,8 @@ import net.minecraft.world.level.chunk.LevelChunk;
  *
  * 光照衔接按 chunk 级去重：GenTask 只推进到 TERRAIN，随后 notifyGenerated 触发一次 fillFrom 与
  * lightChunk。每 chunk 每批次一次，CAS 在途标志去重，不逐 section 重复播种。光照完成回调把
- * 全部 TERRAIN 升 LIGHTED，播种覆盖全 chunk，然后释放在途，hasAnyGen 再检查驱动下一批。
+ * SectionStage.isAwaitingLight 认的段升 LIGHTED，播种覆盖全 chunk，然后释放在途，
+ * hasAwaitingLight 再检查驱动下一批。
  */
 public final class GenQueue {
 
@@ -63,9 +67,37 @@ public final class GenQueue {
             InfsFarlands.id("gen_work"),
             new TicketType(TicketType.NO_TIMEOUT, TicketType.FLAG_LOADING));
 
-    /** 触发本类 clinit，即上面的注册。仅供 BuiltInRegistriesMixin 在冻结前调用。 */
+    /**
+     * 结构依赖的 pin 票：给「中心引用相要读的 ±8 起点表」那些邻居铺的加载票。
+     *
+     * <p>不能复用 {@link #GEN_WORK_TICKET}：那张票的生命周期属于该 chunk 自己的生成任务，
+     * completeTask 一收尾就撤；依赖票必须活到中心的引用相读完为止。
+     *
+     * <p>票在 {@code TicketStorage} 里是**集合语义、不计数**：同型同级再加一次只刷新计时，撤一次就
+     * 没了。所以引用计数由 StructureDriver 自己维护，本类只负责真的加减。
+     */
+    public static final TicketType STRUCTURE_PIN_TICKET = Registry.register(
+            BuiltInRegistries.TICKET_TYPE,
+            InfsFarlands.id("structure_pin"),
+            new TicketType(TicketType.NO_TIMEOUT, TicketType.FLAG_LOADING));
+
+    /** 触发本类 clinit，即上面两张票型的注册。仅供 BuiltInRegistriesMixin 在冻结前调用。 */
     public static TicketType ensureTicketTypeRegistered() {
         return GEN_WORK_TICKET;
+    }
+
+    /** 铺一张结构依赖票。**主线程调用**：票操作非线程安全，调用点负责，见 StructureDriver.pullDependencies。 */
+    public static void pinStructureDependency(ServerLevel level, ChunkPos pos) {
+        level.getChunkSource().addTicketWithRadius(STRUCTURE_PIN_TICKET, pos, 0);
+    }
+
+    /**
+     * 撤一张结构依赖票。票操作非线程安全，而本方法的调用点里有卸载线程，所以自己 marshal 回主线程，
+     * 形状与 {@link #removeGenTicket} 相同。
+     */
+    public static void unpinStructureDependency(ServerLevel level, ChunkPos pos) {
+        SectionIO.runOnMainThread(
+                () -> level.getChunkSource().removeTicketWithRadius(STRUCTURE_PIN_TICKET, pos, 0), level);
     }
 
     /** 生成任务队列，按距最近玩家距离排序，近先生成。PriorityQueue 非线程安全，用 QUEUE 自身同步。 */
@@ -95,6 +127,38 @@ public final class GenQueue {
      * 必须另查本集合，否则按前一次算出的定长缓冲会在写时越界。
      */
     private static final Set<LevelChunk> BIOME_FILLING = ConcurrentHashMap.newKeySet();
+
+    /**
+     * 装饰任务在途计数，关服等待用。
+     *
+     * <p>加在提交处，减在装饰的收尾里，不是在任务体结束时减：收尾是异步投回主线程的一笔，
+     * 若在任务体末尾就减，awaitIdle 会在收尾还没跑的时候放行，那一笔的升段与撤认领就丢了。
+     *
+     * <p>与 ENCODE_TASKS_IN_FLIGHT 同规：停服时不清零，未收尾的任务还会来减，清零会被减成负数。
+     */
+    private static final AtomicInteger DECORATION_IN_FLIGHT = new AtomicInteger();
+
+    /**
+     * 把装饰任务提交到 genPool。返回假表示池已关，即停服中；调用方撤认领、留表稍后再试。
+     *
+     * <p>与地形任务共用同一个池：装饰是纯算力，方案要求它跑在 farlands-gen 上。计数在这里加，
+     * 由 DecorationFiller 的收尾经 {@link #finishDecoration()} 减。
+     */
+    public static boolean submitDecoration(Runnable job) {
+        DECORATION_IN_FLIGHT.incrementAndGet();
+        try {
+            POOL.submit(job);
+            return true;
+        } catch (RejectedExecutionException e) {
+            DECORATION_IN_FLIGHT.decrementAndGet();
+            return false;
+        }
+    }
+
+    /** 装饰收尾完成时减计数。由 DecorationFiller 的收尾调用，主线程。 */
+    public static void finishDecoration() {
+        DECORATION_IN_FLIGHT.decrementAndGet();
+    }
 
     private GenQueue() {
     }
@@ -327,6 +391,11 @@ public final class GenQueue {
                 && !SectionStage.hasBelowLighted(lc)) {
             return false;
         }
+        // 已过雕刻、还没装饰的 chunk 登记进装饰表。装饰有自己的门与驱动，这里只负责发现；
+        // 判据取 CARVERS，与 DecorationFiller.hasDecorationPending 同源。
+        if (DecorationFiller.hasDecorationPending(lc)) {
+            DecorationFiller.register(lc);
+        }
         enqueueChunk(lc);
         return true;
     }
@@ -348,7 +417,12 @@ public final class GenQueue {
 
     // 光照衔接：chunk 级去重
 
-    /** 该 chunk 是否有生成或光照任务在途，供 fsa 清理判定，在途则不清理该 chunk，保守。 */
+    /**
+     * 该 chunk 是否有生成、光照或装饰在途，供 fsa 清理判定，在途则不清理该 chunk，保守。
+     *
+     * <p>装饰那一支按写域问：一个 chunk 只要落在某次装饰的九格写域内就可能正被写，编码与下发
+     * 都要让开，所以判据不是「中心是不是它」而是「它是否被某个写域覆盖」。
+     */
     public static boolean isChunkBusy(LevelChunk chunk) {
         long key = chunk.getPos().pack();
         AtomicBoolean gen = CHUNK_IN_FLIGHT.get(key);
@@ -356,7 +430,10 @@ public final class GenQueue {
             return true;
         }
         AtomicBoolean light = LIGHT_IN_FLIGHT.get(key);
-        return light != null && light.get();
+        if (light != null && light.get()) {
+            return true;
+        }
+        return DecorationClaim.isClaimed(chunk.getLevel().dimension(), key);
     }
 
     /**
@@ -424,6 +501,10 @@ public final class GenQueue {
                     SectionIO.runOnMainThread(
                             () -> {
                                 ChunkDataSender.broadcastChunkLight(serverLevel, chunk);
+                                // 段在这一刻才升 LIGHTED（promote 在上一步已跑完），而下发与落盘同门，
+                                // 所以必须在这里补一次内容变化标记：否则门一加，整包永远不发，客户端
+                                // 只能看到空壳。
+                                ChunkDataSender.markChunkChanged(chunk);
                                 // 光照完成是就绪翻转的主要时点，投一次 drive：主线程若正阻塞在某个等
                                 // FULL 的位置上，这一笔会在 managedBlock 的队列里执行，把等待解开。
                                 ChunkReadiness.drive();
@@ -432,8 +513,8 @@ public final class GenQueue {
                     InfsFarlands.LOGGER.error("farlands: light failed chunk={}", chunk.getPos(), t);
                 }
                 LIGHT_IN_FLIGHT.remove(key);
-                if (SectionStage.hasAnyGen(chunk)) {
-                    // 光照期间新 TERRAIN 未被播种覆盖，下一批。
+                if (SectionStage.hasAwaitingLight(chunk)) {
+                    // 光照期间新到 TERRAIN 或 DECORATED 的段未被这次播种覆盖，下一批。
                     notifyGenerated(chunk);
                 }
             });
@@ -445,8 +526,11 @@ public final class GenQueue {
 
     // 关服等待
 
-    /** 全局是否仍有生成或光照在途，任一标志为真或生成队列非空即为真。 */
+    /** 全局是否仍有生成、光照或装饰在途，任一标志为真或生成队列非空即为真。 */
     public static boolean hasInflightWork() {
+        if (DECORATION_IN_FLIGHT.get() > 0) {
+            return true;
+        }
         for (AtomicBoolean b : CHUNK_IN_FLIGHT.values()) {
             if (b.get()) {
                 return true;

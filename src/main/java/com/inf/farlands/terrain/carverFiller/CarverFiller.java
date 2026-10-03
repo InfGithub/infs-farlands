@@ -94,7 +94,7 @@ public final class CarverFiller {
      * 对齐 vanilla primeHeightmaps 语义，opaque 判定，首个匹配行设 height 为 y 加 1，
      * 全列无匹配则不设，保持默认。列掩码位跳只访问非空行，复杂度是非空 section 数乘 256。
      */
-    private static void primeFinalHeightmaps(LevelChunk chunk) {
+    public static void primeFinalHeightmaps(LevelChunk chunk) {
         WindowedChunk wc = (WindowedChunk) chunk;
         List<Integer> nonEmpty = new ArrayList<>();
         for (Integer sy : wc.windowedAllSections().keySet()) {
