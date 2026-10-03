@@ -39,7 +39,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * <p>
  * 它是入场前的硬前提。PlayerSpawnFinder 在玩家进名单之前就用两参 getChunk 取整块并读高度图，
  * 那条路是阻塞 FULL，而此刻没有玩家、没有窗口、就绪按设计不可达：只有这里先把出生区做成就绪，那次读
- * 才不会永久停在 managedBlock 上。所以循环没有墙钟上限，退出条件只剩「范围内全部点亮」；不收敛时只报
+ * 才不会永久停在 managedBlock 上。所以循环没有墙钟上限，退出条件只剩范围内全部点亮；不收敛时只报
  * 一次停滞明细，不早退，因为早退的结局同样是把玩家关在加载界面外，只是挂得更晚、更没有诊断。
  *
  * <p>
@@ -67,7 +67,7 @@ public abstract class SpawnPreloadMixin {
     private static final int FARLANDS_PRELOAD_RADIUS = 4;
 
     /**
-     * 票与生成的半径：比判据半径大 2。
+     * 票与生成的半径，比判据半径大 2。
      *
      * <p>
      * 装饰的门要求写域九宫格都在且都过雕刻，判据圈半径 4 的每一格都要它的外邻满足这一条，
@@ -75,13 +75,13 @@ public abstract class SpawnPreloadMixin {
      * 的门，或者每遍都因读不到外环而放弃，循环都等不到收敛。
      *
      * <p>
-     * 再外面那圈（7 到 14）不在这里铺票：结构引用相要读的 ±8 由 StructureDriver 按需拉，只对
-     * 「真的要 fill」的 chunk 发起；被拉起来的邻居只当壳，不会再往外拉，一圈即止。
+     * 再外面那圈，即半径 7 到 14，不在这里铺票：结构引用相要读的 ±8 由 StructureDriver 按需拉，只对
+     * 真的要 fill 的 chunk 发起；被拉起来的邻居只当壳，不会再往外拉，一圈即止。
      */
     @Unique
     private static final int FARLANDS_PRELOAD_GEN_RADIUS = FARLANDS_PRELOAD_RADIUS + 2;
 
-    /** 竖直半高，与上一版本一致。 */
+    /** 竖直半高。 */
     @Unique
     private static final int FARLANDS_PRELOAD_HALF_Y = 3;
 
@@ -183,14 +183,14 @@ public abstract class SpawnPreloadMixin {
                     }
                 }
             }
-            // 装饰在这里驱动：它由 tick 驱动，而预加载跑在 tick 之前。不补这一步，判据圈的段会
-            // 永远停在 CARVERS，本循环的退出条件，即范围内全部点亮，也就永远等不到。
+            // 装饰在这里驱动：它由 tick 驱动，而预加载跑在 tick 之前。不补这一步，判据圈的段会永远停在
+            // CARVERS，而本循环的退出条件是范围内全部点亮，那就永远等不到。
             DecorationFiller.tick();
             // 抽一次主线程执行器。装饰的收尾把升段与撤认领投在这里，fsa 的编码提交也在这里，
             // 而 prepareLevels 期间的 waitUntilNextTick 可能不再抽各 level 的 chunk 执行器，
             // 与 GenQueue.awaitIdle 的同形处理一致。不抽它，收尾永远落不下来，认领被一直持有。
             SectionIO.drainMainThreadTasks(server);
-            // 结构相驱动：与装饰同理——它由 tick 驱动，而预加载跑在 tick 之前。排在抽主线程之后，
+            // 结构相驱动：与装饰同理，它由 tick 驱动，而预加载跑在 tick 之前。排在抽主线程之后，
             // 本迭代里被 GenTask 投出的 pullDependencies 这一轮就能把挂起项提升掉。
             StructureDriver.tick();
             ready = farlands$countReady(level, spawnCx, spawnCz, minSy, maxSy);

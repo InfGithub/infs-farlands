@@ -37,7 +37,7 @@ public final class ScopedStructureManager {
     private ScopedStructureManager() {
     }
 
-    /** 以该 region 为 level 的管理器；两个构造件取自 level 那一份。装饰相与结构相共用。 */
+    /** 以该 region 为 level 的管理器，两个构造件取自 level 那一份。装饰相与结构相共用。 */
     public static StructureManager of(ServerLevel level, DecorationRegion region) {
         try {
             StructureManager source = level.structureManager();

@@ -84,12 +84,13 @@ public final class GenTask {
             if (!(level instanceof ServerLevel serverLevel)) {
                 return;
             }
-            // 门查不变量本身：**没有 Beardifier 就不许 fill**。fill 读它（AbstractTerrainFiller:129），
-            // 未设即抛。只看 isAwaiting 不够——登记的落点晚于这个 chunk 对 latestChunk 可见的那一刻，
-            // 中间那道窗口里进池的任务会撞上未设的 Beardifier。这个门也不能挪进就绪判据：FULL 若等
-            // 结构相，setInitialSpawn 那条阻塞读会与「造出 ±8 的壳」互为条件死等。
+            // 门查不变量本身：没有 Beardifier 就不许 fill。fill 会读它，未设即抛，读点在
+            // AbstractTerrainFiller.fill。只看 isAwaiting 不够：登记的落点晚于这个 chunk 对
+            // latestChunk 可见的那一刻，中间那道窗口里进池的任务会撞上未设的 Beardifier。这道门也
+            // 不能挪进就绪判据：FULL 若等结构相，setInitialSpawn 那条阻塞读会与造出 ±8 壳的那条链
+            // 互为条件死等。
             if (!((com.inf.farlands.terrain.ChunkBeardifier) chunk).hasBeardifier()) {
-                // 拉依赖必须在主线程（票操作非线程安全，latestChunk 也只在主线程），而本任务在池上：
+                // 拉依赖必须在主线程，票操作非线程安全，latestChunk 也只在主线程，而本任务在池上。
                 // 排一笔回主线程，早退保持即时。不是挂起项时 pullDependencies 自己会早退。
                 SectionIO.runOnMainThread(() -> StructureDriver.pullDependencies(serverLevel, chunk), serverLevel);
                 return;
@@ -98,10 +99,10 @@ public final class GenTask {
             for (int[] seg : segments) {
                 // 先补 biome 再推 TERRAIN。本方法是全流程唯一把 stage 推到 TERRAIN 的地方，放这里就与
                 // 入队顺序无关；若让生成先跑，stage 越过 BIOMES，fillSectionBiomes 的 stage < BIOMES 门
-                // 会永假，该段 biome 永久停在新段默认值 plains（PalettedContainerFactory 的
-                // defaultBiome），地表规则随之按 plains 跑，密度依赖 biome 的系统连形状一起错。
+                // 会永假，该段 biome 永久停在 PalettedContainerFactory 的默认群系 plains，地表规则随之
+                // 按 plains 跑，密度依赖 biome 的系统连形状一起错。
                 //
-                // 不需要 BIOME_FILLING 括号：本任务全程持有 CHUNK_IN_FLIGHT，发送侧一律看到
+                // 不需要用 BIOME_FILLING 包住这一段：本任务全程持有 CHUNK_IN_FLIGHT，发送侧一律看到
                 // isChunkBusy 为真并返回空表，生成期间不会读这一段。那个标志是给短路完成后跑在
                 // backgroundExecutor 上的 biome 阶段用的，见 WindowSendState.sendableSections。
                 for (int sy = seg[0]; sy <= seg[1]; sy++) {
@@ -141,7 +142,9 @@ public final class GenTask {
             // 雕刻完成即登记装饰：这一步的段是 CARVERS，装饰的门要九宫格，判据与重试都在
             // DecorationFiller。门没过只留表，不影响本任务收尾；扫描路径另有兜底登记。
             if (carved.length > 0) {
-                DecorationFiller.register(chunk);
+                DecorationFiller.register(chunk, carved);
+                // 这一格刚过雕刻：对它八个邻居的门来说，这一格从低于 CARVERS 变成就绪。
+                DecorationFiller.cellChanged();
             }
             // 光照触发条件：carvers 产出了东西，或已有光照能升、但还没升的段。CARVERS 不在判据内：
             // 那一段的下一步是装饰而不是光照，promote 也不升它，算进来只会每 tick 白跑一次光照。
@@ -154,9 +157,9 @@ public final class GenTask {
                 }
                 GenQueue.notifyGenerated(chunk);
                 // fill、surface、carvers 直接写 section，没有 vanilla 广播；这里只标记该 chunk
-                // 内容已变，由 ChunkDataSender 每 tick 按玩家当前窗口物化后再发 §5 包。
-                // 放在 notifyGenerated 之后，flush 时 LIGHT_IN_FLIGHT 必为真，于是留队列等光照
-                // 完成，方块与光照同到。
+                // 内容已变，由 ChunkDataSender 每 tick 按玩家当前窗口物化后再发段包。放在
+                // notifyGenerated 之后，flush 时 LIGHT_IN_FLIGHT 必为真，于是留队列等光照完成，
+                // 方块与光照同到。
                 ChunkDataSender.markChunkChanged(chunk);
             }
         } finally {

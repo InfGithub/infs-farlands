@@ -14,7 +14,7 @@ import net.minecraft.world.level.Level;
  * per-chunk 光照任务锁，半径 2。
  *
  * 一个 chunk 的传播会写邻居 section，方块光最远 15 格即 XZ ±1 section，且
- * 天空光初始化/空 section 检查涉 3×3 邻居 锁半径 2 保证相邻 chunk 的光照任务
+ * 天空光初始化与空 section 检查涉 3×3 邻居，锁半径 2 保证相邻 chunk 的光照任务
  * 不并发，同一 section 不被两个任务同时写，DataLayer.set 半字节读改写不竞争。
  *
  * 获取按 chunk key 排序以防死锁；任一失败回滚已获取的锁并返回 false，调用方
@@ -23,7 +23,7 @@ import net.minecraft.world.level.Level;
  * <p>另一类失败是装饰：装饰在池上写段与天光光源列，而光照任务读同一批段的
  * 光源列。判据并进这一把锁的两侧，见 tryLock 与 FarLandsLightEngine 的
  * tryLockDomain：光照侧遇到被认领的格即让路，装饰侧直接取这把锁，两个方向都走
- * 「失败即重试」，没有等待，因此也没有锁序环。
+ * 失败即重试，没有等待，因此也没有锁序环。
  */
 public final class LightTaskLock {
 
@@ -41,14 +41,11 @@ public final class LightTaskLock {
      * 保证同一时刻至多一个它，缓冲无并发。消除每次 tryLock 的 new long[25]
      * 分配，JFR 55G，传播任务调度热路径。
      *
-     * <p>装饰侧不走这个缓冲：{@link #tryLockDomain} 在主线程上调用，与 drainLight 并发，共用一个
-     * 数组会互相覆盖 key；回滚是按 keys 的下标放的，读到被改过的值就会放错格、并把它已占的格永久
-     * 留下。它走 {@link #domainKeyBuf}。
+     * <p>只有这一条热路径复用缓冲。装饰侧的 {@link #tryLockDomain} 每次自备局部数组：它在
+     * farlands-gen 上被多个池线程并发调用，共用实例缓冲会互相覆盖 key，而回滚按下标放锁，读到
+     * 被改过的值就会放错格，并把它已占的格永久留下。
      */
     private final long[] keyBuf = new long[KEY_COUNT];
-
-    /** 装饰侧取锁用的独立缓冲，理由见 {@link #keyBuf}。装饰只在主线程调用，单线程复用安全。 */
-    private final long[] domainKeyBuf = new long[KEY_COUNT];
 
     public LightTaskLock(ResourceKey<Level> dimension) {
         this.dimension = dimension;
@@ -60,17 +57,21 @@ public final class LightTaskLock {
     }
 
     /**
-     * 装饰侧取锁。与 {@link #tryLock} 是同一把锁，两处不同：
+     * 装饰侧取锁。与 {@link #tryLock} 是同一把锁，三处不同：
      *
-     * <p>一，走 {@link #domainKeyBuf}，不与 drainLight 并发共用一个数组。
+     * <p>一，每次调用自备一个局部缓冲。装饰在 farlands-gen 上跑，两个装饰会在两个池线程上并发调
+     * 它，复用实例缓冲就会互相覆盖 key；回滚按下标放锁，读到被改过的值就会放错格，并把它已占的格
+     * 永久留下。一次装饰一次分配，可忽略。
      *
-     * <p>二，豁免自己那九格认领。**本入口只许在 {@link DecorationClaim#tryClaim} 刚成功之后调用**：
-     * 那时中心 ±1 的写域必定是自己占的，而认领表也在本锁的获取路径上，不豁免就是装饰拿自己的认领
-     * 挡自己——症状是 `tick()` 永远提交不出去、预加载停在同一个格数上。豁免范围正好是本锁域的内层
-     * 3×3，别人的认领照旧让路，哪怕只差一格。
+     * <p>二，豁免自己那九格认领。本入口只许在 {@link DecorationClaim#tryClaim} 成功、且尚未释放
+     * 期间调用：那时中心 ±1 的写域必定是自己占的，而认领表也在本锁的获取路径上，不豁免就是装饰
+     * 拿自己的认领挡自己，症状是 tick() 永远提交不出去、预加载停在同一个格数上。豁免范围正好是本
+     * 锁域的内层 3×3，别人的认领照旧让路，哪怕只差一格。
+     *
+     * <p>三，失败即放弃本次，此时一个方块都没写，调用方留表下一轮，不等待。
      */
     public boolean tryLockDomain(int chunkX, int chunkZ) {
-        return this.tryLock(chunkX, chunkZ, this.domainKeyBuf, true);
+        return this.tryLock(chunkX, chunkZ, new long[KEY_COUNT], true);
     }
 
     private boolean tryLock(int chunkX, int chunkZ, long[] keys, boolean exemptOwnWriteDomain) {

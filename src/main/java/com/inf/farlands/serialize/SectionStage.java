@@ -22,15 +22,14 @@ import net.minecraft.world.level.chunk.LevelChunk;
  * <p>不变式：装饰先于点亮，即 LIGHTED 蕴含 DECORATED。fsa 只写 stage >= LIGHTED 的段，所以
  * DECORATED 只活在内存里，磁盘上不会出现它。
  *
- * 载体。旧仓库在 NeoForge 1.21.1 上用 attachment 挂在 ChunkAccess 上，与 terrain 的
- * GenQueue 共用，属于 fsa 与 terrain 的共享数据面。本 port 不用 Fabric API，stage 由 fsa
- * 自己承载，即 chunkPos 到 sectionY 到 stage 的无装箱分段 map，全 port 只有这一份状态。
+ * <p>载体：chunkPos 到 sectionY 到 stage 的无装箱分段 map。本 port 不用 Fabric API，stage 由
+ * fsa 自己承载，全 port 只有这一份状态。
  *
  * 推进点。BIOMES 在 BiomeFiller，TERRAIN 在 GenTask 的 fill 之后，SURFACE 在 SurfaceFiller，
  * CARVERS 在 CarverFiller，DECORATED 在 DecorationFiller 的收尾，LIGHTED 在
  * GenQueue.triggerLight 的 whenComplete 里由 promoteAllGenToLighted 一次升段。
  *
- * <p>「光照会升的三档」由 {@link #isAwaitingLight(int)} 一处给出：promoteAllGenToLighted、
+ * <p>光照会升的三档由 {@link #isAwaitingLight(int)} 一处给出：promoteAllGenToLighted、
  * hasAwaitingLight 与 GenTask 的补触发判据都走它，避免三处各写一份而失同步。CARVERS 不在其中，
  * 它的出路是装饰；若光照回调把它一并升 LIGHTED，未装饰的段会被标成完成并落盘。
  *
@@ -87,7 +86,7 @@ public final class SectionStage {
 
     /**
      * 光照会升的三档：一次光照跑完，这三档的段都能升到 LIGHTED。CARVERS 不在其中，它的出路是
-     * 装饰；把它算进来会让光照回调升完段后仍判为「还有活」，无限续接下一轮。
+     * 装饰；把它算进来会让光照回调升完段后仍判为还有活，无限续接下一轮。
      */
     public static boolean isAwaitingLight(int stage) {
         return stage == TERRAIN || stage == SURFACE || stage == DECORATED;
@@ -108,7 +107,7 @@ public final class SectionStage {
      * 该 chunk 是否还有光照能升、但还没升的 section。光照完成后再检查，驱动下一批。
      *
      * <p>判据与 {@link #promoteAllGenToLighted} 的匹配面同源，两处都由 {@link #isAwaitingLight(int)}
-     * 给出。放宽到「全体 belowLighted」会把 CARVERS 也算进来，回调因此永远为真。
+     * 给出。放宽到全体 belowLighted 会把 CARVERS 也算进来，回调因此永远为真。
      */
     public static boolean hasAwaitingLight(LevelChunk chunk) {
         ConcurrentHashMap<Integer, Integer> m = STAGES.get(chunk.getPos().pack());

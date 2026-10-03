@@ -55,7 +55,7 @@ public final class GenQueue {
 
     /**
      * fill 任务期间保持 chunk 加载的 ticket，半径 0，只保加载不卸载。
-     * 与 light 的 CHUNK_WORK_TICKET 同型不同类，避免同 chunk 双 ticket 引用计数混淆。
+     * 与光照那张票同型但不同实例，两票在同一 chunk 上互不覆盖。
      *
      * 26.1.2 的 TicketType 是 record，没有 mod 侧静态工厂，类型须注册进
      * BuiltInRegistries.TICKET_TYPE，且必须在 freeze 之前。注册时机由 BuiltInRegistriesMixin
@@ -68,12 +68,12 @@ public final class GenQueue {
             new TicketType(TicketType.NO_TIMEOUT, TicketType.FLAG_LOADING));
 
     /**
-     * 结构依赖的 pin 票：给「中心引用相要读的 ±8 起点表」那些邻居铺的加载票。
+     * 结构依赖的 pin 票：给中心引用相要读的 ±8 起点表那些邻居铺的加载票。
      *
      * <p>不能复用 {@link #GEN_WORK_TICKET}：那张票的生命周期属于该 chunk 自己的生成任务，
      * completeTask 一收尾就撤；依赖票必须活到中心的引用相读完为止。
      *
-     * <p>票在 {@code TicketStorage} 里是**集合语义、不计数**：同型同级再加一次只刷新计时，撤一次就
+     * <p>票在 {@code TicketStorage} 里是集合语义、不计数：同型同级再加一次只刷新计时，撤一次就
      * 没了。所以引用计数由 StructureDriver 自己维护，本类只负责真的加减。
      */
     public static final TicketType STRUCTURE_PIN_TICKET = Registry.register(
@@ -86,7 +86,7 @@ public final class GenQueue {
         return GEN_WORK_TICKET;
     }
 
-    /** 铺一张结构依赖票。**主线程调用**：票操作非线程安全，调用点负责，见 StructureDriver.pullDependencies。 */
+    /** 铺一张结构依赖票。主线程调用，票操作非线程安全，调用点负责，见 StructureDriver.pullDependencies。 */
     public static void pinStructureDependency(ServerLevel level, ChunkPos pos) {
         level.getChunkSource().addTicketWithRadius(STRUCTURE_PIN_TICKET, pos, 0);
     }
@@ -104,7 +104,7 @@ public final class GenQueue {
     private static final PriorityQueue<GenTask> QUEUE = new PriorityQueue<>(Comparator.comparingInt(GenTask::priority));
 
     // 规模在配置层已解析：显式值受 range(1,64) 约束，"auto" 由取值器算出，两者都 >= 1。
-    // 这里不再解释 0 哨兵——哨兵已由 "auto" 取代。
+    // 这里不再解释 0 哨兵，它已由 "auto" 取代。
     private static final ExecutorService POOL = Executors.newFixedThreadPool(FarlandsConfig.genWorkerThreads, r -> {
         Thread t = new Thread(r, "farlands-gen");
         t.setDaemon(true);
@@ -141,7 +141,7 @@ public final class GenQueue {
     /**
      * 把装饰任务提交到 genPool。返回假表示池已关，即停服中；调用方撤认领、留表稍后再试。
      *
-     * <p>与地形任务共用同一个池：装饰是纯算力，方案要求它跑在 farlands-gen 上。计数在这里加，
+     * <p>与地形任务共用同一个池：装饰是纯算力，它必须跑在 farlands-gen 上。计数在这里加，
      * 由 DecorationFiller 的收尾经 {@link #finishDecoration()} 减。
      */
     public static boolean submitDecoration(Runnable job) {
@@ -287,7 +287,7 @@ public final class GenQueue {
      * execute 完成回调：检查窗口并集内是否仍有未 TERRAIN 的 section，覆盖 execute 期间新入队的。
      * 有剩余就续任务并保持 CHUNK_IN_FLIGHT 为真，无剩余才清标志并释放 fill ticket。
      *
-     * 标志不在续任务时清：否则会留下"标志已清、任务尚未入队"的空窗，那期间 isChunkBusy 返回假，
+     * 标志不在续任务时清：否则会留下标志已清、任务尚未入队的空窗，那期间 isChunkBusy 返回假，
      * 读 section 的一方会与生成写并发。在途条目用 remove 而非 set(false)，任务链结束后条目不永存，
      * 防随探索单调增长。
      */
@@ -373,7 +373,7 @@ public final class GenQueue {
 
     /**
      * 扫描单个 chunk：已加载 LevelChunk 且窗口并集内有未 TERRAIN 的 section、surface 与 carvers
-     * 待处理、或仍有做过但没点亮的段，则 enqueueChunk，幂等。
+     * 待处理，或仍有做过但没点亮的段，则 enqueueChunk，幂等。
      */
     private static boolean scanChunk(ServerLevel level, int cx, int cz) {
         LevelChunk lc = SectionLifecycle.latestChunk(level, cx, cz);
@@ -394,13 +394,13 @@ public final class GenQueue {
         // 已过雕刻、还没装饰的 chunk 登记进装饰表。装饰有自己的门与驱动，这里只负责发现；
         // 判据取 CARVERS，与 DecorationFiller.hasDecorationPending 同源。
         if (DecorationFiller.hasDecorationPending(lc)) {
-            DecorationFiller.register(lc);
+            DecorationFiller.register(lc, null);
         }
         enqueueChunk(lc);
         return true;
     }
 
-    /** P2：玩家位置变化时全部在途任务按当前距离重排，修复入队快照旧。 */
+    /** 玩家位置变化时全部在途任务按当前距离重排，修复入队快照旧。 */
     public static void rebuildQueue() {
         synchronized (QUEUE) {
             if (QUEUE.isEmpty()) {
@@ -421,7 +421,7 @@ public final class GenQueue {
      * 该 chunk 是否有生成、光照或装饰在途，供 fsa 清理判定，在途则不清理该 chunk，保守。
      *
      * <p>装饰那一支按写域问：一个 chunk 只要落在某次装饰的九格写域内就可能正被写，编码与下发
-     * 都要让开，所以判据不是「中心是不是它」而是「它是否被某个写域覆盖」。
+     * 都要让开，所以判据不是中心是不是它，而是它是否被某个写域覆盖。
      */
     public static boolean isChunkBusy(LevelChunk chunk) {
         long key = chunk.getPos().pack();
@@ -501,7 +501,7 @@ public final class GenQueue {
                     SectionIO.runOnMainThread(
                             () -> {
                                 ChunkDataSender.broadcastChunkLight(serverLevel, chunk);
-                                // 段在这一刻才升 LIGHTED（promote 在上一步已跑完），而下发与落盘同门，
+                                // 段在这一刻才升 LIGHTED，promote 在上一步已跑完，而下发与落盘同门，
                                 // 所以必须在这里补一次内容变化标记：否则门一加，整包永远不发，客户端
                                 // 只能看到空壳。
                                 ChunkDataSender.markChunkChanged(chunk);

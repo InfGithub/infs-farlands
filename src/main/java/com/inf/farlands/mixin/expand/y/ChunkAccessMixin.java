@@ -91,7 +91,8 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
 
     /**
      * carving mask 载体。26.1.2 只有单个 mask，没有 GenerationStep.Carving 分组。
-     * 不用字段初始化器，懒建在 getOrCreateCarvingMask 里，避免交接文档 §10.1 那个静默丢初始化器的坑。
+     * 不用字段初始化器，懒建在 getOrCreateCarvingMask 里，因为本类没有显式构造器，@Unique 实例
+     * 字段的初始化器可能被静默丢弃，读到时会是 null。
      */
     @Unique
     private CarvingMask farlandsCarvingMask;
@@ -381,9 +382,9 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
     }
 
     /**
-     * 是否已设 {@code Beardifier}。**生成侧的门读它**：没有就不许 fill。
+     * 是否已设 {@code Beardifier}。生成侧的门读它，没有就不许 fill。
      *
-     * <p>判据落在不变量本身，而不是「有没有被登记为等结构相」那个代理上——登记晚于这个 chunk 对
+     * <p>判据落在不变量本身，而不是「有没有被登记为等结构相」那个代理，登记晚于这个 chunk 对
      * {@code latestChunk} 可见的那一刻，中间那道窗口会让只看代理的门放行，而 fill 取数即抛。
      * 字段是 volatile，池上读安全。
      */
@@ -459,7 +460,7 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
      *
      * 缺段不能走 getSection：那会把每次群系查询变成段的来源。刷怪这类按整列随机取 Y 的调用
      * 每次都能建出一个窗口外的段，而窗口外的段只靠 fsa 清理回收，追不上就是无界内存。缺段返回
-     * containerFactory 的默认群系，与"建一个空段再读它的群系"逐字等价：空段的 biome 容器就是
+     * containerFactory 的默认群系，与「建一个空段再读它的群系」逐字等价：空段的 biome 容器就是
      * new PalettedContainer<>(defaultBiome, strategy)。
      */
     @Overwrite

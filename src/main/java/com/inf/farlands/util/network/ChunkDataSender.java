@@ -42,15 +42,15 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 
 /**
- * §5 窗口滑动 section 包的发送端。
+ * 窗口滑动 section 包的发送端。
  *
  * <p>
  * 服务端主线程每 tick：窗口差量检测；限量发包。
  *
  * <p>
  * 窗口 = 玩家 sectionY ± {@link FarlandsConfig#verticalSimulationDistance}，
- * 与 axisY 的窗口/实体窗口/随机刻窗口同源。section 数据以 byte[] 中转：装载
- * 是否发送由接收端按包内绝对 sectionY 与 chunk 当前状态决定。
+ * 与 axisY 的窗口、实体窗口、随机刻窗口同源。section 数据以 byte[] 中转，是否发送由接收端按包内
+ * 绝对 sectionY 与 chunk 当前状态决定。
  *
  * <p>
  * 内容变化由 {@link #markChunkChanged} 只记 chunk，给谁由每 tick 在 flush 之前按玩家当前窗口物化
@@ -66,7 +66,7 @@ public final class ChunkDataSender {
     private static final class PlayerWindowState {
         int centerY;
         ResourceKey<Level> dimension;
-        /** 上次 XZ chunk 坐标，P2 动态优先级触发检测用。 */
+        /** 上次 XZ chunk 坐标，动态优先级触发检测用。 */
         int lastChunkX = Integer.MIN_VALUE;
         int lastChunkZ = Integer.MIN_VALUE;
 
@@ -76,10 +76,10 @@ public final class ChunkDataSender {
         }
     }
 
-    /** UUID -> 上次窗口中心与维度。维度变化按首次记录语义处理，不发 difference。 */
+    /** UUID 到上次窗口中心与维度。维度变化按首次记录语义处理，不发 difference。 */
     private static final Map<UUID, PlayerWindowState> WINDOW_STATES = new ConcurrentHashMap<>();
 
-    /** §4.2 队列：UUID -> (chunkPos -> 新进入 sectionY 集合)。已发送即出队，队列无历史状态机。 */
+    /** 队列：UUID 到 chunkPos 到新进入的 sectionY 集合。已发送即出队，队列无历史状态机。 */
     private static final Map<UUID, Map<Long, Set<Integer>>> PENDING_QUEUES = new ConcurrentHashMap<>();
 
     /** 内容变化过的 chunk，按维度分桶。给谁由每 tick 物化决定，见 {@link #markChunkChanged}。 */
@@ -110,7 +110,7 @@ public final class ChunkDataSender {
     }
 
     /**
-     * 服务端每 tick 入口：窗口差量 + 限量发包。
+     * 服务端每 tick 入口：窗口差量加限量发包。
      * 返回 true 表示任一玩家窗口发生变化，调用方 FarlandsTick 据此驱动 fsa 清理判定。
      */
     public static boolean tick(MinecraftServer server) {
@@ -129,7 +129,7 @@ public final class ChunkDataSender {
         for (ServerPlayer player : players) {
             flushPendingSections(player);
         }
-        // 玩家退出后清理窗口状态（roster 变化在下一次 tick 体现）
+        // 玩家退出后清理窗口状态，roster 变化在下一次 tick 体现
         Set<UUID> roster = new HashSet<>();
         for (ServerPlayer p : players) {
             roster.add(p.getUUID());
@@ -162,11 +162,11 @@ public final class ChunkDataSender {
     }
 
     /**
-     * 窗口变化检测 + difference：新窗口内不在旧窗口区间的 sectionY = 新进入 -> 入队该玩家
-     * tracking view 内每个 chunk。首次记录（或换维度）整窗入队。
+     * 窗口变化检测与 difference：新窗口内不在旧窗口区间的 sectionY 即新进入，入队该玩家 tracking
+     * view 内每个 chunk。首次记录或换维度时整窗入队。
      *
      * <p>
-     * 返回 true = 窗口变化。
+     * 返回 true 表示窗口变化。
      */
     public static boolean updatePlayerWindow(ServerPlayer player) {
         ResourceKey<Level> dim = player.level().dimension();
@@ -183,7 +183,7 @@ public final class ChunkDataSender {
             }
             return true;
         }
-        // P2 动态优先级：任一玩家跨 chunk 移动时，地形与光照队列按当前距离重排。
+        // 任一玩家跨 chunk 移动时，地形与光照队列按当前距离重排。
         ChunkPos pc = player.chunkPosition();
         if (state.lastChunkX != pc.x() || state.lastChunkZ != pc.z()) {
             state.lastChunkX = pc.x();
@@ -214,10 +214,8 @@ public final class ChunkDataSender {
      * 该 sectionY 入队到玩家 tracking view 内每个 chunk，并对已加载的 chunk 触发 fsa 读回。
      *
      * <p>
-     * fsa 读回要在磁盘有数据时恢复 section、光照与 stage，并补发 section 包。它与 §5 发送
-     * 复用同一次窗口差量检测。旧仓库这两件事同在 {@code InfFarlands.updatePlayerWindow} 的
-     * {@code enqueueGenForSection} 里，即 §5 入队加 {@code SectionLifecycle.loadSection}，
-     * 本 port 在此合并。只对 ChunkStatus.FULL 的 chunk 读回。
+     * fsa 读回要在磁盘有数据时恢复 section、光照与 stage，并补发 section 包，它与这里的发送复用
+     * 同一次窗口差量检测。只对 ChunkStatus.FULL 的 chunk 读回。
      */
     private static void enqueueForWindow(ServerPlayer player, int sectionY) {
         int s = sectionY;
@@ -316,7 +314,7 @@ public final class ChunkDataSender {
         }
     }
 
-    /** 限量发送：按距离排序出队，累计 ≤ sectionSendBytesPerTick，打包为一个 §5 包。 */
+    /** 限量发送：按距离排序出队，累计不超过 sectionSendBytesPerTick，打包为一个段包。 */
     private static void flushPendingSections(ServerPlayer player) {
         Map<Long, Set<Integer>> queue = PENDING_QUEUES.get(player.getUUID());
         if (queue == null || queue.isEmpty()) {

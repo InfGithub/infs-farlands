@@ -73,9 +73,9 @@ import net.minecraft.world.ticks.ScheduledTick;
  * 再查。越出读域、或读域内没交句柄，才抛 {@link DecorationAbort}，由驱动留表重试。
  *
  * <p>
- * 反过来，vanilla 的两种正常边界在这里不抛：写到写域外（{@code ensureCanWrite} 假）与写到尚未
- * 物化的段，都是丢弃这次写并返回假，与 vanilla「写域外丢写」同形。地物按高度图落点，而本 port 的
- * 段按窗口段物化，带外的地形尚不存在，写进去没有落点；这不是异常，是这套生成模型的边界。
+ * 反过来，vanilla 的两种正常边界在这里不抛：写到写域外，即 {@code ensureCanWrite} 返回假，以及
+ * 写到尚未物化的段，都是丢弃这次写并返回假，与 vanilla 写域外丢写同形。地物按高度图落点，而本
+ * port 的段按窗口段物化，带外的地形尚不存在，写进去没有落点；这不是异常，是这套生成模型的边界。
  *
  * <p>
  * 池上做的副作用：四张高度图、段空态翻转、光照属性变化时的天光光源列更新与 checkBlock。方块
@@ -98,10 +98,9 @@ public final class DecorationRegion implements WorldGenLevel {
     private final int readRadius;
 
     /**
-     * 本区域自己的随机源。**不能借 {@code level.getRandom()}**：那是带并发检测的
-     * {@code LegacyRandomSource}，而本区域跑在 farlands-gen 上，主线程同时在用它（刷怪、降水等），
-     * 共用即 "Accessing LegacyRandomSource from multiple threads" 崩溃。vanilla 的
-     * WorldGenRegion
+     * 本区域自己的随机源。不能借 {@code level.getRandom()}：那是带并发检测的
+     * {@code LegacyRandomSource}，而本区域跑在 farlands-gen 上，主线程同时在用它，刷怪与降水都读它，
+     * 共用即 "Accessing LegacyRandomSource from multiple threads" 崩溃。vanilla 的 WorldGenRegion
      * 也是自建，下面构造器里的表达式逐字照抄它。
      */
     private final RandomSource random;
@@ -138,8 +137,8 @@ public final class DecorationRegion implements WorldGenLevel {
     }
 
     /**
-     * 只读的 region，供**主线程**上的结构引用相：句柄按需向 SectionLifecycle.latestChunk 取，不预交
-     * 快照。主线程合法，所以不需要池任务那种「先取好再交下去」的约束。
+     * 只读的 region，供主线程上的结构引用相：句柄按需向 SectionLifecycle.latestChunk 取，不预交
+     * 快照。主线程合法，所以不需要池任务那种先取好再交下去的约束。
      *
      * <p>
      * 读半径 8 是 vanilla FEATURES 步对 STRUCTURE_STARTS 的依赖半径，也是 createReferences 的
@@ -247,8 +246,8 @@ public final class DecorationRegion implements WorldGenLevel {
      *
      * <p>
      * 残留一条：vanilla 的 chunk 查询在命中待建条目时会把那条从待建表里移走，而那张表是 chunk 的
-     * plain map。装饰期该 chunk 被写域认领覆盖，主线程的存盘与清理因此跳过，但玩家交互路径不查认领，
-     * 属已知残留。
+     * plain map。装饰期该 chunk 被写域认领覆盖，主线程的存盘与清理因此跳过，但玩家交互路径不查
+     * 认领，属已知残留。
      */
     @Override
     public BlockEntity getBlockEntity(BlockPos pos) {
@@ -262,8 +261,8 @@ public final class DecorationRegion implements WorldGenLevel {
     // ---- 写入 ----
 
     /**
-     * 是否可写：只判 XZ 是否在写域内。越域记一条错误并返回假，与 vanilla「打日志返回 false」同形；
-     * 这条门只在我们自己算错时才被触发，不该让整个服务器为一次越域写入崩掉。
+     * 是否可写：只判 XZ 是否在写域内。越域记一条错误并返回假，与 vanilla 打日志返回假同形；这条门
+     * 只在本 port 自己算错时才被触发，不该让整个服务器为一次越域写入崩掉。
      */
     @Override
     public boolean ensureCanWrite(BlockPos pos) {
@@ -272,8 +271,8 @@ public final class DecorationRegion implements WorldGenLevel {
         if (dx <= WRITE_RADIUS && dz <= WRITE_RADIUS) {
             return true;
         }
-        // 带上「此刻在放什么」：vanilla 的同名方法也在这里读它，作用是把越域那次写归到具体地物上。
-        // 不读它就是只写不读的字段（IDE 已报），而这正是排查越域时唯一有用的上下文。
+        // 带上此刻在放什么：vanilla 的同名方法也在这里读它，作用是把越域那次写归到具体地物上。
+        // 不读它就是只写不读的字段，而这正是排查越域时唯一有用的上下文。
         Supplier<String> generating = this.currentlyGenerating;
         InfsFarlands.LOGGER.error("farlands: decoration wrote outside the write domain pos={} center={}{}",
                 pos, this.center.getPos(),
@@ -370,7 +369,7 @@ public final class DecorationRegion implements WorldGenLevel {
      *
      * <p>
      * vanilla 那个在 getSection 里对段调 acquire，那是调色板的并发检测器：抢失败靠抛异常把许可
-     * 交出去，而异常被编码侧的 catch 吞掉之后许可就永久占用。我们只需要读，而
+     * 交出去，而异常被编码侧的 catch 吞掉之后许可就永久占用。这里只需要读，而
      * {@code LevelChunkSection.getBlockState} 走调色板的 get，本来就不加锁。
      */
     public static final class UnlockedSectionAccess extends BulkSectionAccess {
@@ -386,8 +385,8 @@ public final class DecorationRegion implements WorldGenLevel {
         public LevelChunkSection getSection(BlockPos pos) {
             LevelChunk owner = this.region.chunkOf(pos);
             LevelChunkSection section = ((WindowedChunk) owner).windowedAllSections().get(pos.getY() >> 4);
-            // 可空是 vanilla BulkSectionAccess 的契约，OreFeature 在 139 行判空之后才写；段没物化时
-            // 返回 null，与「这次写没有落点」同义。
+            // 可空是 vanilla BulkSectionAccess 的契约，OreFeature 判空之后才写；段没物化时返回 null，
+            // 与这次写没有落点同义。
             if (section != null) {
                 // 它绕过本区域的 setBlock 直接写段，所以写过的 chunk 要在这里补记，收尾才补得上下发。
                 // 编码互斥靠认领覆盖整片写域，与 fill 的既有取舍同形。
@@ -424,9 +423,7 @@ public final class DecorationRegion implements WorldGenLevel {
         return this.level.getUncachedNoiseBiome(quartX, quartY, quartZ);
     }
 
-    /**
-     * 难度按 level 现算，不走 hasChunk 那条判据：装饰期的 chunk 表在池线程上不可查。
-     */
+    /** 难度按 level 现算，不走 hasChunk 那条判据：装饰期的 chunk 表在池线程上不可查。 */
     @Override
     public DifficultyInstance getCurrentDifficultyAt(BlockPos pos) {
         return new DifficultyInstance(this.level.getDifficulty(), this.level.getOverworldClockTime(), 0L,

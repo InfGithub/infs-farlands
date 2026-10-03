@@ -51,6 +51,10 @@ public final class WindowSendState {
      *
      * 短路完成后的 biome 阶段跑在 Util.backgroundExecutor 上，不在那两张标志内，所以另查
      * GenQueue.isBiomeFilling，它在两次遍历之间同样会换掉 section 的 biomes 容器。
+     *
+     * 与落盘同门：只收 stage 已到 LIGHTED 的段，低于它的段还在中间态。把中间态发出去，客户端会
+     * 先显示一份随后要被推翻的地形，而服务端仍按未就绪拒绝放置与破坏，那正是看得见地形却动不了的
+     * 来源。空段不受这道门约束，群系存在段里，不发客户端就没有那份群系。
      */
     public static List<Map.Entry<Integer, LevelChunkSection>> sendableSections(LevelChunk chunk) {
         if (GenQueue.isChunkBusy(chunk) || GenQueue.isBiomeFilling(chunk)) {
@@ -62,9 +66,6 @@ public final class WindowSendState {
         for (Map.Entry<Integer, LevelChunkSection> e : ((WindowedChunk) chunk).windowedAllSections().entrySet()) {
             int sy = e.getKey();
             LevelChunkSection s = e.getValue();
-            // 与落盘同门：只有 stage >= LIGHTED 的段才是最终内容。中间态（fill 到 carvers 之间）发出去
-            // 就是让客户端显示一份随后要被推翻的地形，而服务端仍按未就绪拒绝放置与破坏 —— 那正是
-            // 「看得见地形却动不了」的来源。空段照发：群系存在段里，不发客户端就没有那份群系。
             if (sy >= minY && sy <= maxY && s != null
                     && com.inf.farlands.serialize.SectionStage.isOrAfter(chunk, sy,
                             com.inf.farlands.serialize.SectionStage.LIGHTED)) {

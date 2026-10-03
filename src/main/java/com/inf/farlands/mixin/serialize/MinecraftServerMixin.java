@@ -24,10 +24,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * fsa 的关服同步刷盘。
  *
- * 旧仓库挂在 ServerStoppingEvent 上，顺序是 awaitEncodeTasks(5000)、awaitIODrain、
- * drainMainThreadTasks、GenQueue.awaitIdle(server, 5000)、shutdownSyncFlush。本 port 的等价位点是
- * MinecraftServer.stopServer() 的 HEAD，已 javap 核实存在且为 protected。它在最终保存之前
- * 执行，此时各维度与 chunk 都还在。
+ * 等价位点是 MinecraftServer.stopServer() 的 HEAD，它在最终保存之前执行，此时各维度与 chunk
+ * 都还在。
  *
  * 顺序不可调换。卸载编码任务由 flushChunk 提交到 ENCODE_POOL，必须先于 awaitIODrain 完成
  * 提交，否则其 IO 写不被等待，关服就丢已卸载的 section 数据。
@@ -60,7 +58,7 @@ public abstract class MinecraftServerMixin {
      * 而 ChunkReadiness 的关服标志也不能提前复位，否则 vanilla 在 saveAllChunks 里那次 chunk NBT 保存会走
      * isDataReady 而不是 isChunkBusy，forceload 且无玩家那类 chunk 就写不出 NBT。RETURN 在 saveAllChunks、
      * level.close 与几个 close 之后，线程随后才结束；客户端在 disconnect 里自旋等 isShutdown()，所以这里
-     * 既晚于旧世界所有需要这些状态的动作，又早于新世界开始。
+     * 既晚于所有需要这些状态的动作，又早于新世界开始。
      *
      * <p>三张位置侧信道表不在这里清：它们在主源集两端共用，客户端那条收尾中的渲染链要到
      * updateLevelInEngines(null) 才释放 sectionNode 长键，清早了会把哈希当坐标。那三张表由客户端卸关卡时清。

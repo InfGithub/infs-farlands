@@ -51,7 +51,7 @@ public class FarlandsTick {
     }
 
     /**
-     * 这一轮至少注册过一个坐标（swap 前的 size &gt; 0）时，给所有在线玩家授予成就。
+     * 这一轮在 swap 之前至少注册过一个坐标时，给所有在线玩家授予成就。
      * 对应进度的 criterion 是 minecraft:impossible，永不自动满足，只能由本方法授予。
      * award 对已解锁的玩家是幂等的。
      */
@@ -157,17 +157,17 @@ public class FarlandsTick {
             trimAquiferLookup(tickCount);
         }
         // 光照引擎每 tick 的任务配额：真 tick 是唯一权威边界。
-        // 无 tick 阶段（prepareLevels 建世界 / saveEverything 保存）由引擎自己按 tick 间隔兜底。
+        // 无 tick 阶段由引擎自己按 tick 间隔兜底，两个入口是 prepareLevels 建世界与 saveEverything 保存。
         for (ServerLevel level : server.getAllLevels()) {
             if (level.getChunkSource().getLightEngine() instanceof FarLandsLightEngine lightEngine) {
                 lightEngine.grantTickBudget();
             }
         }
-        // §5 窗口差量 + 限量发包；返回值同时驱动 fsa 的窗口清理判定。
+        // 窗口差量与限量发包；返回值同时驱动 fsa 的窗口清理判定。
         boolean windowChanged = ChunkDataSender.tick(server);
         // 世界系统选择下发：玩家进服或换维度后补一次，客户端据此显示当前 level 用哪四族系统。
         SystemsSender.tick(server);
-        // P2 动态优先级：任一玩家跨 chunk 移动时，地形与光照队列按当前距离重排。
+        // 玩家跨 chunk 移动时，地形与光照队列按当前距离重排。
         if (ChunkDataSender.consumePlayersMoved()) {
             GenQueue.rebuildQueue();
             for (ServerLevel level : server.getAllLevels()) {
@@ -182,7 +182,7 @@ public class FarlandsTick {
         // fsa 序列化
 
         // 周期持久化：窗口内脏 section 写盘；偏移表与数据同节奏落盘，否则运行中磁盘偏移表
-        // 陈旧，重进时 getSlot 错位丢 section。崩溃/强退兜底。
+        // 陈旧，重进时 getSlot 错位丢 section。崩溃与强退兜底。
         if (tickCount % FarlandsConfig.fsaPersistInterval == 0) {
             SectionLifecycle.flushAllDirty(server);
             SectionIO.flushAllOffsetTables();

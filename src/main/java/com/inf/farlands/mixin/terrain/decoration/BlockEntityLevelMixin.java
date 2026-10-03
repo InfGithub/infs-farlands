@@ -14,8 +14,8 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * 装饰期不让方块实体持有 live level。
  *
  * <p>为什么必须处置：装饰期建出的方块实体，其 {@code level} 字段会被赋成该 level 实例，也就是
- * ServerLevel；地物随后经由方块实体发起的调用因此绕过装饰区域直接落到活世界上。实测那条路是
- * 刷怪笼：{@code MonsterRoomFeature} 设 entityId，走 SpawnerBlockEntity 覆写的 setNextSpawnData，
+ * ServerLevel；地物随后经由方块实体发起的调用因此绕过装饰区域直接落到活世界上。那条路是刷怪笼：
+ * {@code MonsterRoomFeature} 设 entityId，走 SpawnerBlockEntity 覆写的 setNextSpawnData，
  * 里面读 {@code level.getBlockState} 并发 {@code level.sendBlockUpdated}。
  *
  * <p>处置取写 null，不是写区域：字段与 setLevel 的形参都是 {@code Level}，而装饰区域是

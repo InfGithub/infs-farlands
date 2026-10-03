@@ -59,20 +59,13 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
  * 时把脏 section 入队 PERSIST。flushAllDirty 周期性地把所有脏 section 入队 PERSIST。
  * shutdownSyncFlush 关服同步兜底。
  *
- * 26.1.2 相对 1.21.1 的差异，均已 javap 打运行时 jar 核实。
- * ChunkMap.getChunks 在 26.1.2 不存在，public 遍历入口只剩 forEachReadyToSendChunk，
- * 而它不是全量。改用反射读 ChunkMap.visibleChunkMap，类型是
- * Long2ObjectLinkedOpenHashMap 装 ChunkHolder，语义等价于旧的 getChunks，即全部可见
- * ChunkHolder。ChunkHolder.getLatestChunk 声明在父类 GenerationChunkHolder 上，
- * 26.1.2 仍在。
- * stage 由 SectionStage 承载，取值 0 UNPROCESSED、1 BIOMES、2 TERRAIN、3 SURFACE、4
- * CARVERS、
- * 5 LIGHTED。旧仓库是 NeoForge attachment，且与 terrain 共用。
- * terrain 侧调用收口在 TerrainHooks，即 GenQueue.isChunkBusy 与 GenQueue.enqueueChunk。
- * 条目的 block_states 与 biomes codec 从 chunk 的 PalettedContainerFactory 取。
- * ChunkPos.toLong 改名 pack，cp.x 与 cp.z 改成 cp.x() 与 cp.z()。
- * chunk.getSectionIndexFromSectionY 来自 LevelHeightAccessor 而非 WindowedChunk，
- * LevelChunk 继承之。
+ * 26.1.2 的 ChunkMap 没有 getChunks，public 遍历入口只剩 forEachReadyToSendChunk，而它不是全量。
+ * 这里改用反射读 ChunkMap.visibleChunkMap，类型是 Long2ObjectLinkedOpenHashMap 装 ChunkHolder，
+ * 即全部可见 ChunkHolder。ChunkHolder.getLatestChunk 声明在父类 GenerationChunkHolder 上。
+ * stage 由 SectionStage 承载，取值见那一类。terrain 侧调用收口在 TerrainHooks，即
+ * GenQueue.isChunkBusy 与 GenQueue.enqueueChunk。条目的 block_states 与 biomes codec 从 chunk 的
+ * PalettedContainerFactory 取。ChunkPos.toLong 改名 pack，cp.x 与 cp.z 改成 cp.x() 与 cp.z()。
+ * chunk.getSectionIndexFromSectionY 来自 LevelHeightAccessor 而非 WindowedChunk，LevelChunk 继承之。
  */
 public final class SectionLifecycle {
 
@@ -105,8 +98,8 @@ public final class SectionLifecycle {
     /**
      * 停服时清掉按世界的在途状态。两个队列里持有的都是旧 LevelChunk。
      *
-     * <p>不复位 ENCODE_TASKS_IN_FLIGHT：旧世界可能有超时未收尾的编码任务仍在途，它们的出口会递减这个
-     * 计数，先set(0) 会被减成负数，下一个世界的关服等待就会误判成没有在途任务而直接放行。
+     * <p>不复位 ENCODE_TASKS_IN_FLIGHT：旧世界可能有超时未收尾的编码任务仍在途，它们的出口会递减
+     * 这个计数，先 set(0) 会被减成负数，下一个世界的关服等待就会误判成没有在途任务而直接放行。
      */
     public static void clearWorldState() {
         pendingEncode.clear();
@@ -114,7 +107,7 @@ public final class SectionLifecycle {
         ENCODE_FAIL_LOGGED.set(0);
     }
 
-    /** 26.1.2 没有 ChunkMap.getChunks()，改反射 visibleChunkMap。 */
+    /** ChunkMap 没有 getChunks，改反射 visibleChunkMap。 */
     private static final Field F_VISIBLE_CHUNKS;
 
     static {
@@ -167,8 +160,8 @@ public final class SectionLifecycle {
     private static final AtomicInteger ENCODE_TASKS_IN_FLIGHT = new AtomicInteger();
 
     /**
-     * 卸载编码独立线程池，单线程 daemon。与 genPool 隔离，避免编码抢生成线程。探索时
-     * fill 与卸载编码曾共享 genPool，结果 fill 被延迟，生成效率下降。
+     * 卸载编码独立线程池，单线程 daemon。与 genPool 隔离，避免编码抢生成线程。两者曾共用一个池，
+     * 结果是 fill 被编码延迟，生成效率下降。
      */
     private static final ExecutorService ENCODE_POOL = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "farlands-encode");
@@ -195,8 +188,12 @@ public final class SectionLifecycle {
         pendingWindowRead.remove(lc);
         ServerLevel level = (ServerLevel) lc.getLevel();
         ChunkReadiness.discard(level, lc.getPos());
-        // 起点标记与结构相的挂起项也随卸载一起丢：重载时起点由读盘填回，标记重算。
+        // 起点标记、结构相的挂起项与装饰的待办项都随卸载一起丢：重载时起点由读盘填回、标记重算，
+        // 装饰由下一次雕刻重新登记。卸载是它们唯一的权威移除点，tick 里取不到 chunk 不算。
         StructureDriver.clearChunk(level.dimension(), lc.getPos().pack());
+        com.inf.farlands.terrain.decorationFiller.DecorationFiller.clearChunk(level.dimension(),
+                lc.getPos().pack());
+        com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged();
         if (TerrainHooks.isChunkBusy(lc)) {
             return;
         }
@@ -339,7 +336,7 @@ public final class SectionLifecycle {
 
     /**
      * 每 tick 唤醒编码消费者。主线程在这里不做编码，只把活交给 ENCODE_POOL，与 {@code GenQueue.tick} 同形。
-     * 名字保留 tick 是为了不动调用点；它同时是消费者被「写入者在途」挡回之后的唯一唤醒来源，所以延迟上限是
+     * 名字保留 tick 是为了不动调用点；它同时是消费者被写入者在途挡回之后的唯一唤醒来源，所以延迟上限是
      * 一 tick。
      */
     public static void tick() {
@@ -364,20 +361,20 @@ public final class SectionLifecycle {
     }
 
     /**
+     * 一轮 drain 最多编码的段数。编满就交接并立刻再唤醒一轮，把主线程每次吃的量钉在约 0.4 毫秒
+     * 以内；超过这个量的批次会让 map 分配与 LRU 命中率一起变差。
+     */
+    private static final int ENCODE_PASS_BUDGET = 256;
+
+    /**
      * 池线程：出队、判写入者、编码，再按维度归批投回主线程记账。
      *
      * <p>编码搬到这里，依据是 encodeNow 自己的线程约定：主线程 tick 与编码池卸载共用，任意线程安全。
      * 主线程只剩 getOrOpen、prepareWrite、commitWrite 与扇区分配，那些是主线程独占状态，不能搬。
      *
-     * <p>整轮最多处理「进入时的队列长度」个单元，保证本轮必然结束。不满足写入者判据的单元放回队尾，留到
-     * 下一次唤醒。
+     * <p>整轮最多处理进入时队列长度那么多的单元，保证本轮必然结束。不满足写入者判据的单元放回队尾，
+     * 留到下一次唤醒。
      */
-    /**
-     * 一轮 drain 最多编码的段数。编满就交接并立刻再唤醒一轮，把主线程每次吃的量钉在约 0.4 毫秒以内；
-     * 超过这个量的批次会让 map 分配与 LRU 命中率一起变差。
-     */
-    private static final int ENCODE_PASS_BUDGET = 256;
-
     private static void drainEncode() {
         boolean more = false;
         try {
@@ -679,7 +676,7 @@ public final class SectionLifecycle {
     public static void retryPendingReads(MinecraftServer server) {
         if (pendingWindowRead.isEmpty() || EntitySectionWindow.ranges().length == 0) {
             return; // 无 pending 或窗口未建立，即 Preparing 与玩家未注册期，零开销早退。
-                    // 此前 ranges 为空也全量重试，导致初次进入世界每 tick 巨量 stat 卡死。
+                    // 只按 ranges 是否为空早退，不必全量重试；全量重试会让初次进入世界每 tick 巨量 stat。
         }
         int budget = 32; // 每 tick 最多重试 32 个，防单 tick 巨量 Files.exists stat
         for (LevelChunk lc : pendingWindowRead) {
@@ -785,6 +782,9 @@ public final class SectionLifecycle {
             }
         }
         SectionStage.setStage(lc, sy, decoded.stage());
+        // 这一段刚被读回恢复，档位来自磁盘：它的邻居门要重判。
+        com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged();
+        StructureDriver.cellChanged();
         // 磁盘只存 fsa 的方块与光照，chunk NBT 的 sections 被剥空，所以原版读盘路径里那句
         // poiManager.checkConsistencyWithBlocks 在本 port 从不执行。恢复的段在这里补一次，
         // 清掉方块已不存在的 POI 条目。
@@ -820,6 +820,39 @@ public final class SectionLifecycle {
             Object visible = F_VISIBLE_CHUNKS.get(level.getChunkSource().chunkMap);
             ChunkHolder holder = ((Long2ObjectLinkedOpenHashMap<ChunkHolder>) visible).get(ChunkPos.pack(cx, cz));
             return holder != null && holder.getLatestChunk() instanceof LevelChunk lc ? lc : null;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 批量取数的游标：把 {@code visibleChunkMap} 的反射读做一次，之后每次 {@link #at} 只做 map get 与
+     * {@code getLatestChunk()}。语义与 {@link #latestChunk} 逐行同源，只差反射次数。
+     *
+     * <p>给扫 ±r 一格一格查的调用点用，即装饰的门与结构引用相的存在性判定：那里一格一次
+     * {@code latestChunk}，290 格就是 290 次反射读。主线程独占，游标不可跨线程。
+     */
+    public static final class ChunkCursor {
+
+        private final Long2ObjectLinkedOpenHashMap<ChunkHolder> visible;
+
+        private ChunkCursor(Long2ObjectLinkedOpenHashMap<ChunkHolder> visible) {
+            this.visible = visible;
+        }
+
+        /** 该格当前的 LevelChunk；取不到或还不是 LevelChunk 时返回 null。 */
+        public LevelChunk at(int cx, int cz) {
+            ChunkHolder holder = this.visible.get(ChunkPos.pack(cx, cz));
+            return holder != null && holder.getLatestChunk() instanceof LevelChunk lc ? lc : null;
+        }
+    }
+
+    /** 造一个游标，只做一次反射读。主线程调用。 */
+    @SuppressWarnings("unchecked")
+    public static ChunkCursor cursor(ServerLevel level) {
+        try {
+            Object visible = F_VISIBLE_CHUNKS.get(level.getChunkSource().chunkMap);
+            return new ChunkCursor((Long2ObjectLinkedOpenHashMap<ChunkHolder>) visible);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
