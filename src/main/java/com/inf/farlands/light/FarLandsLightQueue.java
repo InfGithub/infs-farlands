@@ -138,7 +138,7 @@ public final class FarLandsLightQueue {
     }
 
     /**
-     * P2：玩家位置变化 -> 队列按距本维度最近玩家距离重排，近的先处理；原 FIFO 远处先入队先处理，
+     * 玩家位置变化 -> 队列按距本维度最近玩家距离重排，近的先处理；原 FIFO 远处先入队先处理，
      * 玩家附近光照延后。无分配 comparator，ChunkPos.getX/Z 为静态。与 nextDirty 同锁互斥。
      * 动态收集用 LongArrayList 不用 size() 预分配数组，并发入队时 size 竞态 -> 越界/
      * 少放回 -> 任务丢 -> inFlight 永久 true -> §5 滞留 -> 空缺。

@@ -62,10 +62,12 @@ public abstract class ChunkGeneratorMixin {
      * 结构按生成步分组，惰性缓存。原版每个 chunk 都重建一次，见 {@code ChunkGenerator} 的
      * {@code applyBiomeDecoration}。
      *
-     * <p>分组只由 {@link Structure#step()} 与结构注册表的内容决定，而注册表在
+     * <p>
+     * 分组只由 {@link Structure#step()} 与结构注册表的内容决定，而注册表在
      * {@code BuiltInRegistries.bootStrap} 末尾冻结，之后不再变。
      *
-     * <p>装饰任务跑在 farlands-gen 上，不同 chunk 可以并发，所以缓存字段是 volatile，建的过程
+     * <p>
+     * 装饰任务跑在 farlands-gen 上，不同 chunk 可以并发，所以缓存字段是 volatile，建的过程
      * 放同步方法里，两个线程同时进也只建一份。
      */
     @Unique
@@ -77,7 +79,7 @@ public abstract class ChunkGeneratorMixin {
         if (cached != null) {
             return cached;
         }
-        // 注册表在 BuiltInRegistries.bootStrap 末尾冻结，此处之后内容不变，所以建一次即可。
+        // 此处之后注册表内容不变，所以建一次即可。
         Map<Integer, List<Structure>> built = registry.stream()
                 .collect(Collectors.groupingBy(s -> s.step().ordinal()));
         this.farlandsStructuresByStep = built;

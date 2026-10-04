@@ -51,6 +51,7 @@ public final class BiomeFiller {
             }
             sys.fillBiomes(level, chunk, sectionY, sectionY);
             SectionStage.setStage(chunk, sectionY, SectionStage.BIOMES);
+            com.inf.farlands.terrain.debug.StageMetrics.sectionsIn(1L);
         }
     }
 }

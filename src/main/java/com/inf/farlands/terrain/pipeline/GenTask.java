@@ -144,7 +144,7 @@ public final class GenTask {
             if (carved.length > 0) {
                 DecorationFiller.register(chunk, carved);
                 // 这一格刚过雕刻：对它八个邻居的门来说，这一格从低于 CARVERS 变成就绪。
-                DecorationFiller.cellChanged();
+                DecorationFiller.cellChanged(chunk.getPos().pack());
             }
             // 光照触发条件：carvers 产出了东西，或已有光照能升、但还没升的段。CARVERS 不在判据内：
             // 那一段的下一步是装饰而不是光照，promote 也不升它，算进来只会每 tick 白跑一次光照。

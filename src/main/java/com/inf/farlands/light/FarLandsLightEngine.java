@@ -376,18 +376,19 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
     /**
      * 装饰侧取光照域锁：半径 2，覆盖它的 3×3 写域。主线程调用，失败即放弃本次、留表重试。
      *
-     * <p>这把锁与 {@link LightTaskLock#tryLock} 共用同一份 per-chunk 锁：光照侧在那里的 25 格
+     * <p>
+     * 这把锁与 {@link LightTaskLock#tryLock} 共用同一份 per-chunk 锁：光照侧在那里的 25 格
      * 循环里查装饰认领表，装饰侧直接取锁，于是两个方向互为排除。客户端构造下 taskLock 为 null，
      * 装饰是纯服务端，返回假即可。
      */
-    public boolean tryLockDomain(int chunkX, int chunkZ) {
-        return this.taskLock != null && this.taskLock.tryLockDomain(chunkX, chunkZ);
+    public long tryLockDomain(int chunkX, int chunkZ) {
+        return this.taskLock == null ? 0L : this.taskLock.tryLockDomain(chunkX, chunkZ);
     }
 
-    /** 装饰侧释放光照域锁。与 {@link #tryLockDomain} 配对，收尾调用。 */
-    public void unlockDomain(int chunkX, int chunkZ) {
+    /** 装饰侧释放光照域锁。与 {@link #tryLockDomain} 配对，收尾调用，必须带回取域时的编号。 */
+    public void unlockDomain(int chunkX, int chunkZ, long owner) {
         if (this.taskLock != null) {
-            this.taskLock.unlock(chunkX, chunkZ);
+            this.taskLock.unlock(chunkX, chunkZ, owner);
         }
     }
 
@@ -503,7 +504,7 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
 
     // 调度 / 池 / ticket
 
-    /** P2：玩家位置变化 -> 光照任务队列按距离重排，近的先处理；原 FIFO 远处先入队先处理。 */
+    /** 玩家位置变化 -> 光照任务队列按距离重排，近的先处理；原 FIFO 远处先入队先处理。 */
     public void rebuildLightQueue() {
         if (queue != null) {
             queue.rebuildQueue((ServerLevel) chunkSource.getLevel());
@@ -608,10 +609,11 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
      */
     private void drainLight() {
         try {
-            int budget = acquireBudget();
-            if (budget <= 0) {
+            int budgetGranted = acquireBudget();
+            if (budgetGranted <= 0) {
                 return; // 本窗配额已用完，出口统一在 finally
             }
+            int budget = budgetGranted;
             while (budget > 0) {
                 long key = queue.nextDirty();
                 if (key == Long.MIN_VALUE) {
@@ -623,18 +625,19 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
                 }
                 int cx = tasks.chunkX();
                 int cz = tasks.chunkZ();
-                if (!taskLock.tryLock(cx, cz)) {
+                long lockOwner = taskLock.tryLock(cx, cz);
+                if (lockOwner == 0L) {
                     queue.requeue(tasks); // 相邻任务占用，重排队尾下轮重试
                     Thread.yield();
                     continue;
                 }
                 try {
-                    lightPool.submit(() -> executeTask(tasks, cx, cz));
+                    lightPool.submit(() -> executeTask(tasks, cx, cz, lockOwner));
                 } catch (Throwable t) {
                     // 池已关闭或提交被拒：锁必须还、任务必须放回。否则这个 ChunkWork 既不在
                     // workMap 也不在 pendingWork，没人执行也没人 requeue，onComplete 永不完成，
                     // LIGHT_IN_FLIGHT 永久为真，块锁也永远不释放。与 wakeConsumer 的处理对齐。
-                    taskLock.unlock(cx, cz);
+                    taskLock.unlock(cx, cz, lockOwner);
                     queue.requeue(tasks);
                     InfsFarlands.LOGGER.error("farlands: light submit failed chunk={},{}", cx, cz, t);
                     return;
@@ -660,7 +663,7 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
         }
     }
 
-    private void executeTask(FarLandsLightQueue.ChunkWork tasks, int cx, int cz) {
+    private void executeTask(FarLandsLightQueue.ChunkWork tasks, int cx, int cz, long lockOwner) {
         try {
             if (tasks.isUnload) {
                 blockEngine.removeChunk(new ChunkPos(cx, cz));
@@ -689,7 +692,7 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
         } catch (Throwable t) {
             InfsFarlands.LOGGER.error("Light task exception chunk={},{}", cx, cz, t);
         } finally {
-            taskLock.unlock(cx, cz);
+            taskLock.unlock(cx, cz, lockOwner);
             tasks.onComplete.complete(null);
             // 任务完成补唤醒：防 drainLight 单例漏调度 残留任务由在跑任务的
             // 完成链式续接，light future 落地 -> 生成继续 -> getChunk 解除阻塞。

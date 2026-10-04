@@ -66,23 +66,103 @@ public final class DecorationFiller {
     private static final AtomicInteger ABORT_LOGGED = new AtomicInteger();
 
     /**
-     * 格状态变化的全局纪元：任何一格出现、消失、档位推进或读回落段都加一。
+     * 每 chunk 一个变化计数，键是 chunk 坐标。
      *
-     * <p>门只取决于写域九格的状态，所以纪元没变就说明九格的输入没变过，上次的结论仍然成立，整门可省。
-     * 每项记下自己上次评估门时的纪元，见 {@link #LAST_EVAL_EPOCH}。这条把每 tick 每项 290 格的扫描
-     * 压成只在有格变化时扫；信号漏发只会让某一项晚一点再试，不会让它永久停摆，下一次任何格变化都会
-     * 把它带进来。
+     * <p>必须按 chunk 记而不能全局记：门只取决于该项写域九格的状态，全局单值时任意一格变化都让 PENDING
+     * 里全部项作废门结论、重跑整门，于是门的总代价随待办表规模线性放大。
      */
-    private static final java.util.concurrent.atomic.AtomicLong cellEpoch =
-            new java.util.concurrent.atomic.AtomicLong(1);
+    private static final com.inf.farlands.util.map.Long2ObjectStripedMap<java.util.concurrent.atomic.AtomicLong> CHUNK_EPOCH =
+            new com.inf.farlands.util.map.Long2ObjectStripedMap<>(1 << 12);
 
-    /** 每项上次评估门时的纪元。纪元相同则跳过整门。 */
-    private static final Map<Key, Long> LAST_EVAL_EPOCH = new ConcurrentHashMap<>();
-
-    /** 某一格的状态变了。主线程调用，触发点是存在流程建壳、GenTask 推到 CARVERS、读回落段、收尾升段、卸载。 */
-    public static void cellChanged() {
-        cellEpoch.incrementAndGet();
+    /**
+     * 该 chunk 的变化计数，未 bump 过按 0 计。
+     *
+     * <p>只读不建条目，而不是 computeIfAbsent：读路径不该改结构，而条目由 {@link #cellChanged} 在写侧建。
+     */
+    private static long chunkEpoch(long chunkKey) {
+        java.util.concurrent.atomic.AtomicLong v = CHUNK_EPOCH.get(chunkKey);
+        return v == null ? 0L : v.get();
     }
+
+    /**
+     * 写域九格的变化计数之和。
+     *
+     * <p>取和而不是取最大：某个 chunk 被 bump 时，若它不是邻域里的最大值，最大值不变，于邻域含它的项
+     * 不会重判，那个变化被吞掉。和是单调不减且任一格递增必增的，不会有这个缺口。
+     */
+    private static long neighborhoodEpoch(int chunkX, int chunkZ) {
+        long sum = 0L;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                sum += chunkEpoch(ChunkPos.pack(chunkX + dx, chunkZ + dz));
+            }
+        }
+        return sum;
+    }
+
+    /** 每项上次评估门时的纪元与帧号。纪元相同且未过保鲜期则跳过整门。 */
+    private static final Map<Key, Eval> LAST_EVAL_EPOCH = new ConcurrentHashMap<>();
+
+    /**
+     * 一次门评估的结论：当时的纪元、当时的帧号、以及门是否通过。
+     *
+     * <p>通过与否决定保鲜期取哪一个：门没过要等格变化，取长保鲜期；门过了却没能提交，只是等一个
+     * 认领空出来，取短保鲜期。两类都不改变门看到的输入，所以都该在保鲜期内不再重判。
+     */
+    private record Eval(long epoch, long frame, boolean passed) {
+    }
+
+    /**
+     * 门通过的项的重试间隔，单位帧。
+     *
+     * <p>门过了却没提交成，只是在等一个认领空出来，而认领的持有期是毫秒量级，所以这一档取短保鲜期。
+     * 取 8 是持有期的上界：再短不会有额外收益，因为保鲜期一缩，重判次数必然上升，而提交量不会因此回升。
+     */
+    private static final int CLAIM_RETRY_FRAMES = 8;
+
+    /** 门评估的帧号。只由主线程写，见 {@link #tick()}。 */
+    private static long frame;
+
+    /**
+     * 门失败结论的保鲜期，单位帧。
+     *
+     * <p>只按纪元判「结论仍成立」有一个缺口：纪元只在格变化时加一，而系统一旦静下来就没有格变化，
+     * 于是同一纪元下的失败结论永不过期，停在门上的项再也不会被重判，停摆因此自我维持。本上限让结论
+     * 在不超期时仍然照省，超期则强制重判一次。
+     *
+     * <p>取值依据：超期重判的代价是「全部待办项各跑一轮门」，而这一档的间隔决定了那个代价的频率；
+     * 取 200 帧时，它在主线程驱动占比里的增量远小于活跃期的量级。
+     */
+    private static final int STALE_FRAMES = 200;
+
+    /**
+     * 复现开关：为真时 {@link #cellChanged} 不 bump {@code CHUNK_EPOCH}，于是邻域和恒为 0，
+     * 「纪元变了」这条重判通路被整条吞掉。
+     *
+     * <p>它用来复现一条自锁：推进依赖「格变化」信号，而信号又依赖推进。默认关闭，关闭时行为与不带本
+     * 开关逐位相同。
+     */
+    private static final boolean PROBE_SWALLOW_EPOCH = false;
+
+    /**
+     * 某一格的状态变了，受影响的是该 chunk。主线程与 genPool 都调，触发点是存在流程建壳、GenTask 推到
+     * CARVERS、读回落段、收尾升段、卸载。
+     *
+     * <p>按 chunk 记而不是全局记：门的依赖面只到写域九格，全局记会让任意一格变化作废全部项的门结论。
+     */
+    public static void cellChanged(long chunkKey) {
+        if (PROBE_SWALLOW_EPOCH) {
+            // 只 bump 全局计数器，而没有任何地方读它：邻域和因此恒 0。
+            SWALLOWED_EPOCH.incrementAndGet();
+            return;
+        }
+        CHUNK_EPOCH.computeIfAbsent(chunkKey,
+                k -> new java.util.concurrent.atomic.AtomicLong()).incrementAndGet();
+    }
+
+    /** 复现开关打开时的落点，只为让 bump 有副作用，不为任何逻辑服务。 */
+    private static final java.util.concurrent.atomic.AtomicLong SWALLOWED_EPOCH =
+            new java.util.concurrent.atomic.AtomicLong();
 
     private record Key(ResourceKey<Level> dimension, long chunkPos) {
     }
@@ -138,23 +218,25 @@ public final class DecorationFiller {
         }
         java.util.Set<Integer> sections = PENDING_SECTIONS.computeIfAbsent(keyOf(chunk),
                 k -> java.util.concurrent.ConcurrentHashMap.newKeySet());
-        // 段集合只增，所以「变大」与「有新增」等价。本方法由 farlands-gen 上的 GenTask 与服务端
-        // 主线程的扫描路径两处调，两次 size 之间可能有别的线程写入，那只让判据更容易成立，方向安全。
-        int before = sections.size();
+        // 门结论只在【本次真的新增了段】时作废。判据取 Set.add 的返回值，不取 size 的前后比较：
+        // 集合只增，第一次登记之后 size 恒不变，于是「size 变大」改判的写法在后续登记里恒假，记录被
+        // 反复丢掉，那一项每帧都要重跑整门，而门一次是 25 格取数加九次段表遍历。本方法由 farlands-gen
+        // 上的 GenTask 与服务端主线程的扫描路径两处调，两处都按同一判据。
+        boolean added = false;
         if (carvedSections != null) {
             for (int sy : carvedSections) {
-                sections.add(sy);
+                added |= sections.add(sy);
             }
         } else {
+            boolean[] a = { false };
             SectionStage.forEachStage(chunk, (sy, stage) -> {
                 if (stage == SectionStage.CARVERS) {
-                    sections.add(sy);
+                    a[0] |= sections.add(sy);
                 }
             });
+            added = a[0];
         }
-        // 只有段集合真的变了才让门的结论作废。无条件清会让扫描路径每 tick 的重复登记把上一条记下的
-        // 结论反复丢掉，那时这一项每 tick 都要重跑一次整门。
-        if (sections.size() > before) {
+        if (added) {
             LAST_EVAL_EPOCH.remove(keyOf(chunk));
         }
         if (!hasDecorationPending(chunk, sections)) {
@@ -170,6 +252,7 @@ public final class DecorationFiller {
      * <p>提交成功的项留表直到收尾删掉；这期间认领把同一个中心挡在门外，所以不会重复提交。
      */
     public static void tick() {
+        frame++;
         if (PENDING.isEmpty()) {
             return;
         }
@@ -198,14 +281,23 @@ public final class DecorationFiller {
             if (conflicts) {
                 continue; // 与本轮刚认领的中心域相交：tryClaim 必失败，省下整门
             }
-            // 纪元未变，说明写域九格的输入没变过，上次门的结论仍然成立，整门可省。这一条判在最前，
-            // 连中心那次取数也一起省掉：它只读两个静态字段，不碰 chunk。纪元是全局单值，任意一格
-            // 变化都会让全部待装饰项重判，所以这一句的次序就是本驱动层的主要成本所在。
-            long epoch = cellEpoch.get();
-            Long lastEval = LAST_EVAL_EPOCH.get(key);
-            if (lastEval != null && lastEval.longValue() == epoch) {
-                continue;
+            // 纪元未变且未过保鲜期，说明写域九格的输入没变过，上次门的结论仍然成立，整门可省。这一条
+            // 判在最前，连中心那次取数也一起省掉：它只读两个静态字段，不碰 chunk。
+            Eval lastEval = LAST_EVAL_EPOCH.get(key);
+            // 邻域和只在需要比较时才算：lastEval 为 null 时判据第一项就短路，那九次取数的结果用不上。
+            // 而没有评估记录的项很多（每次 register 加了新段就 remove 一次记录），所以这一条次序
+            // 省掉的是「无论如何都用不上」的九次带乐观戳的取数。
+            if (lastEval != null) {
+                long epoch = neighborhoodEpoch(keyCx, keyCz);
+                // 保鲜期按门是否通过分流：没过要等格变化，过了只是在等认领空出来。
+                if (lastEval.epoch() == epoch
+                        && frame - lastEval.frame() < (lastEval.passed() ? CLAIM_RETRY_FRAMES : STALE_FRAMES)) {
+                    continue;
+                }
             }
+            // 落门的项要 epoch 来写记录，所以在落门时再算一次。落门的是少数（每项每窗约十次），
+            // 而上面那一支省掉的是「lastEval 为 null 时无论如何都用不上」的九次取数。
+            long epoch = neighborhoodEpoch(keyCx, keyCz);
             LevelChunk center = SectionLifecycle.latestChunk(level, ChunkPos.getX(key.chunkPos()),
                     ChunkPos.getZ(key.chunkPos()));
             if (center == null) {
@@ -223,16 +315,19 @@ public final class DecorationFiller {
                     : StructureDriver.STRUCTURE_READ_RADIUS;
             Map<Long, LevelChunk> handles = neighborhood(level, center, readRadius);
             if (handles == null) {
-                LAST_EVAL_EPOCH.put(key, epoch); // 记下这次结论：下次格变化前不必重判
+                LAST_EVAL_EPOCH.put(key, new Eval(epoch, frame, false)); // 门没过：等格变化，取长保鲜期
                 continue; // 门没过：留表等下一轮
             }
-            LAST_EVAL_EPOCH.remove(key);
+            // 门过了也记：认领或提交可能在下一步失败，那时若这里删掉记录，该项下一帧又要重跑整门。
+            // 认领失败不改变门看到的任何输入，所以短保鲜期成立。
+            LAST_EVAL_EPOCH.put(key, new Eval(epoch, frame, true));
             int cx = center.getPos().x();
             int cz = center.getPos().z();
             if (!DecorationClaim.tryClaim(level.dimension(), cx, cz)) {
                 continue; // 写域与另一次装饰相交，留表等下一轮
             }
-            if (!GenQueue.submitDecoration(new DecorationTask(level, center, key, handles, readRadius))) {
+            DecorationTask task = new DecorationTask(level, center, key, handles, readRadius);
+            if (!GenQueue.submitDecoration(task)) {
                 // 池已关，即停服：撤认领、留表等下一轮
                 DecorationClaim.release(level.dimension(), cx, cz);
                 return;
@@ -324,13 +419,17 @@ public final class DecorationFiller {
         @Override
         public void run() {
             DecorationRegion region = null;
+            // 持有者编号在外层声明，finally 才捕获得到 try 内赋的值。取域失败时保持 0，收尾不释放。
+            long lockOwner = 0L;
             try {
                 // 光照域锁取在任务体开头，不在提交时：提交时取锁会把池排队的时间也算进持有期，
                 // 那段时间里这一片的光照任务全被挡着。此刻一个方块都还没写，失败直接放弃即可。
                 FarLandsLightEngine lightEngine = lightEngineOf(this.level);
-                if (lightEngine != null
-                        && !lightEngine.tryLockDomain(this.center.getPos().x(), this.center.getPos().z())) {
-                    return; // 收尾照走：撤认领、清在途计数，但 region 为 null，不升段也不释放别人的锁
+                if (lightEngine != null) {
+                    lockOwner = lightEngine.tryLockDomain(this.center.getPos().x(), this.center.getPos().z());
+                    if (lockOwner == 0L) {
+                        return; // 收尾照走：撤认领、清在途计数，lockOwner 为 0 不释放任何格
+                    }
                 }
                 DecorationContext.enter();
                 try {
@@ -366,11 +465,55 @@ public final class DecorationFiller {
                         this.center.getPos().x(), this.center.getPos().z(), region != null, t);
                 region = null;
             } finally {
-                // 收尾在主线程：装方块实体、升段、标脏、补发、触发光照、撤两把锁与在途计数。
+                // 分流：region 为 null 时本次一个方块都没写，没有任何主线程专属的收尾工作，收尾就在池
+                // 线程内做完，让认领早释放。认领挡的是照光侧，而它在主线程队列里等一笔空的收尾时，照光
+                // 池就被按住了。
+                //
+                // 带锁收尾必须回主线程：装方块实体、升段、标脏、补发、触发光照五件都要求主线程，而它们
+                // 只在真的装饰过、即 region 非 null 时才存在。
                 DecorationRegion computed = region;
-                SectionIO.runOnMainThread(() -> finish(this.level, this.center, this.key, computed), this.level);
+                long computedOwner = lockOwner;
+                if (computed == null) {
+                    finishRegionNull(this.level, this.center, this.key, computedOwner);
+                } else {
+                    SectionIO.runOnMainThread(
+                            () -> finish(this.level, this.center, this.key, computed, computedOwner), this.level);
+                }
             }
         }
+    }
+
+    /**
+     * 没写成任何东西的那一支的收尾。在 farlands-gen 上执行，不走主线程。
+     *
+     * <p>为什么可以不走主线程：这一支一个方块都没写，所以没有方块实体要装、没有段要升、没有下发要
+     * 补、没有光照要触，而主线程专属的工作只有那四件。留下的三件，撤纪元、撤认领、清在途计数，
+     * 三件都有并发安全的载体。
+     *
+     * <p>为什么必须不走主线程：认领挡的是照光侧的取域，而收尾走主线程时认领要在主线程队列里排到这一
+     * 笔被执行才撤，于是持有期被拉长到「池队列等待加收尾」的量级；而这一支一个方块都没写，占提交数的
+     * 九成上下，等于用一笔空收尾按住照光池。
+     *
+     * <p>顺序是契约：先撤纪元，再撤认领。反过来的话，池线程撤完认领、还没撤纪元之前的窗口里，主线程
+     * 的 tick 可能重复认领同一中心并提交第二次任务，而本方法随后的 remove 会擦掉第二次尝试刚设下的
+     * 纪元。后果只是多重判一次门，但把顺序固定下来就没有这个窗口。
+     */
+    private static void finishRegionNull(ServerLevel level, LevelChunk center, Key key, long lockOwner) {
+        // 取域锁失败：一个方块都没写，门看到的输入没变，所以不该抹掉记录，抹掉会让该项下一帧重跑
+        // 整门。只把「门通过」的标记翻回假，让主线程按短保鲜期重试。帧号原样沿用主线程那一次的读值，
+        // 本方法不做算术。
+        Eval prev = LAST_EVAL_EPOCH.get(key);
+        if (prev != null) {
+            LAST_EVAL_EPOCH.put(key, new Eval(prev.epoch(), prev.frame(), false));
+        }
+        DecorationClaim.release(level.dimension(), center.getPos().x(), center.getPos().z());
+        if (lockOwner != 0L) {
+            FarLandsLightEngine lightEngine = lightEngineOf(level);
+            if (lightEngine != null) {
+                lightEngine.unlockDomain(center.getPos().x(), center.getPos().z(), lockOwner);
+            }
+        }
+        GenQueue.finishDecoration();
     }
 
     /**
@@ -387,16 +530,11 @@ public final class DecorationFiller {
      * 只清纪元记录让下一轮重判门。把这三者都当成无事可做而删项时，由于登记是雕刻那一刻的一次性
      * 事件，删了没人重建，段会永久停在 CARVERS。
      */
-    private static void finish(ServerLevel level, LevelChunk center, Key key, DecorationRegion region) {
+    private static void finish(ServerLevel level, LevelChunk center, Key key, DecorationRegion region,
+            long lockOwner) {
+        // region 为 null 的那一支已在 finishRegionNull 里于池线程收尾，本方法只收「真的装饰过」的，
+        // 所以这里的 region 必定非 null。
         try {
-            if (region == null) {
-                // 本次放弃，取数不成立或没抢到光照域锁：一个方块都没写、阶段没动，段仍等着装饰。
-                // 所以绝不能删待办项，登记是雕刻那一刻的一次性事件，删了就再没人重建，段会永久停在
-                // CARVERS。那时走查每轮仍给它排一个生成任务，而它在三个 pending 判据上全部落空，表现为
-                // 静默停摆。只清纪元记录，让下一轮重判门；光照域锁一空就会成功。
-                LAST_EVAL_EPOCH.remove(key);
-                return;
-            }
             LevelChunk current = SectionLifecycle.latestChunk(level, center.getPos().x(), center.getPos().z());
             if (current == null) {
                 // 收尾这一刻取不到 chunk，可能是瞬时取不到，也可能已不在场：没有升段就等于没完成，
@@ -446,17 +584,17 @@ public final class DecorationFiller {
             PENDING_SECTIONS.remove(key);
             LAST_EVAL_EPOCH.remove(key);
             // 这一格的段刚从 CARVERS 升到 DECORATED：对它八个邻居的门来说，这一格的状态变了。
-            cellChanged();
+            cellChanged(current.getPos().pack());
             // 段内容此刻才算定下来：DECORATED 到 LIGHTED 只能由光照回调推进，所以这里必须触发一次光照。
             GenQueue.notifyGenerated(current);
         } finally {
             DecorationClaim.release(level.dimension(), center.getPos().x(), center.getPos().z());
-            // 只有真的取到过锁才释放。取锁失败那一支是一个方块都没写的放弃，盲目 unlock 会把别人正
-            // 持有的那 25 格放掉，别人可能是光照任务，也可能是另一次装饰。
-            if (region != null) {
+            // 只有真的取到过锁才释放：取域返回的持有者编号非 0 才算取到。取锁失败那一支是一个方块
+            // 都没写的放弃，把 0 传下去不会碰到任何别人持有的格。
+            if (lockOwner != 0L) {
                 FarLandsLightEngine lightEngine = lightEngineOf(level);
                 if (lightEngine != null) {
-                    lightEngine.unlockDomain(center.getPos().x(), center.getPos().z());
+                    lightEngine.unlockDomain(center.getPos().x(), center.getPos().z(), lockOwner);
                 }
             }
             GenQueue.finishDecoration();
@@ -466,6 +604,10 @@ public final class DecorationFiller {
     /**
      * 卸载清理：该 chunk 的待装饰项、登记段与纪元记录一起丢。这是唯一的权威移除点，tick 里这一刻
      * 取不到 chunk 不构成移除理由，见那里的注释。
+     *
+     * <p>变化计数不在这里删：{@code SectionLifecycle.flushChunk} 在调本方法之后会补一次
+     * {@link #cellChanged}，删了也会被立刻重建。留着一个旧计数无害，它只让邻域的和偏高，而含该格的
+     * 项本来就该重判。
      */
     public static void clearChunk(ResourceKey<Level> dimension, long chunkKey) {
         Key key = new Key(dimension, chunkKey);
@@ -479,6 +621,6 @@ public final class DecorationFiller {
         PENDING.clear();
         PENDING_SECTIONS.clear();
         LAST_EVAL_EPOCH.clear();
-        cellEpoch.incrementAndGet();
+        CHUNK_EPOCH.clear();
     }
 }

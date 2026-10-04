@@ -67,19 +67,33 @@ public abstract class SpawnPreloadMixin {
     private static final int FARLANDS_PRELOAD_RADIUS = 4;
 
     /**
-     * 票与生成的半径，比判据半径大 2。
+     * 驱动生成的半径。取判据半径 + 1，这是下界。
      *
-     * <p>
-     * 装饰的门要求写域九宫格都在且都过雕刻，判据圈半径 4 的每一格都要它的外邻满足这一条，
-     * 那一圈落在半径 5；而装饰的读域到写域外一格，即半径 6。不带到 6，判据圈的段会永远过不了装饰
-     * 的门，或者每遍都因读不到外环而放弃，循环都等不到收敛。
+     * <p>门的判据是「中心所在 chunk 的 3×3 九格都过 CARVERS」。判据圈边界那格在偏移
+     * {@code FARLANDS_PRELOAD_RADIUS}，它的九格含偏移 {@code FARLANDS_PRELOAD_RADIUS + 1}，所以那一圈
+     * 必须被驱动，即驱动半径至少比判据半径大 1。取成与判据相等时，9×9 边界那一列的门恒不过，那些段
+     * 到不了 LIGHTED，退出条件永不满足，而它们的壳在场、邻域也齐，症状看着像卡在别处。
      *
-     * <p>
-     * 再外面那圈，即半径 7 到 14，不在这里铺票：结构引用相要读的 ±8 由 StructureDriver 按需拉，只对
-     * 真的要 fill 的 chunk 发起；被拉起来的邻居只当壳，不会再往外拉，一圈即止。
+     * <p>被驱动的最外一圈自己的门会失败，它的九格含驱动圈之外；但那不影响判据圈：那一圈只需要到
+     * CARVERS 供判据圈的门使用，不需要到 LIGHTED。
      */
     @Unique
-    private static final int FARLANDS_PRELOAD_GEN_RADIUS = FARLANDS_PRELOAD_RADIUS + 2;
+    private static final int FARLANDS_PRELOAD_DRIVE_RADIUS = FARLANDS_PRELOAD_RADIUS + 1;
+
+    /**
+     * 铺票的半径，只用来让壳在场，不驱动生成。取驱动半径 + {@code STRUCTURE_READ_RADIUS}，这是下界。
+     *
+     * <p>被驱动的 chunk 里最远的一个在驱动半径，而它的结构引用相要读 ±8，所以它的 ±8 邻域必须都在
+     * {@code visibleChunkMap} 里；落到铺票半径即二者之和。
+     *
+     * <p>原来这一圈靠 {@code StructureDriver.pullDependencies} 按需拉，而那个调用点在
+     * {@code GenTask} 的 {@code hasBeardifier} 早退分支里，即「要 Beardifier 才能触发拉依赖，而拉
+     * 依赖就是为了拿 Beardifier」：需要 ±8 的 chunk 恰恰是拿不到 Beardifier 的那个，于是它永不触发
+     * 拉取，预加载不收敛、退出条件永不满足。所以这一圈必须由本处铺票。
+     */
+    @Unique
+    private static final int FARLANDS_PRELOAD_TICKET_RADIUS =
+            FARLANDS_PRELOAD_DRIVE_RADIUS + com.inf.farlands.terrain.structure.StructureDriver.STRUCTURE_READ_RADIUS;
 
     /** 竖直半高。 */
     @Unique
@@ -145,8 +159,8 @@ public abstract class SpawnPreloadMixin {
 
         ServerChunkCache cache = level.getChunkSource();
         Set<Long> issued = new HashSet<>();
-        for (int dx = -FARLANDS_PRELOAD_GEN_RADIUS; dx <= FARLANDS_PRELOAD_GEN_RADIUS; dx++) {
-            for (int dz = -FARLANDS_PRELOAD_GEN_RADIUS; dz <= FARLANDS_PRELOAD_GEN_RADIUS; dz++) {
+        for (int dx = -FARLANDS_PRELOAD_TICKET_RADIUS; dx <= FARLANDS_PRELOAD_TICKET_RADIUS; dx++) {
+            for (int dz = -FARLANDS_PRELOAD_TICKET_RADIUS; dz <= FARLANDS_PRELOAD_TICKET_RADIUS; dz++) {
                 ChunkPos pos = new ChunkPos(spawnCx + dx, spawnCz + dz);
                 cache.addTicketWithRadius(GenQueue.GEN_WORK_TICKET, pos, 0);
                 SpawnPreload.register(level.dimension(), pos);
@@ -162,8 +176,8 @@ public abstract class SpawnPreloadMixin {
             this.waitUntilNextTick();
             // 每轮补一次 FULL：出生区里已就绪的 chunk 越早拿到 FULL，入场前那次阻塞读越早不会撞上。
             ChunkReadiness.drive();
-            for (int dx = -FARLANDS_PRELOAD_GEN_RADIUS; dx <= FARLANDS_PRELOAD_GEN_RADIUS; dx++) {
-                for (int dz = -FARLANDS_PRELOAD_GEN_RADIUS; dz <= FARLANDS_PRELOAD_GEN_RADIUS; dz++) {
+            for (int dx = -FARLANDS_PRELOAD_DRIVE_RADIUS; dx <= FARLANDS_PRELOAD_DRIVE_RADIUS; dx++) {
+                for (int dz = -FARLANDS_PRELOAD_DRIVE_RADIUS; dz <= FARLANDS_PRELOAD_DRIVE_RADIUS; dz++) {
                     ChunkPos pos = new ChunkPos(spawnCx + dx, spawnCz + dz);
                     LevelChunk chunk = ChunkReadiness.chunkAt(level, pos);
                     if (chunk == null) {
@@ -287,7 +301,8 @@ public abstract class SpawnPreloadMixin {
                         .append(",biome=").append(GenQueue.isBiomeFilling(chunk))
                         .append(",reading=").append(SectionIO.isReadingAny(pos.pack()))
                         .append(",pending=").append(SectionLifecycle.isPendingWindowRead(chunk))
-                        .append(",belowLighted=").append(below[0]).append("] ");
+                        .append(",belowLighted=").append(below[0])
+                        .append("] ");
                 listed++;
             }
         }

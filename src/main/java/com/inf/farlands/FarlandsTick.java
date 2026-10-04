@@ -33,6 +33,13 @@ public class FarlandsTick {
     }
 
     /**
+     * 上一轮 fsa 清理是否因预算耗尽而没做完。窗口静止时窗口并集不再变化，只按 windowChanged 触发会让
+     * 没清完的积压一直留着，所以未清完就下 tick 续跑。预算耗尽只由「已点亮、脏、待入队」的段超出上限
+     * 引起，释放那一支不扣预算，因此清完之后本标记恒假，不会常驻扫描。
+     */
+    private static boolean cleanupOpen;
+
+    /**
      * 单一时钟的写入点：服务端 tick 与分离 JVM 的客户端 tick 都从这里推进，侧信道打戳读的
      * 就是这个值。
      */
@@ -155,6 +162,8 @@ public class FarlandsTick {
             swapBlockLookup(server, tickCount);
             trimSectionLookup(tickCount);
             trimAquiferLookup(tickCount);
+            // 就绪吞吐读数：与本周期同档，约 10 秒一行。只报读数，不报解读。
+            com.inf.farlands.terrain.debug.StageMetrics.flush();
         }
         // 光照引擎每 tick 的任务配额：真 tick 是唯一权威边界。
         // 无 tick 阶段由引擎自己按 tick 间隔兜底，两个入口是 prepareLevels 建世界与 saveEverything 保存。
@@ -187,9 +196,10 @@ public class FarlandsTick {
             SectionLifecycle.flushAllDirty(server);
             SectionIO.flushAllOffsetTables();
         }
-        // 窗口变化：窗口并集加余量之外的 section 持久化后即删内存，上限 CLEANUP_BUDGET/tick。
-        if (windowChanged) {
-            SectionLifecycle.cleanup(server);
+        // 窗口变化：窗口之外的 section 按档处置，上限 CLEANUP_BUDGET/tick。
+        // 未清完则下 tick 续跑：窗口静止时它不再变化，只按 windowChanged 触发会让积压永远留着。
+        if (windowChanged || cleanupOpen) {
+            cleanupOpen = SectionLifecycle.cleanup(server);
         }
         // 重进瞬间窗口未建立时加载的 chunk 读回兜底；内部 budget 32/tick、窗口空时零开销早退。
         if (tickCount % 5 == 0) {

@@ -17,7 +17,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.light.FarLandsLightEngine;
 import com.inf.farlands.terrain.structure.StructureDriver;
@@ -60,17 +59,30 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
  * shutdownSyncFlush 关服同步兜底。
  *
  * 26.1.2 的 ChunkMap 没有 getChunks，public 遍历入口只剩 forEachReadyToSendChunk，而它不是全量。
- * 这里改用反射读 ChunkMap.visibleChunkMap，类型是 Long2ObjectLinkedOpenHashMap 装 ChunkHolder，
+ * 这里改用反射读 ChunkMap.visibleChunkMap，类型是 Long2ObjectLinkedOpenHashMap 装
+ * ChunkHolder，
  * 即全部可见 ChunkHolder。ChunkHolder.getLatestChunk 声明在父类 GenerationChunkHolder 上。
  * stage 由 SectionStage 承载，取值见那一类。terrain 侧调用收口在 TerrainHooks，即
- * GenQueue.isChunkBusy 与 GenQueue.enqueueChunk。条目的 block_states 与 biomes codec 从 chunk 的
- * PalettedContainerFactory 取。ChunkPos.toLong 改名 pack，cp.x 与 cp.z 改成 cp.x() 与 cp.z()。
- * chunk.getSectionIndexFromSectionY 来自 LevelHeightAccessor 而非 WindowedChunk，LevelChunk 继承之。
+ * GenQueue.isChunkBusy 与 GenQueue.enqueueChunk。条目的 block_states 与 biomes codec
+ * 从 chunk 的
+ * PalettedContainerFactory 取。ChunkPos.toLong 改名 pack，cp.x 与 cp.z 改成 cp.x() 与
+ * cp.z()。
+ * chunk.getSectionIndexFromSectionY 来自 LevelHeightAccessor 而非
+ * WindowedChunk，LevelChunk 继承之。
  */
 public final class SectionLifecycle {
 
-    /** 每 tick 清理入队上限。 */
+    /** 每 tick 清理入队上限。释放不扣预算，它只限「入队落盘」那一支。 */
     public static final int CLEANUP_BUDGET = 1024;
+
+    /**
+     * 本轮清理是否因预算耗尽而没做完。
+     *
+     * <p>
+     * 唯一来源是「已点亮、脏、且待入队」的段超出 {@link #CLEANUP_BUDGET}。调用方据此在窗口静止时
+     * 续跑：窗口变化才触发的话，积压只会在下一次窗口变化前一直留着。
+     */
+    private static boolean cleanupOpen;
 
     /** 待编码单元。只存引用，编码时现取最新，主线程串行因此无竞态。mode 是 cleanup 语义。 */
     private record EncodeUnit(LevelChunk chunk, int sectionY, boolean cleanup) {
@@ -90,7 +102,7 @@ public final class SectionLifecycle {
      */
     private static final Set<LevelChunk> pendingWindowRead = ConcurrentHashMap.newKeySet();
 
-    /** 该 chunk 是否在等窗口建立后读回。ChunkReadiness 的就绪判据之一，也是停滞诊断的一项。 */
+    /** 该 chunk 是否在等窗口建立后读回。ChunkReadiness 的就绪判据之一。 */
     public static boolean isPendingWindowRead(LevelChunk chunk) {
         return pendingWindowRead.contains(chunk);
     }
@@ -98,7 +110,8 @@ public final class SectionLifecycle {
     /**
      * 停服时清掉按世界的在途状态。两个队列里持有的都是旧 LevelChunk。
      *
-     * <p>不复位 ENCODE_TASKS_IN_FLIGHT：旧世界可能有超时未收尾的编码任务仍在途，它们的出口会递减
+     * <p>
+     * 不复位 ENCODE_TASKS_IN_FLIGHT：旧世界可能有超时未收尾的编码任务仍在途，它们的出口会递减
      * 这个计数，先 set(0) 会被减成负数，下一个世界的关服等待就会误判成没有在途任务而直接放行。
      */
     public static void clearWorldState() {
@@ -124,8 +137,24 @@ public final class SectionLifecycle {
 
     // ---- 触发入队 ----
 
-    /** 窗口变化时扫描清理，主线程。由 FarlandsTick 在窗口差量为真时调用。 */
-    public static void cleanup(MinecraftServer server) {
+    /**
+     * 扫描清理窗口之外、且不再有用途的 section，主线程。由 {@code FarlandsTick} 在窗口变化或上一轮未
+     * 清完时调用。
+     *
+     * <p>
+     * 不跳过在途 chunk：在途任务只写窗口内的段，而本方法从不删窗口内的段，所以两者无交集。原来整块
+     * 跳过在途 chunk 是过粗的，而洪峰期间在途是常态，于是窗口外的段长期积压。
+     *
+     * <p>
+     * 遍历用零余量，而余量只对「已经算出东西的段」成立，防的是边界抖动导致反复释放与重建。低于
+     * LIGHTED 的段从未落盘，重建的代价只是一个 biome 网格加一次默认段构造，所以它不需要余量保护；而
+     * 窗口外的低档段永远推进不了，且没有任何在途任务会碰它，它留在 SectionStage 里只会让装饰的门在写域
+     * 上必失败。加余量遍历时，窗口外那一圈低档段整片落在余量带内，枚举不到，于是它们永不释放。
+     *
+     * @return 是否还有候选项没处理完，调用方据此续跑
+     */
+    public static boolean cleanup(MinecraftServer server) {
+        cleanupOpen = false;
         int[] budget = { CLEANUP_BUDGET };
         for (ServerLevel level : server.getAllLevels()) {
             for (ChunkHolder holder : getChunks(level)) {
@@ -133,27 +162,34 @@ public final class SectionLifecycle {
                 // tickingChunkFuture 完成成 UNLOADED，getTickingChunk 返回 null 就漏遍历。
                 // getLatestChunk 不依赖 ticking 状态，只要 chunk 在 holder 里就返回。
                 ChunkAccess ca = holder.getLatestChunk();
-                if (!(ca instanceof LevelChunk lc) || TerrainHooks.isChunkBusy(lc)) {
+                if (!(ca instanceof LevelChunk lc)) {
                     continue;
                 }
                 WindowedChunk wc = (WindowedChunk) lc;
-                // 增量扫描，只遍历窗口并集加余量之外的 section，成本是 O(log n + 边界外数)
-                wc.forEachOutsideWindows(FarlandsConfig.sectionCleanupMargin, sy -> {
-                    if (budget[0] <= 0) {
+                // 增量扫描，只遍历窗口之外的 section，成本是 O(log n + 窗口外数)
+                wc.forEachOutsideWindows(0, sy -> {
+                    int stage = SectionStage.getStage(lc, sy);
+                    if (stage >= SectionStage.LIGHTED) {
+                        // 已点亮：数据在盘上，删内存即可；脏的入队落盘。与余量无关。
+                        if (!wc.isSectionDirty(sy)) {
+                            removeFromMemory(lc, sy);
+                        } else if (budget[0] > 0) {
+                            pendingEncode.add(new EncodeUnit(lc, sy, true));
+                            budget[0]--;
+                        } else {
+                            cleanupOpen = true; // 预算耗尽，剩下的下一轮再落
+                        }
                         return;
                     }
-                    if (!wc.isSectionDirty(sy)) {
-                        removeFromMemory(lc, sy);
-                    } else if (SectionStage.getStage(lc, sy) >= SectionStage.LIGHTED) {
-                        pendingEncode.add(new EncodeUnit(lc, sy, true));
-                        budget[0]--;
-                    }
-                    // 脏但低于 LIGHTED：既不入队也不释放。入队会被 encodeNow 的兜底拒掉，
-                    // 释放则让未落盘的段从内存消失。光照补触发完成后由 persistChunkDirty 收口。
+                    // 低于 LIGHTED 的段从未落盘，persistChunkDirty 只写 >= LIGHTED 的段，所以释放不
+                    // 丢数据。而窗口外意味着 collectSegments 收不到它、没有在途任务会碰它，留着它只会
+                    // 让装饰的门在写域上必失败，待装饰表因此只涨不落。
+                    removeFromMemory(lc, sy);
                 });
             }
         }
         wakeEncodeConsumer();
+        return cleanupOpen;
     }
 
     /** 卸载编码在途任务数，关服等待用，任务出口递减。 */
@@ -193,7 +229,7 @@ public final class SectionLifecycle {
         StructureDriver.clearChunk(level.dimension(), lc.getPos().pack());
         com.inf.farlands.terrain.decorationFiller.DecorationFiller.clearChunk(level.dimension(),
                 lc.getPos().pack());
-        com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged();
+        com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged(lc.getPos().pack());
         if (TerrainHooks.isChunkBusy(lc)) {
             return;
         }
@@ -369,10 +405,12 @@ public final class SectionLifecycle {
     /**
      * 池线程：出队、判写入者、编码，再按维度归批投回主线程记账。
      *
-     * <p>编码搬到这里，依据是 encodeNow 自己的线程约定：主线程 tick 与编码池卸载共用，任意线程安全。
+     * <p>
+     * 编码搬到这里，依据是 encodeNow 自己的线程约定：主线程 tick 与编码池卸载共用，任意线程安全。
      * 主线程只剩 getOrOpen、prepareWrite、commitWrite 与扇区分配，那些是主线程独占状态，不能搬。
      *
-     * <p>整轮最多处理进入时队列长度那么多的单元，保证本轮必然结束。不满足写入者判据的单元放回队尾，
+     * <p>
+     * 整轮最多处理进入时队列长度那么多的单元，保证本轮必然结束。不满足写入者判据的单元放回队尾，
      * 留到下一次唤醒。
      */
     private static void drainEncode() {
@@ -693,7 +731,8 @@ public final class SectionLifecycle {
     /**
      * 预加载的范围读回：范围内每段发起读回，并解除窗口等待标记。
      *
-     * <p>预加载期间没有玩家窗口，走不到 loadChunkSections 的并集分支；而窗口等待标记必须清掉，否则
+     * <p>
+     * 预加载期间没有玩家窗口，走不到 loadChunkSections 的并集分支；而窗口等待标记必须清掉，否则
      * ChunkReadiness.isDataReady 里那一条恒假，FULL 补不出来，玩家进世界后连方块都放不下去。
      */
     public static void preloadRange(LevelChunk lc, int minSy, int maxSy) {
@@ -782,8 +821,12 @@ public final class SectionLifecycle {
             }
         }
         SectionStage.setStage(lc, sy, decoded.stage());
+        if (decoded.stage() >= SectionStage.LIGHTED) {
+            // 读回不推进档位，但它的 LIGHTED 要计进吞吐，否则重进的 chunk 不进 CPS 与 SPS。
+            com.inf.farlands.terrain.debug.StageMetrics.lightedSections(1);
+        }
         // 这一段刚被读回恢复，档位来自磁盘：它的邻居门要重判。
-        com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged();
+        com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged(lc.getPos().pack());
         StructureDriver.cellChanged();
         // 磁盘只存 fsa 的方块与光照，chunk NBT 的 sections 被剥空，所以原版读盘路径里那句
         // poiManager.checkConsistencyWithBlocks 在本 port 从不执行。恢复的段在这里补一次，
@@ -810,7 +853,8 @@ public final class SectionLifecycle {
     /**
      * 非阻塞取该位置当前的 LevelChunk。存在流程走过就有，没走过或只有 proto 时返回 null。
      *
-     * <p>只在主线程调：visibleChunkMap 是裸的 Long2ObjectLinkedOpenHashMap，不是线程安全的。
+     * <p>
+     * 只在主线程调：visibleChunkMap 是裸的 Long2ObjectLinkedOpenHashMap，不是线程安全的。
      * getLatestChunk 本身不阻塞，FULL 的 future 被数据就绪悬着时会回退到 SPAWN 那个持 LevelChunk
      * 的 future，所以这里拿到的是壳而不是等数据。
      */
@@ -829,7 +873,8 @@ public final class SectionLifecycle {
      * 批量取数的游标：把 {@code visibleChunkMap} 的反射读做一次，之后每次 {@link #at} 只做 map get 与
      * {@code getLatestChunk()}。语义与 {@link #latestChunk} 逐行同源，只差反射次数。
      *
-     * <p>给扫 ±r 一格一格查的调用点用，即装饰的门与结构引用相的存在性判定：那里一格一次
+     * <p>
+     * 给扫 ±r 一格一格查的调用点用，即装饰的门与结构引用相的存在性判定：那里一格一次
      * {@code latestChunk}，290 格就是 290 次反射读。主线程独占，游标不可跨线程。
      */
     public static final class ChunkCursor {

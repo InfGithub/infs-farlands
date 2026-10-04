@@ -37,7 +37,12 @@ public final class CarverFiller {
     private CarverFiller() {
     }
 
-    /** 该 chunk 是否已有 SURFACE 未 CARVERS 且非读回的 section。 */
+    /**
+     * 该 chunk 是否已有 SURFACE 未 CARVERS 且非读回的 section。
+     *
+     * <p>读回在途的段不算待处理：它返回假时调用方直接返回空数组，那些段既不雕刻也不标脏，只等读回完成
+     * 后的回调再触发入队。
+     */
     public static boolean hasCarversPending(LevelChunk chunk) {
         for (Integer sy : ((WindowedChunk) chunk).windowedAllSections().keySet()) {
             if (!WorldBounds.inSection(sy)) {

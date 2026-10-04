@@ -161,7 +161,7 @@ public abstract class GenerationChunkHolderMixin {
             }
             ChunkReadiness.watch((GenerationChunkHolder) (Object) this, levelchunk);
             // 这一格的壳出现了：等它的装饰项要重判门，等它的结构挂起项要重判 ±8。
-            com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged();
+            com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged(levelchunk.getPos().pack());
             com.inf.farlands.terrain.structure.StructureDriver.cellChanged();
 
             // 结构相早于 Beardifier，Beardifier 早于 fill。这是铁的顺序，但它只约束 fill，不约束就绪。
