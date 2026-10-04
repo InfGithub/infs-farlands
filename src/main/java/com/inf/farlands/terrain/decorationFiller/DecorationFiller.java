@@ -4,8 +4,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.light.FarLandsLightEngine;
@@ -13,9 +15,11 @@ import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.LevelSystems;
+import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.terrain.terrainFiller.TerrainSystemContext;
+import com.inf.farlands.util.map.Long2ObjectStripedMap;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.WindowedChunk;
 
@@ -57,7 +61,7 @@ public final class DecorationFiller {
      * <p>登记来自两条路：GenTask 手里已有本次雕刻返回的段数组，直接给；扫描兜底那条给 null，就地
      * 扫一次。同一项重复登记取并集，窗口滑入后新到 CARVERS 的段要能并进来，覆盖会丢段。
      */
-    private static final Map<Key, java.util.Set<Integer>> PENDING_SECTIONS = new ConcurrentHashMap<>();
+    private static final Map<Key, Set<Integer>> PENDING_SECTIONS = new ConcurrentHashMap<>();
 
     /**
      * 放弃原因只打前若干条。门没过的项每轮都会重试，不限流会把日志刷爆；形状与 SectionLifecycle 的
@@ -71,8 +75,8 @@ public final class DecorationFiller {
      * <p>必须按 chunk 记而不能全局记：门只取决于该项写域九格的状态，全局单值时任意一格变化都让 PENDING
      * 里全部项作废门结论、重跑整门，于是门的总代价随待办表规模线性放大。
      */
-    private static final com.inf.farlands.util.map.Long2ObjectStripedMap<java.util.concurrent.atomic.AtomicLong> CHUNK_EPOCH =
-            new com.inf.farlands.util.map.Long2ObjectStripedMap<>(1 << 12);
+    private static final Long2ObjectStripedMap<AtomicLong> CHUNK_EPOCH =
+            new Long2ObjectStripedMap<>(1 << 12);
 
     /**
      * 该 chunk 的变化计数，未 bump 过按 0 计。
@@ -80,7 +84,7 @@ public final class DecorationFiller {
      * <p>只读不建条目，而不是 computeIfAbsent：读路径不该改结构，而条目由 {@link #cellChanged} 在写侧建。
      */
     private static long chunkEpoch(long chunkKey) {
-        java.util.concurrent.atomic.AtomicLong v = CHUNK_EPOCH.get(chunkKey);
+        AtomicLong v = CHUNK_EPOCH.get(chunkKey);
         return v == null ? 0L : v.get();
     }
 
@@ -156,13 +160,11 @@ public final class DecorationFiller {
             SWALLOWED_EPOCH.incrementAndGet();
             return;
         }
-        CHUNK_EPOCH.computeIfAbsent(chunkKey,
-                k -> new java.util.concurrent.atomic.AtomicLong()).incrementAndGet();
+        CHUNK_EPOCH.computeIfAbsent(chunkKey, k -> new AtomicLong()).incrementAndGet();
     }
 
     /** 复现开关打开时的落点，只为让 bump 有副作用，不为任何逻辑服务。 */
-    private static final java.util.concurrent.atomic.AtomicLong SWALLOWED_EPOCH =
-            new java.util.concurrent.atomic.AtomicLong();
+    private static final AtomicLong SWALLOWED_EPOCH = new AtomicLong();
 
     private record Key(ResourceKey<Level> dimension, long chunkPos) {
     }
@@ -180,8 +182,8 @@ public final class DecorationFiller {
         return hasDecorationPending(chunk, null);
     }
 
-    private static boolean hasDecorationPending(LevelChunk chunk, java.util.Set<Integer> recorded) {
-        java.util.Set<Integer> sections = recorded;
+    private static boolean hasDecorationPending(LevelChunk chunk, Set<Integer> recorded) {
+        Set<Integer> sections = recorded;
         if (sections == null) {
             sections = PENDING_SECTIONS.get(keyOf(chunk));
         }
@@ -216,8 +218,8 @@ public final class DecorationFiller {
         if (!(chunk.getLevel() instanceof ServerLevel level)) {
             return;
         }
-        java.util.Set<Integer> sections = PENDING_SECTIONS.computeIfAbsent(keyOf(chunk),
-                k -> java.util.concurrent.ConcurrentHashMap.newKeySet());
+        Set<Integer> sections = PENDING_SECTIONS.computeIfAbsent(keyOf(chunk),
+                k -> ConcurrentHashMap.newKeySet());
         // 门结论只在【本次真的新增了段】时作废。判据取 Set.add 的返回值，不取 size 的前后比较：
         // 集合只增，第一次登记之后 size 恒不变，于是「size 变大」改判的写法在后续登记里恒假，记录被
         // 反复丢掉，那一项每帧都要重跑整门，而门一次是 25 格取数加九次段表遍历。本方法由 farlands-gen

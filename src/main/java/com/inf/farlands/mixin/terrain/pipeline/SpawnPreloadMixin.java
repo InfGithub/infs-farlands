@@ -93,7 +93,7 @@ public abstract class SpawnPreloadMixin {
      */
     @Unique
     private static final int FARLANDS_PRELOAD_TICKET_RADIUS =
-            FARLANDS_PRELOAD_DRIVE_RADIUS + com.inf.farlands.terrain.structure.StructureDriver.STRUCTURE_READ_RADIUS;
+            FARLANDS_PRELOAD_DRIVE_RADIUS + StructureDriver.STRUCTURE_READ_RADIUS;
 
     /** 竖直半高。 */
     @Unique

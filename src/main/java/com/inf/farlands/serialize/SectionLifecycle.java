@@ -19,6 +19,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.light.FarLandsLightEngine;
+import com.inf.farlands.terrain.debug.StageMetrics;
+import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
@@ -227,9 +229,8 @@ public final class SectionLifecycle {
         // 起点标记、结构相的挂起项与装饰的待办项都随卸载一起丢：重载时起点由读盘填回、标记重算，
         // 装饰由下一次雕刻重新登记。卸载是它们唯一的权威移除点，tick 里取不到 chunk 不算。
         StructureDriver.clearChunk(level.dimension(), lc.getPos().pack());
-        com.inf.farlands.terrain.decorationFiller.DecorationFiller.clearChunk(level.dimension(),
-                lc.getPos().pack());
-        com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged(lc.getPos().pack());
+        DecorationFiller.clearChunk(level.dimension(), lc.getPos().pack());
+        DecorationFiller.cellChanged(lc.getPos().pack());
         if (TerrainHooks.isChunkBusy(lc)) {
             return;
         }
@@ -823,10 +824,10 @@ public final class SectionLifecycle {
         SectionStage.setStage(lc, sy, decoded.stage());
         if (decoded.stage() >= SectionStage.LIGHTED) {
             // 读回不推进档位，但它的 LIGHTED 要计进吞吐，否则重进的 chunk 不进 CPS 与 SPS。
-            com.inf.farlands.terrain.debug.StageMetrics.lightedSections(1);
+            StageMetrics.lightedSections(1);
         }
         // 这一段刚被读回恢复，档位来自磁盘：它的邻居门要重判。
-        com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged(lc.getPos().pack());
+        DecorationFiller.cellChanged(lc.getPos().pack());
         StructureDriver.cellChanged();
         // 磁盘只存 fsa 的方块与光照，chunk NBT 的 sections 被剥空，所以原版读盘路径里那句
         // poiManager.checkConsistencyWithBlocks 在本 port 从不执行。恢复的段在这里补一次，

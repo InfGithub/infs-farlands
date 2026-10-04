@@ -3,6 +3,7 @@ package com.inf.farlands.terrain.biomeFiller;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.BiomeSystem;
 import com.inf.farlands.terrain.LevelSystems;
+import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.util.window.EntitySectionWindow;
 
 import net.minecraft.server.level.ServerLevel;
@@ -51,7 +52,7 @@ public final class BiomeFiller {
             }
             sys.fillBiomes(level, chunk, sectionY, sectionY);
             SectionStage.setStage(chunk, sectionY, SectionStage.BIOMES);
-            com.inf.farlands.terrain.debug.StageMetrics.sectionsIn(1L);
+            StageMetrics.sectionsIn(1L);
         }
     }
 }

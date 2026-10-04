@@ -7,6 +7,7 @@ import com.inf.farlands.util.window.WindowedChunk;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import java.lang.reflect.Field;
 import java.util.ArrayDeque;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -65,7 +66,7 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
     final LightChunkGetter chunkSource;
 
     /** 邻居 chunkKey -> 播种时等它的 chunk 集合，邻居 fillFrom 后触发重播修正边界方向位。 */
-    private static final ConcurrentHashMap<Long, java.util.Set<Long>> SKY_WAITERS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Long, Set<Long>> SKY_WAITERS = new ConcurrentHashMap<>();
 
     public static void registerSkyWaiter(long neighborKey, long waiterKey) {
         SKY_WAITERS.computeIfAbsent(neighborKey, k -> ConcurrentHashMap.newKeySet()).add(waiterKey);
@@ -73,7 +74,7 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
 
     /** 本 chunk SkyLightSources fillFrom 完成 -> 触发等待它的 chunk 重播，修正边界方向位。 */
     public void onChunkSkySourcesReady(ChunkPos pos) {
-        java.util.Set<Long> waiters = SKY_WAITERS.remove(pos.pack());
+        Set<Long> waiters = SKY_WAITERS.remove(pos.pack());
         if (waiters == null)
             return;
         for (long wk : waiters) {

@@ -5,6 +5,7 @@ import com.inf.farlands.serialize.ChunkReadiness;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.terrain.LevelSystems;
+import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.terrain.structure.StructureDriver;
@@ -163,7 +164,7 @@ public class FarlandsTick {
             trimSectionLookup(tickCount);
             trimAquiferLookup(tickCount);
             // 就绪吞吐读数：与本周期同档，约 10 秒一行。只报读数，不报解读。
-            com.inf.farlands.terrain.debug.StageMetrics.flush();
+            StageMetrics.flush();
         }
         // 光照引擎每 tick 的任务配额：真 tick 是唯一权威边界。
         // 无 tick 阶段由引擎自己按 tick 间隔兜底，两个入口是 prepareLevels 建世界与 saveEverything 保存。

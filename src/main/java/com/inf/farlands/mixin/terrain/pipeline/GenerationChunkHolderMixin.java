@@ -4,9 +4,12 @@ import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.serialize.ChunkReadiness;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
+import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.ChunkBeardifier;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
+import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
+import com.inf.farlands.terrain.structure.StructureDriver;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -161,8 +164,8 @@ public abstract class GenerationChunkHolderMixin {
             }
             ChunkReadiness.watch((GenerationChunkHolder) (Object) this, levelchunk);
             // 这一格的壳出现了：等它的装饰项要重判门，等它的结构挂起项要重判 ±8。
-            com.inf.farlands.terrain.decorationFiller.DecorationFiller.cellChanged(levelchunk.getPos().pack());
-            com.inf.farlands.terrain.structure.StructureDriver.cellChanged();
+            DecorationFiller.cellChanged(levelchunk.getPos().pack());
+            StructureDriver.cellChanged();
 
             // 结构相早于 Beardifier，Beardifier 早于 fill。这是铁的顺序，但它只约束 fill，不约束就绪。
             // 所以这里只挂起引用相与 Beardifier 那一小段，尾部照跑，尾部是 biome、读回、入队与 drive。
@@ -175,15 +178,15 @@ public abstract class GenerationChunkHolderMixin {
             // forStructuresInChunk 对空起点表返回的就是 Beardifier.EMPTY。所以跳过起点相、门与 pin
             // 和照常跑完，交出来的是同一个对象。照调 forStructuresInChunk 而不是直接塞 EMPTY，是为了
             // 不让这里成为唯一算得出特例的地方。
-            if (!com.inf.farlands.terrain.structure.StructureDriver.structuresEnabled(level)) {
+            if (!StructureDriver.structuresEnabled(level)) {
                 ((ChunkBeardifier) levelchunk).setBeardifier(
                         Beardifier.forStructuresInChunk(level.structureManager(), levelchunk.getPos()));
             } else {
-                com.inf.farlands.terrain.structure.StructureDriver.ensureStarts(level, levelchunk);
-                if (com.inf.farlands.terrain.structure.StructureDriver.referencesBuildable(level, levelchunk)) {
+                StructureDriver.ensureStarts(level, levelchunk);
+                if (StructureDriver.referencesBuildable(level, levelchunk)) {
                     farlandsStructureReady(level, levelchunk);
                 } else {
-                    com.inf.farlands.terrain.structure.StructureDriver.await(level, levelchunk,
+                    StructureDriver.await(level, levelchunk,
                             () -> farlandsStructureReady(level, levelchunk));
                 }
             }
@@ -206,7 +209,7 @@ public abstract class GenerationChunkHolderMixin {
     @Unique
     private void farlandsStructureReady(ServerLevel level, LevelChunk levelchunk) {
         // 引用相：读中心 ±8 的起点表，写中心自己的引用表。主线程调，且必须先于 Beardifier。
-        com.inf.farlands.terrain.structure.StructureDriver.buildReferences(level, levelchunk);
+        StructureDriver.buildReferences(level, levelchunk);
 
         // 结构性地形适配数据：Beardifier.forStructuresInChunk 读中心的引用表，再按引用取各 chunk 的
         // 起点，所以必须在引用相之后。它经 StructureManager 走 ServerChunkCache 的取 chunk，非主线程
@@ -219,7 +222,7 @@ public abstract class GenerationChunkHolderMixin {
         // 任何段；preload(chunk, min, max) 走显式段范围，正是走查那一路用的入口。
         // 范围取该 chunk 已物化过的段，走查的 biome 阶段已经把它们建出来了。
         int[] range = { Integer.MAX_VALUE, Integer.MIN_VALUE };
-        com.inf.farlands.serialize.SectionStage.forEachStage(levelchunk, (sy, stage) -> {
+        SectionStage.forEachStage(levelchunk, (sy, stage) -> {
             if (sy < range[0]) {
                 range[0] = sy;
             }

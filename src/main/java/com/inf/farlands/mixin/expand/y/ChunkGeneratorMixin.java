@@ -3,8 +3,7 @@ package com.inf.farlands.mixin.expand.y;
 import com.inf.farlands.util.window.WindowedChunk;
 
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.Collections;import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -203,6 +202,6 @@ public abstract class ChunkGeneratorMixin {
         Map<Integer, LevelChunkSection> all = ((WindowedChunk) ca).windowedAllSections();
         if (all != null && !all.isEmpty())
             return all.values();
-        return java.util.Arrays.asList(ca.getSections());
+        return Arrays.asList(ca.getSections());
     }
 }

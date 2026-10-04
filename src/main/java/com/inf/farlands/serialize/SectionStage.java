@@ -1,8 +1,10 @@
 package com.inf.farlands.serialize;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
+import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.util.map.Long2ObjectStripedMap;
 
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -100,7 +102,7 @@ public final class SectionStage {
         ConcurrentHashMap<Integer, Integer> m = STAGES.get(chunk.getPos().pack());
         if (m != null) {
             // 先数出有多少段会被这一次升档覆盖，再升。两个读数的分子按同一次回调累计。
-            java.util.concurrent.atomic.AtomicInteger promoted = new java.util.concurrent.atomic.AtomicInteger();
+            AtomicInteger promoted = new AtomicInteger();
             m.forEach((k, v) -> {
                 if (isAwaitingLight(v)) {
                     promoted.incrementAndGet();
@@ -109,8 +111,8 @@ public final class SectionStage {
             m.replaceAll((k, v) -> isAwaitingLight(v) ? LIGHTED : v);
             int n = promoted.get();
             if (n > 0) {
-                com.inf.farlands.terrain.debug.StageMetrics.lightedSections(n);
-                com.inf.farlands.terrain.debug.StageMetrics.lightedChunk();
+                StageMetrics.lightedSections(n);
+                StageMetrics.lightedChunk();
             }
         }
     }
@@ -143,7 +145,7 @@ public final class SectionStage {
     public static void clearAll() {
         STAGES.clear();
         // 吞吐计数与阶段表同生命周期，一起清，防跨世界把上一份累计串进来。
-        com.inf.farlands.terrain.debug.StageMetrics.clearWorldState();
+        StageMetrics.clearWorldState();
     }
 
     /**

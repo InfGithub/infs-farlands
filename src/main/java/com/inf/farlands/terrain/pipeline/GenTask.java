@@ -3,6 +3,7 @@ package com.inf.farlands.terrain.pipeline;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
+import com.inf.farlands.terrain.ChunkBeardifier;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
 import com.inf.farlands.terrain.carverFiller.CarverFiller;
 import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
@@ -89,7 +90,7 @@ public final class GenTask {
             // latestChunk 可见的那一刻，中间那道窗口里进池的任务会撞上未设的 Beardifier。这道门也
             // 不能挪进就绪判据：FULL 若等结构相，setInitialSpawn 那条阻塞读会与造出 ±8 壳的那条链
             // 互为条件死等。
-            if (!((com.inf.farlands.terrain.ChunkBeardifier) chunk).hasBeardifier()) {
+            if (!((ChunkBeardifier) chunk).hasBeardifier()) {
                 // 拉依赖必须在主线程，票操作非线程安全，latestChunk 也只在主线程，而本任务在池上。
                 // 排一笔回主线程，早退保持即时。不是挂起项时 pullDependencies 自己会早退。
                 SectionIO.runOnMainThread(() -> StructureDriver.pullDependencies(serverLevel, chunk), serverLevel);
