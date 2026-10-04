@@ -15,7 +15,6 @@ import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.LevelSystems;
-import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.terrain.terrainFiller.TerrainSystemContext;
@@ -35,16 +34,20 @@ import net.minecraft.world.level.chunk.LevelChunk;
 /**
  * 装饰阶段编排：待装饰表、邻域门、写域认领、提交到 farlands-gen、主线程收尾。
  *
- * <p>装饰是 XZ 网格驱动的 3D 写入，不能按 section 原子化：写入落在目标 chunk 与 XZ 八个邻居上，
+ * <p>
+ * 装饰是 XZ 网格驱动的 3D 写入，不能按 section 原子化：写入落在目标 chunk 与 XZ 八个邻居上，
  * 而那一圈在写入之前必须都已经过地形与雕刻。门因此取九宫格每一格都有过段、且已有段都到 CARVERS，
  * 与 vanilla ChunkPyramid 的 addRequirement(CARVERS, 1) 同源。
  *
- * <p>线程：门、认领、提交与收尾都在主线程，装饰体在 farlands-gen。取数一律走
+ * <p>
+ * 线程：门、认领、提交与收尾都在主线程，装饰体在 farlands-gen。取数一律走
  * {@link SectionLifecycle#latestChunk}，它只在主线程可调，所以九格句柄由主线程取好交给任务。
  *
- * <p>失败一律不抛：门没过就留表等下一轮，与 surface、carve 两族同形。
+ * <p>
+ * 失败一律不抛：门没过就留表等下一轮，与 surface、carve 两族同形。
  *
- * <p>地物在这一遍里跑：池上建区域、调 ChunkGenerator.applyBiomeDecoration，写直进真实段；收尾回
+ * <p>
+ * 地物在这一遍里跑：池上建区域、调 ChunkGenerator.applyBiomeDecoration，写直进真实段；收尾回
  * 主线程装方块实体、升段、标脏、补发、触发光照。结构的两相不在这里：它必须早于 fill，落在存在流程里。
  */
 public final class DecorationFiller {
@@ -58,7 +61,8 @@ public final class DecorationFiller {
     /**
      * 每个待装饰项在登记时记下的、处于 CARVERS 的段。待装饰判定因此只查这几段，不再扫全段。
      *
-     * <p>登记来自两条路：GenTask 手里已有本次雕刻返回的段数组，直接给；扫描兜底那条给 null，就地
+     * <p>
+     * 登记来自两条路：GenTask 手里已有本次雕刻返回的段数组，直接给；扫描兜底那条给 null，就地
      * 扫一次。同一项重复登记取并集，窗口滑入后新到 CARVERS 的段要能并进来，覆盖会丢段。
      */
     private static final Map<Key, Set<Integer>> PENDING_SECTIONS = new ConcurrentHashMap<>();
@@ -72,16 +76,17 @@ public final class DecorationFiller {
     /**
      * 每 chunk 一个变化计数，键是 chunk 坐标。
      *
-     * <p>必须按 chunk 记而不能全局记：门只取决于该项写域九格的状态，全局单值时任意一格变化都让 PENDING
+     * <p>
+     * 必须按 chunk 记而不能全局记：门只取决于该项写域九格的状态，全局单值时任意一格变化都让 PENDING
      * 里全部项作废门结论、重跑整门，于是门的总代价随待办表规模线性放大。
      */
-    private static final Long2ObjectStripedMap<AtomicLong> CHUNK_EPOCH =
-            new Long2ObjectStripedMap<>(1 << 12);
+    private static final Long2ObjectStripedMap<AtomicLong> CHUNK_EPOCH = new Long2ObjectStripedMap<>(1 << 12);
 
     /**
      * 该 chunk 的变化计数，未 bump 过按 0 计。
      *
-     * <p>只读不建条目，而不是 computeIfAbsent：读路径不该改结构，而条目由 {@link #cellChanged} 在写侧建。
+     * <p>
+     * 只读不建条目，而不是 computeIfAbsent：读路径不该改结构，而条目由 {@link #cellChanged} 在写侧建。
      */
     private static long chunkEpoch(long chunkKey) {
         AtomicLong v = CHUNK_EPOCH.get(chunkKey);
@@ -91,7 +96,8 @@ public final class DecorationFiller {
     /**
      * 写域九格的变化计数之和。
      *
-     * <p>取和而不是取最大：某个 chunk 被 bump 时，若它不是邻域里的最大值，最大值不变，于邻域含它的项
+     * <p>
+     * 取和而不是取最大：某个 chunk 被 bump 时，若它不是邻域里的最大值，最大值不变，于邻域含它的项
      * 不会重判，那个变化被吞掉。和是单调不减且任一格递增必增的，不会有这个缺口。
      */
     private static long neighborhoodEpoch(int chunkX, int chunkZ) {
@@ -110,7 +116,8 @@ public final class DecorationFiller {
     /**
      * 一次门评估的结论：当时的纪元、当时的帧号、以及门是否通过。
      *
-     * <p>通过与否决定保鲜期取哪一个：门没过要等格变化，取长保鲜期；门过了却没能提交，只是等一个
+     * <p>
+     * 通过与否决定保鲜期取哪一个：门没过要等格变化，取长保鲜期；门过了却没能提交，只是等一个
      * 认领空出来，取短保鲜期。两类都不改变门看到的输入，所以都该在保鲜期内不再重判。
      */
     private record Eval(long epoch, long frame, boolean passed) {
@@ -119,7 +126,8 @@ public final class DecorationFiller {
     /**
      * 门通过的项的重试间隔，单位帧。
      *
-     * <p>门过了却没提交成，只是在等一个认领空出来，而认领的持有期是毫秒量级，所以这一档取短保鲜期。
+     * <p>
+     * 门过了却没提交成，只是在等一个认领空出来，而认领的持有期是毫秒量级，所以这一档取短保鲜期。
      * 取 8 是持有期的上界：再短不会有额外收益，因为保鲜期一缩，重判次数必然上升，而提交量不会因此回升。
      */
     private static final int CLAIM_RETRY_FRAMES = 8;
@@ -130,11 +138,13 @@ public final class DecorationFiller {
     /**
      * 门失败结论的保鲜期，单位帧。
      *
-     * <p>只按纪元判「结论仍成立」有一个缺口：纪元只在格变化时加一，而系统一旦静下来就没有格变化，
+     * <p>
+     * 只按纪元判「结论仍成立」有一个缺口：纪元只在格变化时加一，而系统一旦静下来就没有格变化，
      * 于是同一纪元下的失败结论永不过期，停在门上的项再也不会被重判，停摆因此自我维持。本上限让结论
      * 在不超期时仍然照省，超期则强制重判一次。
      *
-     * <p>取值依据：超期重判的代价是「全部待办项各跑一轮门」，而这一档的间隔决定了那个代价的频率；
+     * <p>
+     * 取值依据：超期重判的代价是「全部待办项各跑一轮门」，而这一档的间隔决定了那个代价的频率；
      * 取 200 帧时，它在主线程驱动占比里的增量远小于活跃期的量级。
      */
     private static final int STALE_FRAMES = 200;
@@ -143,7 +153,8 @@ public final class DecorationFiller {
      * 复现开关：为真时 {@link #cellChanged} 不 bump {@code CHUNK_EPOCH}，于是邻域和恒为 0，
      * 「纪元变了」这条重判通路被整条吞掉。
      *
-     * <p>它用来复现一条自锁：推进依赖「格变化」信号，而信号又依赖推进。默认关闭，关闭时行为与不带本
+     * <p>
+     * 它用来复现一条自锁：推进依赖「格变化」信号，而信号又依赖推进。默认关闭，关闭时行为与不带本
      * 开关逐位相同。
      */
     private static final boolean PROBE_SWALLOW_EPOCH = false;
@@ -152,7 +163,8 @@ public final class DecorationFiller {
      * 某一格的状态变了，受影响的是该 chunk。主线程与 genPool 都调，触发点是存在流程建壳、GenTask 推到
      * CARVERS、读回落段、收尾升段、卸载。
      *
-     * <p>按 chunk 记而不是全局记：门的依赖面只到写域九格，全局记会让任意一格变化作废全部项的门结论。
+     * <p>
+     * 按 chunk 记而不是全局记：门的依赖面只到写域九格，全局记会让任意一格变化作废全部项的门结论。
      */
     public static void cellChanged(long chunkKey) {
         if (PROBE_SWALLOW_EPOCH) {
@@ -175,7 +187,8 @@ public final class DecorationFiller {
     /**
      * 该 chunk 是否还有已过雕刻、尚未装饰的段。CARVERS 是唯一待装饰的取值。
      *
-     * <p>有登记集合时只查集合里那几段，即登记时记下的 CARVERS 段；没有登记时退回全段扫描，覆盖
+     * <p>
+     * 有登记集合时只查集合里那几段，即登记时记下的 CARVERS 段；没有登记时退回全段扫描，覆盖
      * 尚未登记与兜底路径就地扫过两种情形。
      */
     public static boolean hasDecorationPending(LevelChunk chunk) {
@@ -211,7 +224,8 @@ public final class DecorationFiller {
     /**
      * 登记待装饰。雕刻完成后由 GenTask 调，带上本次雕刻的段；扫描路径调它兜底，传 null。
      *
-     * <p>登记不去重：已提交的项由 {@link DecorationClaim} 挡住重复提交，门没过的项本来就要留表。
+     * <p>
+     * 登记不去重：已提交的项由 {@link DecorationClaim} 挡住重复提交，门没过的项本来就要留表。
      * 段集合取并集，见 {@link #PENDING_SECTIONS}。
      */
     public static void register(LevelChunk chunk, int[] carvedSections) {
@@ -251,7 +265,8 @@ public final class DecorationFiller {
     /**
      * 每 tick 一次的主线程驱动：逐项判门、取句柄、认领写域与光照域、提交到 farlands-gen。
      *
-     * <p>提交成功的项留表直到收尾删掉；这期间认领把同一个中心挡在门外，所以不会重复提交。
+     * <p>
+     * 提交成功的项留表直到收尾删掉；这期间认领把同一个中心挡在门外，所以不会重复提交。
      */
     public static void tick() {
         frame++;
@@ -347,12 +362,14 @@ public final class DecorationFiller {
      * 写域九格的句柄与门，另加读域外环的句柄。返回 null 表示门没过：写域某格缺席、某格一个段都没有，
      * 或某格还有未过雕刻的段。
      *
-     * <p>句柄在这里取好交给任务：chunk 的窗口容器与服务端的 chunk 表都不是线程安全的，池线程不得
+     * <p>
+     * 句柄在这里取好交给任务：chunk 的窗口容器与服务端的 chunk 表都不是线程安全的，池线程不得
      * 再查，所以取数是主线程的事。写域即 ±1 必须齐；读域外环到
      * {@link DecorationRegion#READ_RADIUS} 有就带上、没有就跳过，地物偶尔会读到写域外一格，缺句柄时
      * 那一次读会放弃并记日志，但门不因此拦住整遍装饰。
      *
-     * <p>已有段都到 CARVERS 是写者判据：到 CARVERS 的邻居不会再被 genPool 写它自己的段，因为
+     * <p>
+     * 已有段都到 CARVERS 是写者判据：到 CARVERS 的邻居不会再被 genPool 写它自己的段，因为
      * collectSegments 只收未 TERRAIN 的段，而 surface 与 carvers 的 pending 判据都不认 CARVERS 段。
      * 有过段这一条不能省：一个段都没有的 chunk 既可能还没开始生成，也可能地形已产出但没建段，只有
      * 后者能承载装饰。
@@ -488,15 +505,18 @@ public final class DecorationFiller {
     /**
      * 没写成任何东西的那一支的收尾。在 farlands-gen 上执行，不走主线程。
      *
-     * <p>为什么可以不走主线程：这一支一个方块都没写，所以没有方块实体要装、没有段要升、没有下发要
+     * <p>
+     * 为什么可以不走主线程：这一支一个方块都没写，所以没有方块实体要装、没有段要升、没有下发要
      * 补、没有光照要触，而主线程专属的工作只有那四件。留下的三件，撤纪元、撤认领、清在途计数，
      * 三件都有并发安全的载体。
      *
-     * <p>为什么必须不走主线程：认领挡的是照光侧的取域，而收尾走主线程时认领要在主线程队列里排到这一
+     * <p>
+     * 为什么必须不走主线程：认领挡的是照光侧的取域，而收尾走主线程时认领要在主线程队列里排到这一
      * 笔被执行才撤，于是持有期被拉长到「池队列等待加收尾」的量级；而这一支一个方块都没写，占提交数的
      * 九成上下，等于用一笔空收尾按住照光池。
      *
-     * <p>顺序是契约：先撤纪元，再撤认领。反过来的话，池线程撤完认领、还没撤纪元之前的窗口里，主线程
+     * <p>
+     * 顺序是契约：先撤纪元，再撤认领。反过来的话，池线程撤完认领、还没撤纪元之前的窗口里，主线程
      * 的 tick 可能重复认领同一中心并提交第二次任务，而本方法随后的 remove 会擦掉第二次尝试刚设下的
      * 纪元。后果只是多重判一次门，但把顺序固定下来就没有这个窗口。
      */
@@ -522,12 +542,15 @@ public final class DecorationFiller {
      * 收尾。主线程执行：装方块实体、把该 chunk 已过雕刻的段升 DECORATED、标脏、补发、触发光照，
      * 并撤两把锁与在途计数。
      *
-     * <p>升段只认 CARVERS，即该 chunk 自己的那一段：邻居被写到的段不跟着升，否则被写到会被当成
+     * <p>
+     * 升段只认 CARVERS，即该 chunk 自己的那一段：邻居被写到的段不跟着升，否则被写到会被当成
      * 它自己的装饰完成，而那正是本档要消灭的那个混淆。
      *
-     * <p>{@code region} 为 null 表示本次放弃，取数不成立或抛异常，此时只撤锁、不升段，留表重试。
+     * <p>
+     * {@code region} 为 null 表示本次放弃，取数不成立或抛异常，此时只撤锁、不升段，留表重试。
      *
-     * <p>不变式：删待办项的唯一位置在真的把段升成 {@code DECORATED} 之后。装饰完成的判据是段升了
+     * <p>
+     * 不变式：删待办项的唯一位置在真的把段升成 {@code DECORATED} 之后。装饰完成的判据是段升了
      * 档，不是任务跑完了；所以放弃、收尾时取不到 chunk、没有段停在 CARVERS 这三种情形一律留项，
      * 只清纪元记录让下一轮重判门。把这三者都当成无事可做而删项时，由于登记是雕刻那一刻的一次性
      * 事件，删了没人重建，段会永久停在 CARVERS。
@@ -607,7 +630,8 @@ public final class DecorationFiller {
      * 卸载清理：该 chunk 的待装饰项、登记段与纪元记录一起丢。这是唯一的权威移除点，tick 里这一刻
      * 取不到 chunk 不构成移除理由，见那里的注释。
      *
-     * <p>变化计数不在这里删：{@code SectionLifecycle.flushChunk} 在调本方法之后会补一次
+     * <p>
+     * 变化计数不在这里删：{@code SectionLifecycle.flushChunk} 在调本方法之后会补一次
      * {@link #cellChanged}，删了也会被立刻重建。留着一个旧计数无害，它只让邻域的和偏高，而含该格的
      * 项本来就该重判。
      */
