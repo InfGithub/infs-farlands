@@ -5,13 +5,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
-import com.inf.farlands.InfsFarlands;
-
 /**
- * 配置入口：静态持有全部配置项，逐项用 builder 声明。声明形状：
+ * 一份配置文件的条目集合：一个实例持有一份文件与它自己的条目表，逐项用 builder 声明。声明形状：
  *
  * <pre>{@code
- * public static final ConfigEntry<Integer> MAX_CAP_ITER = Config.setInt("maxCapIter")
+ * private static final Config CONFIG = new Config("infs-farlands", Map.of(...));
+ *
+ * public static final ConfigEntry<Integer> MAX_CAP_ITER = CONFIG.setInt("maxCapIter")
  *         .comment("en_us", "Iteration/search cap for extreme-Y loops.")
  *         .comment("zh_cn", "极端 Y 循环的迭代/搜索上限。")
  *         .range(1, 65536)
@@ -30,67 +30,80 @@ import com.inf.farlands.InfsFarlands;
  * 方法名首字母必须大写：{@code default} 是 Java 关键字，不能做方法名。
  *
  * <p>
- * 值域（{@code min} / {@code max}）只作用于显式声明的值，见 {@link ConfigEntry.Constraint}。
+ * 值域由 {@code min} 与 {@code max} 声明，只作用于显式声明的值，见 {@link ConfigEntry.Constraint}。
  *
  * <p>
- * 一次性语义：{@link #init()} 是唯一的读盘点，读一次、解析一次、约束一次。
- * 本系统<b>不支持热重载</b>，而且是结构性的：一批配置项在类加载期就被内联进字节码
- * （{@code mixin/expand/xz/border/*} 的 {@code @ModifyConstant}），另一批只在构造时读一次
- * （线程池规模、{@code ViewArea.sections} 的尺寸、{@code LinkedHashMap} 的初始容量）。
+ * 一次性语义：{@link #init()} 是每个实例的唯一读盘点，读一次、解析一次、约束一次。
+ * 本系统<b>不支持热重载</b>，而且是结构性的：一批配置项在类加载期就被内联进字节码，即
+ * {@code mixin/expand/xz/border/*} 的 {@code @ModifyConstant}；另一批只在构造时读一次，即
+ * 线程池规模、{@code ViewArea.sections} 的尺寸、{@code LinkedHashMap} 的初始容量。
  * 重载只会产出「一部分生效、一部分永远不生效」的状态，而那条分界线既不在配置文件里也不在日志里。
  */
 public final class Config {
 
-    private static final Map<String, ConfigEntry<?>> ENTRIES = new LinkedHashMap<>();
+    /** 该实例的文件路径，构造时由 user.dir/config/<fileName>.json 拼出。 */
+    private final Path file;
 
-    /** 幂等标志：init() 只读一次文件；多个配置类 static 块重复调用无害。 */
-    private static boolean initialized;
+    /** 该文件顶层的 note，落盘时写进根对象的 note 键。 */
+    private final Map<String, String> fileNotes;
 
-    private Config() {
+    /** 本文件的条目表，保声明顺序。 */
+    private final Map<String, ConfigEntry<?>> entries = new LinkedHashMap<>();
+
+    /** 幂等标志：init() 只读一次本实例的文件；持有它的类重复调用无害。 */
+    private boolean initialized;
+
+    /** fileName 不带扩展名，路径在本类内拼成 user.dir/config/<fileName>.json。 */
+    public Config(String fileName, Map<String, String> fileNotes) {
+        this.file = Path.of(System.getProperty("user.dir"), "config", "%s.json".formatted(fileName));
+        this.fileNotes = Map.copyOf(fileNotes);
     }
 
     // ---- 工厂：9 种值类型 ----
 
-    public static IntBuilder setInt(String name) {
-        return new IntBuilder(name);
+    public IntBuilder setInt(String name) {
+        return new IntBuilder(this, name);
     }
 
-    public static LongBuilder setLong(String name) {
-        return new LongBuilder(name);
+    public LongBuilder setLong(String name) {
+        return new LongBuilder(this, name);
     }
 
-    public static ShortBuilder setShort(String name) {
-        return new ShortBuilder(name);
+    public ShortBuilder setShort(String name) {
+        return new ShortBuilder(this, name);
     }
 
-    public static ByteBuilder setByte(String name) {
-        return new ByteBuilder(name);
+    public ByteBuilder setByte(String name) {
+        return new ByteBuilder(this, name);
     }
 
-    public static FloatBuilder setFloat(String name) {
-        return new FloatBuilder(name);
+    public FloatBuilder setFloat(String name) {
+        return new FloatBuilder(this, name);
     }
 
-    public static DoubleBuilder setDouble(String name) {
-        return new DoubleBuilder(name);
+    public DoubleBuilder setDouble(String name) {
+        return new DoubleBuilder(this, name);
     }
 
-    public static BoolBuilder setBoolean(String name) {
-        return new BoolBuilder(name);
+    public BoolBuilder setBoolean(String name) {
+        return new BoolBuilder(this, name);
     }
 
     /** 类名不叫 StringBuilder：那会遮蔽 {@link java.lang.StringBuilder}。 */
-    public static StringsBuilder setString(String name) {
-        return new StringsBuilder(name);
+    public StringsBuilder setString(String name) {
+        return new StringsBuilder(this, name);
     }
 
-    public static <T extends Enum<T>> EnumBuilder<T> setEnum(String name, Class<T> type) {
-        return new EnumBuilder<>(name, type);
+    public <T extends Enum<T>> EnumBuilder<T> setEnum(String name, Class<T> type) {
+        return new EnumBuilder<>(this, name, type);
     }
 
     // ---- builder ----
 
     public abstract static class Builder<T, B extends Builder<T, B>> {
+
+        /** 产出本 builder 的配置实例，build() 把条目登记进它的表。 */
+        private final Config owner;
 
         protected final String name;
         protected final Map<String, String> notes = new LinkedHashMap<>();
@@ -103,10 +116,11 @@ public final class Config {
         protected T max;
         protected ConfigEntry.Constraint<T> constraint;
 
-        Builder(String name) {
+        Builder(Config owner, String name) {
             if (!ConfigEntry.isValidName(name)) {
                 throw new IllegalArgumentException("Invalid config entry name: %s".formatted(name));
             }
+            this.owner = owner;
             this.name = name;
         }
 
@@ -175,7 +189,7 @@ public final class Config {
         }
 
         public ConfigEntry<T> build() {
-            if (ENTRIES.containsKey(name)) {
+            if (owner.entries.containsKey(name)) {
                 throw new IllegalStateException("Duplicate config entry: %s".formatted(name));
             }
             if (defaultValue == null && defaultKeyword == null) {
@@ -188,7 +202,7 @@ public final class Config {
             }
             ConfigEntry<T> e = new ConfigEntry<>(name, notes, type(), defaultValue, defaultKeyword,
                     keywords, min, max, constraint);
-            ENTRIES.put(name, e);
+            owner.entries.put(name, e);
             return e;
         }
     }
@@ -204,8 +218,8 @@ public final class Config {
     public abstract static class NumericBuilder<T extends Number & Comparable<T>, B extends NumericBuilder<T, B>>
             extends Builder<T, B> {
 
-        NumericBuilder(String name) {
-            super(name);
+        NumericBuilder(Config owner, String name) {
+            super(owner, name);
         }
 
         /** 下界。与 {@link #max} 无关，可单独声明。 */
@@ -286,8 +300,8 @@ public final class Config {
     }
 
     public static final class IntBuilder extends NumericBuilder<Integer, IntBuilder> {
-        IntBuilder(String name) {
-            super(name);
+        IntBuilder(Config owner, String name) {
+            super(owner, name);
         }
 
         @Override
@@ -302,8 +316,8 @@ public final class Config {
     }
 
     public static final class LongBuilder extends NumericBuilder<Long, LongBuilder> {
-        LongBuilder(String name) {
-            super(name);
+        LongBuilder(Config owner, String name) {
+            super(owner, name);
         }
 
         @Override
@@ -318,8 +332,8 @@ public final class Config {
     }
 
     public static final class ShortBuilder extends NumericBuilder<Short, ShortBuilder> {
-        ShortBuilder(String name) {
-            super(name);
+        ShortBuilder(Config owner, String name) {
+            super(owner, name);
         }
 
         @Override
@@ -334,8 +348,8 @@ public final class Config {
     }
 
     public static final class ByteBuilder extends NumericBuilder<Byte, ByteBuilder> {
-        ByteBuilder(String name) {
-            super(name);
+        ByteBuilder(Config owner, String name) {
+            super(owner, name);
         }
 
         @Override
@@ -350,8 +364,8 @@ public final class Config {
     }
 
     public static final class FloatBuilder extends NumericBuilder<Float, FloatBuilder> {
-        FloatBuilder(String name) {
-            super(name);
+        FloatBuilder(Config owner, String name) {
+            super(owner, name);
         }
 
         @Override
@@ -366,8 +380,8 @@ public final class Config {
     }
 
     public static final class DoubleBuilder extends NumericBuilder<Double, DoubleBuilder> {
-        DoubleBuilder(String name) {
-            super(name);
+        DoubleBuilder(Config owner, String name) {
+            super(owner, name);
         }
 
         @Override
@@ -382,8 +396,8 @@ public final class Config {
     }
 
     public static final class BoolBuilder extends Builder<Boolean, BoolBuilder> {
-        BoolBuilder(String name) {
-            super(name);
+        BoolBuilder(Config owner, String name) {
+            super(owner, name);
         }
 
         @Override
@@ -410,8 +424,8 @@ public final class Config {
     }
 
     public static final class StringsBuilder extends Builder<String, StringsBuilder> {
-        StringsBuilder(String name) {
-            super(name);
+        StringsBuilder(Config owner, String name) {
+            super(owner, name);
         }
 
         @Override
@@ -442,8 +456,8 @@ public final class Config {
 
         private final Class<T> enumType;
 
-        EnumBuilder(String name, Class<T> type) {
-            super(name);
+        EnumBuilder(Config owner, String name, Class<T> type) {
+            super(owner, name);
             this.enumType = type;
         }
 
@@ -461,22 +475,18 @@ public final class Config {
     // ---- 读盘 ----
 
     /**
-     * 读文件。幂等：首次调用读磁盘并填充 ConfigEntry，之后直接返回。
+     * 读本实例的文件。幂等：首次调用读磁盘并填充 ConfigEntry，之后直接返回。
      *
      * <p>
-     * 唯一调用点是 {@code FarlandsConfig} 的静态块尾部（该类的初始化由首个引用它的类触发）。
-     * 该方法之后不再有任何重新读盘的入口——热重载是结构性不可行的，见类注释。
+     * 调用点是持有本实例的类的静态块尾部，该类的初始化由首个引用它的类触发。方法之后不再有任何
+     * 重新读盘的入口，热重载是结构性不可行的，见类注释。
      */
-    public static void init() {
-        if (initialized) {
+    public void init() {
+        if (this.initialized) {
             return;
         }
-        initialized = true;
-        ConfigFile.load(
-                Path.of(System.getProperty("user.dir"), "config", "%s.json".formatted(
-                        InfsFarlands.MOD_ID)),
-                Map.of("en_us", "Inf's Farlands configuration", "zh_cn", "Inf's Farlands 配置文件"),
-                ENTRIES);
+        this.initialized = true;
+        ConfigFile.load(this.file, this.fileNotes, this.entries);
     }
 
 }

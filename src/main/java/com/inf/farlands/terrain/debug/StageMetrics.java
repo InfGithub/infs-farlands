@@ -3,6 +3,7 @@ package com.inf.farlands.terrain.debug;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.InfsFarlands;
 
 /**
@@ -70,13 +71,15 @@ public final class StageMetrics {
         long sectionsLighted = SECTIONS_LIGHTED.get();
         long chunksLighted = CHUNKS_LIGHTED.get();
 
-        InfsFarlands.LOGGER.info(
-                "FLSTAGE window={}t elapsed={}s cps={} sps={} cum_cps={} cum_sps={} sectIn={}",
-                WINDOW_TICKS, fmt(windowSeconds),
-                fmt(chunksLighted / windowSeconds), fmt(sectionsLighted / windowSeconds),
-                fmt((anchorChunksLighted + chunksLighted) / cumSeconds),
-                fmt((anchorSectionsLighted + sectionsLighted) / cumSeconds),
-                sectionsIn);
+        if (FarlandsConfig.logStageMetrics) {
+            InfsFarlands.LOGGER.info(
+                    "FLSTAGE window={}t elapsed={}s cps={} sps={} cum_cps={} cum_sps={} sectIn={}",
+                    WINDOW_TICKS, fmt(windowSeconds),
+                    fmt(chunksLighted / windowSeconds), fmt(sectionsLighted / windowSeconds),
+                    fmt((anchorChunksLighted + chunksLighted) / cumSeconds),
+                    fmt((anchorSectionsLighted + sectionsLighted) / cumSeconds),
+                    sectionsIn);
+        }
 
         anchorNanos = now;
         anchorSectionsLighted += sectionsLighted;

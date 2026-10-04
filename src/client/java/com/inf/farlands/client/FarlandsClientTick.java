@@ -1,5 +1,6 @@
 package com.inf.farlands.client;
 
+import com.inf.farlands.FarlandsConfig;
 import com.inf.farlands.FarlandsTick;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.util.maps.BlockUtil;
@@ -24,7 +25,9 @@ public class FarlandsClientTick {
 
     private static void swapBlockLookup() {
         int size = BlockUtil.size();
-        InfsFarlands.LOGGER.info("Swapping BlockUtil.lookup, size: {}", size);
+        if (FarlandsConfig.logBlockLookupSwap) {
+            InfsFarlands.LOGGER.info("Swapping BlockUtil.lookup, size: {}", size);
+        }
         BlockUtil.swap();
     }
 
@@ -32,7 +35,9 @@ public class FarlandsClientTick {
         int beforeSize = SectionUtil.size();
         SectionUtil.trim(tickCount);
         int afterSize = SectionUtil.size();
-        InfsFarlands.LOGGER.info("Trimmed SectionUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
+        if (FarlandsConfig.logSectionLookupTrim) {
+            InfsFarlands.LOGGER.info("Trimmed SectionUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
+        }
     }
 
     public static void atEnd(Minecraft minecraft, int tickCount) {

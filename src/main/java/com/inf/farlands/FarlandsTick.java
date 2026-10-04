@@ -51,7 +51,9 @@ public class FarlandsTick {
     private static void swapBlockLookup(MinecraftServer server, int tickCount) {
         // size 必须在 swap 前取：swap 之后读到的是新的空表，恒为 0。
         int size = BlockUtil.size();
-        InfsFarlands.LOGGER.info("Swapping BlockUtil.lookup, size: {}", size);
+        if (FarlandsConfig.logBlockLookupSwap) {
+            InfsFarlands.LOGGER.info("Swapping BlockUtil.lookup, size: {}", size);
+        }
         BlockUtil.swap();
         if (size > 0) {
             awardIntBlockPos(server);
@@ -77,14 +79,18 @@ public class FarlandsTick {
         int beforeSize = SectionUtil.size();
         SectionUtil.trim(tickCount);
         int afterSize = SectionUtil.size();
-        InfsFarlands.LOGGER.info("Trimmed SectionUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
+        if (FarlandsConfig.logSectionLookupTrim) {
+            InfsFarlands.LOGGER.info("Trimmed SectionUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
+        }
     }
 
     private static void trimAquiferLookup(int tickCount) {
         int beforeSize = AquiferUtil.size();
         AquiferUtil.trim(tickCount);
         int afterSize = AquiferUtil.size();
-        InfsFarlands.LOGGER.info("Trimmed AquiferUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
+        if (FarlandsConfig.logAquiferLookupTrim) {
+            InfsFarlands.LOGGER.info("Trimmed AquiferUtil.lookup, before: {}, after: {}", beforeSize, afterSize);
+        }
     }
 
     /**
