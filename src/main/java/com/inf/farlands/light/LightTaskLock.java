@@ -14,19 +14,23 @@ import net.minecraft.world.level.Level;
 /**
  * per-chunk 光照任务锁，半径 2。
  *
- * <p>一个 chunk 的传播会写邻居 section，方块光最远 15 格即 XZ ±1 section，且
+ * <p>
+ * 一个 chunk 的传播会写邻居 section，方块光最远 15 格即 XZ ±1 section，且
  * 天空光初始化与空 section 检查涉 3×3 邻居，锁半径 2 保证相邻 chunk 的光照任务
  * 不并发，同一 section 不被两个任务同时写，DataLayer.set 半字节读改写不竞争。
  *
- * <p>获取按 chunk key 排序以防死锁；任一失败回滚已获取的锁并返回 0，调用方
+ * <p>
+ * 获取按 chunk key 排序以防死锁；任一失败回滚已获取的锁并返回 0，调用方
  * 将任务放回队列重试。
  *
- * <p>另一类失败是装饰：装饰在池上写段与天光光源列，而光照任务读同一批段的
+ * <p>
+ * 另一类失败是装饰：装饰在池上写段与天光光源列，而光照任务读同一批段的
  * 光源列。判据并进这一把锁的两侧，见 tryLock 与 FarLandsLightEngine 的
  * tryLockDomain：光照侧遇到被认领的格即让路，装饰侧直接取这把锁，两个方向都走
  * 失败即重试，没有等待，因此也没有锁序环。
  *
- * <p><b>取域返回持有者编号，放域按编号 CAS。</b>每格是 {@code AtomicLong}，0 表示空闲，
+ * <p>
+ * <b>取域返回持有者编号，放域按编号 CAS。</b>每格是 {@code AtomicLong}，0 表示空闲，
  * 非 0 是该次取域的编号。取域成功返回编号，失败返回 0；放域必须把编号带回来，只清属于自己的格。
  * 旧写法是无条件清零，两方交错时会放掉别人刚取的格。
  */
@@ -45,7 +49,8 @@ public final class LightTaskLock {
      * key 缓冲，光照任务侧复用：那里的热路径是 drainLight 单例调用，consumerActive CAS 保证同一时刻
      * 至多一个它，所以缓冲无并发。省掉每次取域的 new long[25] 分配。
      *
-     * <p>装饰侧不用它，见 {@link #tryLockDomain}。
+     * <p>
+     * 装饰侧不用它，见 {@link #tryLockDomain}。
      */
     private final long[] keyBuf = new long[KEY_COUNT];
 
@@ -71,16 +76,19 @@ public final class LightTaskLock {
     /**
      * 装饰侧取锁。与 {@link #tryLock} 是同一把锁，三处不同：
      *
-     * <p>一，每次调用自备一个局部缓冲。装饰在 farlands-gen 上跑，两个装饰会在两个池线程上并发调
+     * <p>
+     * 一，每次调用自备一个局部缓冲。装饰在 farlands-gen 上跑，两个装饰会在两个池线程上并发调
      * 它，复用 {@link #keyBuf} 会互相覆盖 key；回滚按下标放锁，读到被改过的值就会放错格，并把它已占
      * 的格永久留下。一次装饰一次分配，可忽略。
      *
-     * <p>二，豁免自己那九格认领。本入口只许在 {@link DecorationClaim#tryClaim} 成功、且尚未释放
+     * <p>
+     * 二，豁免自己那九格认领。本入口只许在 {@link DecorationClaim#tryClaim} 成功、且尚未释放
      * 期间调用：那时中心 ±1 的写域必定是自己占的，而认领表也在本锁的获取路径上，不豁免就是装饰
      * 拿自己的认领挡自己，症状是 tick() 永远提交不出去、预加载停在同一个格数上。豁免范围正好是本
      * 锁域的内层 3×3，别人的认领照旧让路，哪怕只差一格。
      *
-     * <p>三，失败即放弃本次，此时一个方块都没写，调用方留表下一轮，不等待。
+     * <p>
+     * 三，失败即放弃本次，此时一个方块都没写，调用方留表下一轮，不等待。
      *
      * @return 持有者编号，0 表示失败
      */
@@ -138,7 +146,8 @@ public final class LightTaskLock {
     /**
      * 释放中心 chunk 半径内的锁，只清 {@code owner} 名下的格。
      *
-     * <p>调用方必须把取域时拿到的编号带回来。装饰侧由 {@code region != null} 保证取过锁，光照侧由
+     * <p>
+     * 调用方必须把取域时拿到的编号带回来。装饰侧由 {@code region != null} 保证取过锁，光照侧由
      * 调度循环的配对保证。
      */
     public void unlock(int chunkX, int chunkZ, long owner) {

@@ -569,14 +569,18 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
      * 已被本轮的 CAS 吞掉，配额却已发下）。
      *
      * <p>
+     * 只有本轮真的提交过任务才自唤。撞满重试上限而一次都没提交的那一轮必须停手：否则「每轮有界、
+     * 轮数无界」，自唤把有界重试接成新的无限自旋。那种情况交给下一个 tick 的 grantTickBudget。
+     *
+     * <p>
      * 注意这里**不能**无条件重排自己：配额未到就重排会让 drain 轮无缝接续，退化成不受限的忙转。
      * 下一个边界由真 tick、边界到达后的主线程泵（tryScheduleUpdate）、或新入队提供——
      * 卡住时 Server thread 正在 managedBlock 里跑主线程任务（ServerChunkCache:630 的
      * tryScheduleUpdate），所以该唤醒源在加载/保存阶段始终存在。
      */
-    private void exitDrain() {
+    private void exitDrain(boolean progressed) {
         consumerActive.set(false);
-        if (queue.hasWork() && tickBudget.get() > 0) {
+        if (progressed && queue.hasWork() && tickBudget.get() > 0) {
             wakeConsumer();
         }
     }
@@ -609,12 +613,15 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
      * （IntegratedServer.initServer 的 saveEverything 卡住，进度屏冻结、无日志无异常）。
      */
     private void drainLight() {
+        boolean progressed = false;
         try {
             int budgetGranted = acquireBudget();
             if (budgetGranted <= 0) {
                 return; // 本窗配额已用完，出口统一在 finally
             }
             int budget = budgetGranted;
+            int retries = 0;
+            int limit = retryLimit(budgetGranted);
             while (budget > 0) {
                 long key = queue.nextDirty();
                 if (key == Long.MIN_VALUE) {
@@ -622,6 +629,9 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
                 }
                 FarLandsLightQueue.ChunkWork tasks = queue.takeTask(key);
                 if (tasks == null) {
+                    if (++retries >= limit) {
+                        break;
+                    }
                     continue; // 已被并发取走，takeTask 原子 remove，空转一次
                 }
                 int cx = tasks.chunkX();
@@ -629,6 +639,9 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
                 long lockOwner = taskLock.tryLock(cx, cz);
                 if (lockOwner == 0L) {
                     queue.requeue(tasks); // 相邻任务占用，重排队尾下轮重试
+                    if (++retries >= limit) {
+                        break; // 本轮试够了：键已回队尾，剩下的键与它一起交给下一个 tick
+                    }
                     Thread.yield();
                     continue;
                 }
@@ -644,11 +657,28 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
                     return;
                 }
                 budget--;
+                progressed = true;
             }
         } finally {
             // consumerActive 是 wakeConsumer CAS 的唯一闸门，任何出口漏掉它都会让队列永久搁浅。
-            exitDrain();
+            exitDrain(progressed);
         }
+    }
+
+    /**
+     * 一轮 drain 允许的重试次数。重试不占推进预算，因为那是重试而不是进展，但次数必须有界：锁冲突时键
+     * 回到队尾，若没有上限，这一轮的两个出口都不会动，队列排空与预算耗尽都等不到，循环会一直转下去。
+     *
+     * <p>
+     * 与预算同比例，使「一轮能做多少事」与「一轮能试多少」同阶。下限 8 保证预算为 1 时也试得起。
+     */
+    private static int retryLimit(int budgetGranted) {
+        return Math.max(8, budgetGranted * 2);
+    }
+
+    /** 当前值不值得唤醒 drain：有配额，或距上次放行已满一个 tick，即虚拟 tick 的边界。 */
+    private boolean budgetAvailable() {
+        return tickBudget.get() > 0 || System.nanoTime() - lastGrantNanos >= TICK_NANOS;
     }
 
     /**
@@ -659,7 +689,7 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
         if (queue == null) {
             return;
         }
-        if (tickBudget.get() > 0 || System.nanoTime() - lastGrantNanos >= TICK_NANOS) {
+        if (budgetAvailable()) {
             wakeConsumer();
         }
     }
@@ -697,7 +727,11 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
             tasks.onComplete.complete(null);
             // 任务完成补唤醒：防 drainLight 单例漏调度 残留任务由在跑任务的
             // 完成链式续接，light future 落地 -> 生成继续 -> getChunk 解除阻塞。
-            wakeConsumer();
+            // 只在有配额或已过虚拟 tick 边界时真唤醒，而下一个 tick 的 grantTickBudget 里
+            // 有 if (queue.hasWork()) 兜底，不会漏活。
+            if (budgetAvailable()) {
+                wakeConsumer();
+            }
             // ticket 移除必须主线程，ticket 操作非线程安全
             mainExecutor().execute(() -> {
                 if (queue.removeWorkRef(tasks.chunkKey) <= 0) {
@@ -712,7 +746,10 @@ public class FarLandsLightEngine extends ThreadedLevelLightEngine {
 
     /** 入队后加 light ticket，必须主线程；非主线程调用点如生成线程先回主线程。 */
     private void onEnqueued(FarLandsLightQueue.ChunkWork tasks) {
-        wakeConsumer(); // 入队即唤醒后台调度，不依赖主线程下一 tick
+        // 入队即唤醒后台调度，不依赖主线程下一 tick。同样只在有价值时真唤醒，见 executeTask 那处的说明。
+        if (budgetAvailable()) {
+            wakeConsumer();
+        }
         if (tasks.isTicketAdded) {
             return;
         }

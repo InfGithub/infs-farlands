@@ -8,6 +8,7 @@ import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
+import com.inf.farlands.terrain.pipeline.NeighborhoodTickets;
 import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.terrain.system.terrain.noise.overworld.Beta173.Beta173NoiseSystem;
 import com.inf.farlands.terrain.system.terrain.noise.overworld.Vanilla.VanillaNoiseSystem;
@@ -17,6 +18,10 @@ import com.inf.farlands.util.maps.SectionUtil;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.network.SystemsSender;
 import com.inf.farlands.util.window.EntitySectionWindow;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
@@ -160,6 +165,19 @@ public class FarlandsTick {
         }
     }
 
+    /**
+     * 每 tick 末尾要跑一次的钩子，由兼容层在自己初始化时登记。核心不认识登记者，也不 import 它。
+     *
+     * <p>用途是那些「需要每 tick 推进一步、但又不属于本类职责」的兼容逻辑，例如 Chunky 预生成的驱动
+     * 与完成判定。登记发生在模组初始化期，那时是单线程，此后只读。
+     */
+    private static final List<Consumer<MinecraftServer>> TICK_SINKS = new CopyOnWriteArrayList<>();
+
+    /** 登记一个每 tick 末尾的回调。 */
+    public static void addTickSink(Consumer<MinecraftServer> sink) {
+        TICK_SINKS.add(sink);
+    }
+
     /** 服务端 tick 末尾统一入口。 */
     public static void atEnd(MinecraftServer server, int tickCount) {
         setNow(tickCount);
@@ -194,6 +212,8 @@ public class FarlandsTick {
         }
         // 实体 section 窗口并集更新。terrain 的窗口段收集与 fsa 的清理判定都读它，必须先刷新。
         EntitySectionWindow.update(server.getPlayerList().getPlayers());
+        // 驱动面 ±8 邻域的保加载：玩家自己的票圈只到视距加 2，门要的那 289 格有约 94% 落在圈外。
+        NeighborhoodTickets.tick(server);
 
         // fsa 序列化
 
@@ -226,5 +246,9 @@ public class FarlandsTick {
         StructureDriver.tick();
         // 数据就绪驱动：当 tick 变成就绪的 chunk 在同一 tick 放行 promotion 的两个 future。
         ChunkReadiness.drive();
+        // 兼容层的每 tick 钩子，排在所有核心驱动之后：它只驱动本 port 之外的请求方，例如 Chunky 预生成。
+        for (Consumer<MinecraftServer> sink : TICK_SINKS) {
+            sink.accept(server);
+        }
     }
 }

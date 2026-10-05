@@ -1,7 +1,6 @@
 package com.inf.farlands.terrain.decorationFiller;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -15,12 +14,17 @@ import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.LevelSystems;
+import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.terrain.terrainFiller.TerrainSystemContext;
 import com.inf.farlands.util.map.Long2ObjectStripedMap;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.WindowedChunk;
+
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongIterator;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -114,13 +118,27 @@ public final class DecorationFiller {
     private static final Map<Key, Eval> LAST_EVAL_EPOCH = new ConcurrentHashMap<>();
 
     /**
-     * 一次门评估的结论：当时的纪元、当时的帧号、以及门是否通过。
+     * 光照域锁没抢到时的重试帧数。取 8，与写域认领同一档：曾经改成 2 想让重试更勤，实测无效：每次
+     * 等待的真实长度是那把锁的持有时间，约 0.4 秒，而不是重试间隔，而更勤的重试只把主线程排队从
+     * 0.5 毫秒抬到 174 毫秒。
+     */
+    private static final int DOMAIN_RETRY_FRAMES = 8;
+
+    /**
+     * 一次门评估的结论：当时的纪元、当时的帧号、门是否通过、失败是否只是没抢到光照域锁。
      *
      * <p>
      * 通过与否决定保鲜期取哪一个：门没过要等格变化，取长保鲜期；门过了却没能提交，只是等一个
      * 认领空出来，取短保鲜期。两类都不改变门看到的输入，所以都该在保鲜期内不再重判。
      */
-    private record Eval(long epoch, long frame, boolean passed) {
+
+    /**
+     * 一次门的结论缓存：纪元、帧号、门是否通过、失败是否只是没抢到光照域锁。
+     *
+     * <p>最后一位单独列出来，是因为三种等待的时长差一个量级：门没过要等格变化，写域被占要等一次装饰
+     * 收尾，而光照锁被占只需等一次光照任务跑完。用一个布尔背这些意思是先前踩过的坑。
+     */
+    private record Eval(long epoch, long frame, boolean passed, boolean domainMiss) {
     }
 
     /**
@@ -150,16 +168,6 @@ public final class DecorationFiller {
     private static final int STALE_FRAMES = 200;
 
     /**
-     * 复现开关：为真时 {@link #cellChanged} 不 bump {@code CHUNK_EPOCH}，于是邻域和恒为 0，
-     * 「纪元变了」这条重判通路被整条吞掉。
-     *
-     * <p>
-     * 它用来复现一条自锁：推进依赖「格变化」信号，而信号又依赖推进。默认关闭，关闭时行为与不带本
-     * 开关逐位相同。
-     */
-    private static final boolean PROBE_SWALLOW_EPOCH = false;
-
-    /**
      * 某一格的状态变了，受影响的是该 chunk。主线程与 genPool 都调，触发点是存在流程建壳、GenTask 推到
      * CARVERS、读回落段、收尾升段、卸载。
      *
@@ -167,16 +175,8 @@ public final class DecorationFiller {
      * 按 chunk 记而不是全局记：门的依赖面只到写域九格，全局记会让任意一格变化作废全部项的门结论。
      */
     public static void cellChanged(long chunkKey) {
-        if (PROBE_SWALLOW_EPOCH) {
-            // 只 bump 全局计数器，而没有任何地方读它：邻域和因此恒 0。
-            SWALLOWED_EPOCH.incrementAndGet();
-            return;
-        }
         CHUNK_EPOCH.computeIfAbsent(chunkKey, k -> new AtomicLong()).incrementAndGet();
     }
-
-    /** 复现开关打开时的落点，只为让 bump 有副作用，不为任何逻辑服务。 */
-    private static final AtomicLong SWALLOWED_EPOCH = new AtomicLong();
 
     private record Key(ResourceKey<Level> dimension, long chunkPos) {
     }
@@ -267,6 +267,11 @@ public final class DecorationFiller {
      *
      * <p>
      * 提交成功的项留表直到收尾删掉；这期间认领把同一个中心挡在门外，所以不会重复提交。
+     *
+     * <p>
+     * 一遍即止。曾经试过一轮做多遍、只把冲突跳过的项留给下一遍，想让靠后的项少等几轮，结果无效：冲突
+     * 的对象是**持续持有**的认领，一直到那次装饰收尾才撤，而不是本轮瞬时状态，所以下一遍看到的是同一批
+     * 冲突。多遍只把主线程的 marshal 翻了一倍多，`dispatch` 一秒没少。
      */
     public static void tick() {
         frame++;
@@ -308,7 +313,7 @@ public final class DecorationFiller {
                 long epoch = neighborhoodEpoch(keyCx, keyCz);
                 // 保鲜期按门是否通过分流：没过要等格变化，过了只是在等认领空出来。
                 if (lastEval.epoch() == epoch
-                        && frame - lastEval.frame() < (lastEval.passed() ? CLAIM_RETRY_FRAMES : STALE_FRAMES)) {
+                        && frame - lastEval.frame() < retryFrames(lastEval)) {
                     continue;
                 }
             }
@@ -330,14 +335,14 @@ public final class DecorationFiller {
             // 读不出写域之外，维持 ±2 省钱。
             int readRadius = center.getAllReferences().isEmpty() ? DecorationRegion.READ_RADIUS
                     : StructureDriver.STRUCTURE_READ_RADIUS;
-            Map<Long, LevelChunk> handles = neighborhood(level, center, readRadius);
+            Long2ObjectMap<LevelChunk> handles = neighborhood(level, center, readRadius);
             if (handles == null) {
-                LAST_EVAL_EPOCH.put(key, new Eval(epoch, frame, false)); // 门没过：等格变化，取长保鲜期
+                LAST_EVAL_EPOCH.put(key, new Eval(epoch, frame, false, false)); // 门没过：等格变化，取长保鲜期
                 continue; // 门没过：留表等下一轮
             }
             // 门过了也记：认领或提交可能在下一步失败，那时若这里删掉记录，该项下一帧又要重跑整门。
             // 认领失败不改变门看到的任何输入，所以短保鲜期成立。
-            LAST_EVAL_EPOCH.put(key, new Eval(epoch, frame, true));
+            LAST_EVAL_EPOCH.put(key, new Eval(epoch, frame, true, false));
             int cx = center.getPos().x();
             int cz = center.getPos().z();
             if (!DecorationClaim.tryClaim(level.dimension(), cx, cz)) {
@@ -353,7 +358,17 @@ public final class DecorationFiller {
         }
     }
 
-    /** 该 level 的光照引擎。非本 port 引擎返回 null，此时装饰侧不取光照域锁。 */
+    /** 三档重试窗：门没过等格变化，写域被占等一次装饰收尾，光照锁被占只等一次光照任务。 */
+    private static int retryFrames(Eval eval) {
+        if (!eval.passed()) {
+            return STALE_FRAMES;
+        }
+        return eval.domainMiss() ? DOMAIN_RETRY_FRAMES : CLAIM_RETRY_FRAMES;
+    }
+
+    /**
+     * 该 level 的光照引擎。非本 port 引擎返回 null，此时装饰侧不取光照域锁。
+     */
     private static FarLandsLightEngine lightEngineOf(ServerLevel level) {
         return level.getChunkSource().getLightEngine() instanceof FarLandsLightEngine engine ? engine : null;
     }
@@ -374,15 +389,19 @@ public final class DecorationFiller {
      * 有过段这一条不能省：一个段都没有的 chunk 既可能还没开始生成，也可能地形已产出但没建段，只有
      * 后者能承载装饰。
      */
-    private static Map<Long, LevelChunk> neighborhood(ServerLevel level, LevelChunk center, int readRadius) {
-        Map<Long, LevelChunk> handles = new HashMap<>();
+    private static Long2ObjectMap<LevelChunk> neighborhood(ServerLevel level, LevelChunk center, int readRadius) {
+        Long2ObjectMap<LevelChunk> handles = new Long2ObjectOpenHashMap<>(
+                (readRadius * 2 + 1) * (readRadius * 2 + 1));
         ChunkPos pos = center.getPos();
         SectionLifecycle.ChunkCursor cursor = SectionLifecycle.cursor(level);
+        // 九格里有任何一格不合格，门就不过，语义与逐格早退一致。
+        boolean ok = true;
         for (int dx = -NEIGHBORHOOD_RADIUS; dx <= NEIGHBORHOOD_RADIUS; dx++) {
             for (int dz = -NEIGHBORHOOD_RADIUS; dz <= NEIGHBORHOOD_RADIUS; dz++) {
                 LevelChunk neighbor = cursor.at(pos.x() + dx, pos.z() + dz);
                 if (neighbor == null) {
-                    return null;
+                    ok = false;
+                    continue;
                 }
                 long neighborKey = neighbor.getPos().pack();
                 boolean[] any = { false };
@@ -393,11 +412,19 @@ public final class DecorationFiller {
                         belowCarvers[0] = true;
                     }
                 });
-                if (!any[0] || belowCarvers[0]) {
-                    return null;
+                if (!any[0]) {
+                    ok = false;
+                    continue;
+                }
+                if (belowCarvers[0]) {
+                    ok = false;
+                    continue;
                 }
                 handles.put(neighborKey, neighbor);
             }
+        }
+        if (!ok) {
+            return null;
         }
         for (int dx = -readRadius; dx <= readRadius; dx++) {
             for (int dz = -readRadius; dz <= readRadius; dz++) {
@@ -412,7 +439,6 @@ public final class DecorationFiller {
         }
         return handles;
     }
-
     /**
      * 一个装饰任务。跑在 farlands-gen 上：建区域、跑 applyBiomeDecoration，然后无论成败都回主线程
      * 收尾。
@@ -422,11 +448,11 @@ public final class DecorationFiller {
         private final ServerLevel level;
         private final LevelChunk center;
         private final Key key;
-        private final Map<Long, LevelChunk> handles;
+        private final Long2ObjectMap<LevelChunk> handles;
         /** 本任务的读半径：由主线程按中心有无引用定好交下来，池上不再读那张表。 */
         private final int readRadius;
 
-        DecorationTask(ServerLevel level, LevelChunk center, Key key, Map<Long, LevelChunk> handles,
+        DecorationTask(ServerLevel level, LevelChunk center, Key key, Long2ObjectMap<LevelChunk> handles,
                 int readRadius) {
             this.level = level;
             this.center = center;
@@ -456,11 +482,13 @@ public final class DecorationFiller {
                     // 结构起点的 Y 锚会经 getFirstOccupiedHeight 构造 NoiseChunk，而 NoiseChunk 的
                     // 构造点要求 TerrainSystemContext 已设，否则抛。夹法照 fill 的形状。
                     TerrainSystemContext.set(((LevelSystems) this.level).terrainSystem());
+                    long decStart = System.nanoTime();
                     try {
                         this.level.getChunkSource().getGenerator().applyBiomeDecoration(region, this.center,
                                 ScopedStructureManager.of(this.level, region));
                     } finally {
                         TerrainSystemContext.clear();
+                        StageMetrics.stageWork(StageMetrics.STAGE_DECORATED, System.nanoTime() - decStart);
                     }
                 } finally {
                     DecorationContext.exit();
@@ -521,12 +549,15 @@ public final class DecorationFiller {
      * 纪元。后果只是多重判一次门，但把顺序固定下来就没有这个窗口。
      */
     private static void finishRegionNull(ServerLevel level, LevelChunk center, Key key, long lockOwner) {
-        // 取域锁失败：一个方块都没写，门看到的输入没变，所以不该抹掉记录，抹掉会让该项下一帧重跑
-        // 整门。只把「门通过」的标记翻回假，让主线程按短保鲜期重试。帧号原样沿用主线程那一次的读值，
-        // 本方法不做算术。
+        // 取域锁失败：一个方块都没写，门看到的输入没变，所以不该抹掉记录，抹掉会让该项下一帧重跑整门。
+        // 帧号原样沿用主线程那一次的读值，本方法不做算术。
+        //
+        // 这个布尔必须写真：它的唯一读者是重判处那个三元，用它在「短保鲜期」与「长保鲜期」之间选，
+        // 而这里门确实已经通过，失败的只是抢那把域锁。写真才会按短保鲜期重试；写成假会把重试从 8 帧
+        // 拖到 200 帧，也就是把一次抢锁失败变成 10 秒的停等。
         Eval prev = LAST_EVAL_EPOCH.get(key);
         if (prev != null) {
-            LAST_EVAL_EPOCH.put(key, new Eval(prev.epoch(), prev.frame(), false));
+            LAST_EVAL_EPOCH.put(key, new Eval(prev.epoch(), prev.frame(), true, true));
         }
         DecorationClaim.release(level.dimension(), center.getPos().x(), center.getPos().z());
         if (lockOwner != 0L) {
@@ -581,7 +612,8 @@ public final class DecorationFiller {
             }
             // 下发标记：写域是九格，邻居的方块也被写过，它们各自的下发要跟着这次装饰走。与升段解耦：
             // 写过就得补发，不管本次有没有可升的段。
-            for (long writtenKey : region.writtenChunks()) {
+            for (LongIterator it = region.writtenChunks().iterator(); it.hasNext();) {
+                long writtenKey = it.nextLong();
                 LevelChunk owner = SectionLifecycle.latestChunk(level, ChunkPos.getX(writtenKey),
                         ChunkPos.getZ(writtenKey));
                 if (owner != null) {
@@ -604,6 +636,7 @@ public final class DecorationFiller {
                 SectionStage.setStage(current, sy, SectionStage.DECORATED);
                 ((WindowedChunk) current).markSectionDirty(sy);
             }
+            StageMetrics.stageSections(StageMetrics.STAGE_DECORATED, carvers.size());
             // 到这里才算装饰完成：三张表一起清。这是删待办项的唯一位置。
             PENDING.remove(key);
             PENDING_SECTIONS.remove(key);

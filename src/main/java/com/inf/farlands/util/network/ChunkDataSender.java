@@ -17,7 +17,6 @@ import com.inf.farlands.network.expand.y.LightUpdatePacket;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionSerializer;
 import com.inf.farlands.serialize.TerrainHooks;
-import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.util.window.WindowedChunk;
 import com.inf.farlands.util.world.WorldBounds;
@@ -229,10 +228,10 @@ public final class ChunkDataSender {
             if (lc != null) {
                 // fsa 读回优先：磁盘有数据则恢复数据、光照与 stage 并补发，不重生成。读回完成后
                 // 再补填 biome 并入生成队列，GenQueue.enqueue 的 isOrAfter 会跳过已读回的 section。
-                SectionLifecycle.loadSection(lc, s, () -> {
-                    BiomeFiller.fillSectionBiomes(level, lc, s);
-                    TerrainHooks.enqueueGen(lc, s);
-                });
+                // 盘上无数据时这条回调在调用线程即主线程上内联跑。这里不补填群系：那会在主线程上做一次
+                // 64 次气候采样的填充，而下一句入队带来的 GenTask 本来就会「先补 biome 再推 TERRAIN」，
+                // 段要到 LIGHTED 才下发，所以下发路径不受影响。
+                SectionLifecycle.loadSection(lc, s, () -> TerrainHooks.enqueueGen(lc, s));
             }
         });
     }

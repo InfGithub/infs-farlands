@@ -12,9 +12,9 @@ import net.minecraft.world.level.chunk.LevelChunk;
 /**
  * BIOMES 阶段编排：何时填、状态推进到 BIOMES、按维度分派 BiomeSystem。
  *
- * biome 是独立阶段，不依赖地形内容，由触发链驱动：短路完成时 fillChunkBiomes 在后台线程按
- * 窗口并集填，窗口滑入新 section 时 fillSectionBiomes 在主线程补填。fill 不再管 biome，
- * 读回 section 的磁盘 stage 恢复后自动跳过。
+ * biome 是独立阶段，不依赖地形内容，由触发链驱动：短路完成时由 {@code farlandsGenerateTail} 在驱动
+ * 面内按窗口并集铺，其余入口是生成收段前的补种、出生区预加载与 {@code /fillbiome}，都是单段。fill
+ * 不再管 biome，读回 section 的磁盘 stage 恢复后自动跳过。
  *
  * setStage 线程安全：stage 载体是分段 map 加 CHM，任意线程可写。
  */
@@ -23,7 +23,11 @@ public final class BiomeFiller {
     private BiomeFiller() {
     }
 
-    /** 短路完成：窗口并集内每 section 填 biome 并升 BIOMES。后台线程。 */
+    /**
+     * 短路完成：窗口并集内每 section 填 biome 并升 BIOMES。后台线程。
+     *
+     * <p>调用方只对驱动面内的 chunk 调它，见 {@code farlandsGenerateTail}：视距之外铺了也不会被驱动。
+     */
     public static void fillChunkBiomes(ServerLevel level, LevelChunk chunk) {
         BiomeSystem sys = ((LevelSystems) level).biomeSystem();
         EntitySectionWindow.forEachSectionInAnyWindow(sy -> seedSection(level, chunk, sys, sy));
@@ -50,9 +54,12 @@ public final class BiomeFiller {
             if (SectionStage.getStage(chunk, sectionY) >= SectionStage.BIOMES) {
                 return;
             }
+            long t0 = System.nanoTime();
             sys.fillBiomes(level, chunk, sectionY, sectionY);
+            StageMetrics.stageWork(StageMetrics.STAGE_BIOMES, System.nanoTime() - t0);
             SectionStage.setStage(chunk, sectionY, SectionStage.BIOMES);
             StageMetrics.sectionsIn(1L);
+            StageMetrics.stageSections(StageMetrics.STAGE_BIOMES, 1);
         }
     }
 }

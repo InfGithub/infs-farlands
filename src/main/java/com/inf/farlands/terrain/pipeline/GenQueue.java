@@ -8,6 +8,7 @@ import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.LevelSystems;
+import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.terrain.carverFiller.CarverFiller;
 import com.inf.farlands.terrain.decorationFiller.DecorationClaim;
 import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
@@ -93,7 +94,7 @@ public final class GenQueue {
 
     /**
      * 撤一张结构依赖票。票操作非线程安全，而本方法的调用点里有卸载线程，所以自己 marshal 回主线程，
-     * 形状与 {@link #removeGenTicket} 相同。
+     * 形状与 {@link #removeGenTicket} 相同。半径必须与铺下去的那次逐字相同。
      */
     public static void unpinStructureDependency(ServerLevel level, ChunkPos pos) {
         SectionIO.runOnMainThread(
@@ -192,11 +193,11 @@ public final class GenQueue {
      * 恢复后已经 isOrAfter 为 TERRAIN。
      */
     public static void enqueue(LevelChunk chunk, int sectionY) {
-        if (SectionStage.isOrAfter(chunk, sectionY, SectionStage.LIGHTED)) {
+        // fsa 读回在途：该 section 正在从磁盘恢复，完成回调会再调 enqueue。
+        if (SectionIO.isReading(chunk.getPos().pack(), sectionY)) {
             return;
         }
-        // fsa 读回在途：该 section 正在从磁盘恢复，完成回调会再调 enqueue，由本方法的 stage 门判定。
-        if (SectionIO.isReading(chunk.getPos().pack(), sectionY)) {
+        if (!hasWorkInWindow(chunk)) {
             return;
         }
         long key = chunk.getPos().pack();
@@ -220,6 +221,9 @@ public final class GenQueue {
         if (!isNearPlayer(chunk)) {
             return;
         }
+        if (!hasWorkInWindow(chunk)) {
+            return;
+        }
         long key = chunk.getPos().pack();
         if (CHUNK_IN_FLIGHT.computeIfAbsent(key, k -> new AtomicBoolean()).compareAndSet(false, true)) {
             addGenTicket(chunk);
@@ -231,11 +235,37 @@ public final class GenQueue {
     }
 
     /**
-     * 预加载：指定 section 范围入队，绕过 tracking view 过滤。幂等，范围内全已点亮则不入队。
+     * 该 chunk 在窗口并集内是否还有生成侧的活：存在低于 CARVERS 的段。
      *
-     * <p>门取 LIGHTED 而不是 TERRAIN：范围内已有数据但 stage 低于 LIGHTED 的段要靠这次入队触发光照补，
-     * 取 TERRAIN 会让它们既不生成也不点亮，预加载的等待就永远等不到。collectSegments 的预加载模式
-     * 只按段内 stage 收集，已有数据的那几段不会被重填。
+     * <p>与 {@link #preload} 的门同源，区别只在范围：preload 的范围是显式段带，这里是窗口并集。带内全
+     * ≥ CARVERS 时任务什么也做不了，逐条推导见 preload 的注释。
+     *
+     * <p>为什么不能只看本次要入队的那一段：窗口模式的任务扫整个窗口并集，另有一段仍在 TERRAIN 时它照样
+     * 有事可做，所以判据必须落在范围上，而不是落在触发它的那一段上。
+     */
+    private static boolean hasWorkInWindow(LevelChunk chunk) {
+        boolean[] found = { false };
+        EntitySectionWindow.forEachSectionInAnyWindow(sy -> {
+            if (!WorldBounds.inSection(sy)) {
+                return;
+            }
+            if (!SectionStage.isOrAfter(chunk, sy, SectionStage.CARVERS)) {
+                found[0] = true;
+            }
+        });
+        return found[0];
+    }
+
+    /**
+     * 预加载：指定 section 范围入队，绕过 tracking view 过滤。幂等，范围内全已生成则不入队。
+     *
+     * <p>门取 CARVERS，也就是生成侧欠账的终点。带内全 ≥ CARVERS 时这个任务什么也做不了，可以逐条推：
+     * collectSegments 只收未过 TERRAIN 的段，空；surface 与 carvers 的待处理判据都不认 CARVERS 段，空；
+     * 末尾的点亮触发只认 TERRAIN、SURFACE、DECORATED 三档，CARVERS 不在其中，也空。所以放它进去只是
+     * 一次空跑。而出生区预加载的循环每轮都对同一圈块重调本方法，空跑会被放大成每秒几百次。
+     *
+     * <p>低于 CARVERS 的档全部放行：缺席的段要建，BIOMES 要 fill，TERRAIN 要 surface，SURFACE 要 carve，
+     * 这四件事都在 GenTask 里连着做完，也都需要这次入队。
      */
     public static void preload(LevelChunk chunk, int minSy, int maxSy) {
         boolean anyPending = false;
@@ -243,7 +273,7 @@ public final class GenQueue {
             if (!WorldBounds.inSection(sy)) {
                 continue;
             }
-            if (!SectionStage.isOrAfter(chunk, sy, SectionStage.LIGHTED)) {
+            if (!SectionStage.isOrAfter(chunk, sy, SectionStage.CARVERS)) {
                 anyPending = true;
                 break;
             }
@@ -265,8 +295,13 @@ public final class GenQueue {
         }
     }
 
-    /** 该 chunk 是否在任一玩家的视距或外圈 1 内。 */
-    private static boolean isNearPlayer(LevelChunk chunk) {
+    /**
+     * 该 chunk 是否在任一玩家的视距或外圈 1 内，即驱动面内。
+     *
+     * <p>入队与「要不要预填群系」共用它：视距之外加载的 chunk 不会被驱动，给它们铺群系的那笔气候采样
+     * 白做。判据在主线程取：players 是普通 List，后台线程不该遍历它。
+     */
+    public static boolean isNearPlayer(LevelChunk chunk) {
         Level level = chunk.getLevel();
         if (!(level instanceof ServerLevel sl)) {
             return false;
@@ -284,24 +319,36 @@ public final class GenQueue {
     }
 
     /**
-     * execute 完成回调：检查窗口并集内是否仍有未 TERRAIN 的 section，覆盖 execute 期间新入队的。
-     * 有剩余就续任务并保持 CHUNK_IN_FLIGHT 为真，无剩余才清标志并释放 fill ticket。
+     * execute 完成回调：被门挡下的那一支不续任务，其余仍按窗口并集判。
      *
-     * 标志不在续任务时清：否则会留下标志已清、任务尚未入队的空窗，那期间 isChunkBusy 返回假，
-     * 读 section 的一方会与生成写并发。在途条目用 remove 而非 set(false)，任务链结束后条目不永存，
-     * 防随探索单调增长。
+     * <p>续任务的用途只有一个：覆盖 execute 期间新入队的段，所以判据是「窗口并集内仍有未 TERRAIN 的
+     * 段」。但被门挡下时这个判据恒为真，而任务此刻什么也做不了，因为没有 Beardifier 就不许 fill，
+     * 于是续任务成为一条不推进任何状态、却占满池与主线程的自旋。被挡的 chunk 改由两条路再触发：扫描
+     * 的有预算重试，以及 farlandsStructureReady 设好 Beardifier 之后的回投。
+     *
+     * <p>标志不在续任务时清：否则会留下标志已清、任务尚未入队的空窗，那期间 isChunkBusy 返回假，
+     * 读 section 的一方会与生成写并发。被挡那一支用 set(false) 而不是 remove：remove 会让并发的
+     * computeIfAbsent 造出第二个 AtomicBoolean，两个 CAS 都能成功，同 chunk 于是出现两个任务并发写
+     * 同一批高度图。工作做完那一支仍用 remove，任务链结束后条目不永存，防随探索单调增长。
      */
-    static void completeTask(LevelChunk chunk) {
+    static void completeTask(LevelChunk chunk, boolean blocked) {
         long key = chunk.getPos().pack();
-        if (hasUnprocessed(chunk)) {
+        if (!blocked && hasUnprocessed(chunk)) {
             synchronized (QUEUE) {
                 QUEUE.add(new GenTask(chunk));
             }
             wakeConsumer();
+            return;
+        }
+        if (blocked) {
+            AtomicBoolean inFlight = CHUNK_IN_FLIGHT.get(key);
+            if (inFlight != null) {
+                inFlight.set(false);
+            }
         } else {
             CHUNK_IN_FLIGHT.remove(key);
-            removeGenTicket(chunk);
         }
+        removeGenTicket(chunk);
     }
 
     /** 该 chunk 在窗口并集内是否仍有未 TERRAIN 的 section。 */
@@ -385,10 +432,8 @@ public final class GenQueue {
         if (inflight != null && inflight.get()) {
             return false;
         }
-        if (!hasUnprocessed(lc)
-                && !SurfaceFiller.hasSurfacePending(lc)
-                && !CarverFiller.hasCarversPending(lc)
-                && !SectionStage.hasBelowLighted(lc)) {
+        if (!hasUnprocessed(lc) && !SurfaceFiller.hasSurfacePending(lc)
+                && !CarverFiller.hasCarversPending(lc) && !SectionStage.hasBelowLighted(lc)) {
             return false;
         }
         // 已过雕刻、还没装饰的 chunk 登记进装饰表。装饰有自己的门与驱动，这里只负责发现；
@@ -490,7 +535,10 @@ public final class GenQueue {
             chunk.initializeLightSources();
             // fillFrom 完成，触发播种时登记等待本 chunk 的邻居重播，修正边界方向位。
             lightEngine.onChunkSkySourcesReady(chunk.getPos());
+            // 这里量的是延迟，即提交到回调执行的墙钟，含排队等待，不是光照的工作线程时间。
+            long lightStart = System.nanoTime();
             lightEngine.lightChunk(chunk, false).whenComplete((c, t) -> {
+                StageMetrics.stageWork(StageMetrics.STAGE_LIGHTED, System.nanoTime() - lightStart);
                 if (t == null) {
                     SectionStage.promoteAllGenToLighted(chunk);
                     // 光照完成，该 chunk 脏 section 入队 PERSIST，此时 fill 与光照都已完成，数据完整。

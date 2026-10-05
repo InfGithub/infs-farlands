@@ -241,6 +241,7 @@ public final class SectionLifecycle {
                     encodeAndSubmit(lc, level);
                 } finally {
                     ENCODE_TASKS_IN_FLIGHT.decrementAndGet();
+                    // 卸载丢弃的段连同 stage 一起没了。
                     SectionStage.clear(lc);
                 }
             });

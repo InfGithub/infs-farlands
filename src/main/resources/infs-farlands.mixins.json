@@ -117,7 +117,8 @@
     "tick.MinecraftServerMixin",
     "outside.LivingEntityMixin",
     "outside.WorldBorder$StaticBorderExtentMixin",
-    "outside.WorldBorderMixin"
+    "outside.WorldBorderMixin",
+    "compat.chunky.FabricWorldMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -7,6 +7,7 @@ import com.inf.farlands.serialize.SectionLifecycle;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.ChunkBeardifier;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
+import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
 import com.inf.farlands.terrain.structure.StructureDriver;
@@ -232,6 +233,9 @@ public abstract class GenerationChunkHolderMixin {
         });
         if (range[0] <= range[1]) {
             GenQueue.preload(levelchunk, range[0], range[1]);
+        } else {
+            // 空范围：这一支今天发不出任何入队。被门挡下的 chunk 从没进过 collectSegments，它的
+            // stage 表就是空的，于是「门开了」这件事传不出去，只能等扫描那一轮。
         }
     }
 
@@ -243,6 +247,7 @@ public abstract class GenerationChunkHolderMixin {
      */
     @Unique
     private void farlandsGenerateTail(ServerLevel level, LevelChunk levelchunk) {
+        StageMetrics.chunkLoaded(levelchunk.getPos().pack());
         // biome 阶段独立：后台按窗口并集填 biome 并升 BIOMES，完成后回主线程做 fsa 读回，
         // 读回完成再入生成队列。读回与入队必须回主线程，thenAccept 在后台线程执行。
         //
@@ -250,12 +255,19 @@ public abstract class GenerationChunkHolderMixin {
         // 据此另查 isBiomeFilling。begin 必须在提交之前由本线程落下，end 必须在填充的最后一笔
         // 写之后：填充抛异常或提交本身失败都要清，否则该 chunk 永久为忙。
         GenQueue.beginBiomeFill(levelchunk);
+        // 视距之外不铺群系：为别的 chunk 的 ±8 被钉住加载的壳也落在这一片，它们不会被驱动，铺了也白做。
+        // 它们的段停在 UNPROCESSED，而 collectSegments 的判据是「未过 TERRAIN」，照样会收，真群系由
+        // GenTask 的预填补上，下发要求 LIGHTED 所以不受影响。判据在主线程取一次：读回与入队照走，而
+        // players 是普通 List，后台线程不该遍历它。
+        boolean prefill = GenQueue.isNearPlayer(levelchunk);
         try {
             CompletableFuture.runAsync(
                     () -> {
                         boolean filled = false;
                         try {
-                            BiomeFiller.fillChunkBiomes(level, levelchunk);
+                            if (prefill) {
+                                BiomeFiller.fillChunkBiomes(level, levelchunk);
+                            }
                             filled = true;
                         } finally {
                             if (!filled) {
@@ -274,8 +286,10 @@ public abstract class GenerationChunkHolderMixin {
                         // fsa 读回：先查磁盘窗口内 section，有则读回恢复数据、光照、stage 并补发。
                         // 完成后才 enqueueChunk，collectSegments 的 isOrAfter(TERRAIN) 自动跳过已读回的，
                         // 磁盘没有的 section 正常入生成队列。
-                        SectionLifecycle.loadChunkSections(levelchunk,
-                                () -> GenQueue.enqueueChunk(levelchunk));
+                        SectionLifecycle.loadChunkSections(levelchunk, () -> {
+                            StageMetrics.chunkLoadDone();
+                            GenQueue.enqueueChunk(levelchunk);
+                        });
                     }, level));
         } catch (RuntimeException e) {
             GenQueue.endBiomeFill(levelchunk);

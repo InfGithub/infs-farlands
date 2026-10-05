@@ -6,6 +6,7 @@ import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.ChunkBeardifier;
 import com.inf.farlands.terrain.biomeFiller.BiomeFiller;
 import com.inf.farlands.terrain.carverFiller.CarverFiller;
+import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.surfaceFiller.SurfaceFiller;
 import com.inf.farlands.terrain.structure.StructureDriver;
@@ -42,6 +43,12 @@ public final class GenTask {
     private final int[] preloadSections;
     /** 该 chunk 到最近玩家的 XZ Chebyshev 距离，入队时快照，玩家移动时 refreshPriority 重算。 */
     private int priority;
+
+    /**
+     * 本次执行是否停在门上，即缺 Beardifier。它决定 completeTask 走哪一支：被挡下的那一支不续任务，
+     * 由扫描的有预算重试与 farlandsStructureReady 的回投再触发。
+     */
+    private boolean blocked;
 
     public GenTask(LevelChunk chunk) {
         this(chunk, null);
@@ -91,9 +98,12 @@ public final class GenTask {
             // 不能挪进就绪判据：FULL 若等结构相，setInitialSpawn 那条阻塞读会与造出 ±8 壳的那条链
             // 互为条件死等。
             if (!((ChunkBeardifier) chunk).hasBeardifier()) {
+                this.blocked = true;
                 // 拉依赖必须在主线程，票操作非线程安全，latestChunk 也只在主线程，而本任务在池上。
                 // 排一笔回主线程，早退保持即时。不是挂起项时 pullDependencies 自己会早退。
                 SectionIO.runOnMainThread(() -> StructureDriver.pullDependencies(serverLevel, chunk), serverLevel);
+                // 这里早退而不续任务：门能不能过只由 ±8 的壳决定，重试改变不了它，而重试消耗的恰是
+                // 解开自己要用的池与主线程。被挡的 chunk 交给扫描与 farlandsStructureReady 的回投。
                 return;
             }
             List<int[]> segments = collectSegments();
@@ -109,6 +119,7 @@ public final class GenTask {
                 for (int sy = seg[0]; sy <= seg[1]; sy++) {
                     BiomeFiller.fillSectionBiomes(serverLevel, chunk, sy);
                 }
+                long fillStart = System.nanoTime();
                 try {
                     GenQueue.filler(serverLevel).fill(serverLevel, chunk, seg[0], seg[1]);
                 } catch (Exception e) {
@@ -116,11 +127,13 @@ public final class GenTask {
                             chunk.getPos().x(), chunk.getPos().z(), e.toString());
                     throw e;
                 }
+                StageMetrics.stageWork(StageMetrics.STAGE_TERRAIN, System.nanoTime() - fillStart);
                 for (int sy = seg[0]; sy <= seg[1]; sy++) {
                     SectionStage.setStage(chunk, sy, SectionStage.TERRAIN);
                     // fsa 脏标记：fill 在 genPool 线程写 section 内容，CHM 安全
                     ((WindowedChunk) chunk).markSectionDirty(sy);
                 }
+                StageMetrics.stageSections(StageMetrics.STAGE_TERRAIN, seg[1] - seg[0] + 1);
             }
             // SURFACE 独立于 segments，fill 后紧跟，因为依赖 fill 产出的高度图，也覆盖读回
             // stage 为 TERRAIN 与 surface 失败残留。失败不抛，section 停留 TERRAIN 由 scanAndEnqueue
@@ -165,7 +178,7 @@ public final class GenTask {
             }
         } finally {
             // fill 异常也清理，清在途并释放 ticket。异常路径若不清理会让标志残留，chunk 永不卸载。
-            GenQueue.completeTask(chunk);
+            GenQueue.completeTask(chunk, this.blocked);
         }
     }
 

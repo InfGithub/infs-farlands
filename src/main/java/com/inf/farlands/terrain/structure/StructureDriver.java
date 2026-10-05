@@ -22,34 +22,42 @@ import net.minecraft.world.level.chunk.LevelChunk;
 /**
  * 结构两相。驱动自建，方法体调 vanilla 的实现，都在主线程跑。
  *
- * <p>依赖顺序，三条都是铁的：
+ * <p>
+ * 依赖顺序，三条都是铁的：
  *
  * <ol>
  * <li><b>起点相</b>在 {@link #ensureStarts}，只读中心自己，写也只写中心自己的
- * {@code structureStarts}。{@code createStructures} 判已有起点，再按 {@code generatorState} 决定
+ * {@code structureStarts}。{@code createStructures} 判已有起点，再按
+ * {@code generatorState} 决定
  * 该 chunk 落哪个结构集的起点。它不需要任何邻居，所以没有门，存在流程里无条件跑一次，由
  * {@code STARTED} 记住已算过。</li>
- * <li><b>引用相</b>在 {@link #buildReferences}，读 ±8 的起点表，即 {@code createReferences} 的
+ * <li><b>引用相</b>在 {@link #buildReferences}，读 ±8 的起点表，即 {@code createReferences}
+ * 的
  * 17×17 起点网格，写中心自己的引用表。±8 是 vanilla FEATURES 步对 {@code STRUCTURE_STARTS} 的
  * 依赖半径，见 {@code ChunkPyramid}，也是 vanilla 区域允许的读半径。</li>
  * <li><b>Beardifier</b> 读中心的引用表，再按引用取各 chunk 的起点；它必须早于 biome 与 fill。</li>
  * </ol>
  *
- * <p>缺 ±8 的壳怎么办：按需拉。拉的动作只从 {@code GenTask} 的门里发起，也就是只有真的要 fill 的
+ * <p>
+ * 缺 ±8 的壳怎么办：按需拉。拉的动作只从 {@code GenTask} 的门里发起，也就是只有真的要 fill 的
  * chunk 才去拉它的 ±8。被拉起来的那些邻居只当壳，算完自己的起点就够，起点相是 chunk 局部的；它们
  * 的 fill 没有任何东西驱动，预加载只走查到 +2，{@code enqueueChunk} 要玩家在附近，所以不会继续
  * 往外拉，一圈即止。若改从存在流程里拉，每个被拉的 chunk 都会再拉自己的 ±8，半径会无界增长，这是
  * 这套设计唯一的陷阱。
  *
- * <p>由此挂起项分两档，成本也分两档：存在流程登记的是只登记档，即 {@code pinned == null}，不被
+ * <p>
+ * 由此挂起项分两档，成本也分两档：存在流程登记的是只登记档，即 {@code pinned == null}，不被
  * {@code tick} 扫描，只被 {@code GenTask} 的门读；只有被要 fill 触发、拉过依赖的那档才带续作进扫描。
  * 被拉起来的成片邻居因此只占一个登记项，不产生每 tick 的取数税。
  *
- * <p>票在 {@code TicketStorage} 里是集合语义、不计数，所以引用计数在这里自己维护，见
+ * <p>
+ * 票在 {@code TicketStorage} 里是集合语义、不计数，所以引用计数在这里自己维护，见
  * {@code PIN_REFS}：同一格被多个中心需要时，只在 0 与 1 的跃迁上真的加减 vanilla 票。
  *
- * <p>为什么结构相在主线程序列：两相写的是 {@code ChunkAccess.structureStarts} 与
- * {@code structuresRefences}，那是 {@code Maps.newHashMap()}，而主线程在读它们，算 Beardifier 与
+ * <p>
+ * 为什么结构相在主线程序列：两相写的是 {@code ChunkAccess.structureStarts} 与
+ * {@code structuresRefences}，那是 {@code Maps.newHashMap()}，而主线程在读它们，算 Beardifier
+ * 与
  * 存盘的 copyOf 都读。票操作同样只在主线程安全。
  */
 public final class StructureDriver {
@@ -78,8 +86,10 @@ public final class StructureDriver {
     /**
      * 起点相：该 chunk 自己的结构起点。幂等，已算过直接返回。主线程调用。
      *
-     * <p>必须夹在 {@link TerrainSystemContext} 的 set 与 clear 之间：起点取 Y 锚会走
-     * {@code getFirstOccupiedHeight}，再到 {@code iterateNoiseColumn}，那里构造 {@code NoiseChunk}，
+     * <p>
+     * 必须夹在 {@link TerrainSystemContext} 的 set 与 clear 之间：起点取 Y 锚会走
+     * {@code getFirstOccupiedHeight}，再到 {@code iterateNoiseColumn}，那里构造
+     * {@code NoiseChunk}，
      * 而 {@code NoiseChunkMixin} 的两处 {@code @Redirect} 都取这个侧信道，未设即抛。形状照
      * {@code AbstractTerrainFiller.fill}。
      */
@@ -118,7 +128,8 @@ public final class StructureDriver {
     /**
      * 引用相是否可做：中心 ±{@link #STRUCTURE_READ_RADIUS} 的壳都在场。主线程调用。
      *
-     * <p>在场即够：每个壳在存在流程里都已跑过自己的起点相，因为 {@link #ensureStarts} 无条件跑；
+     * <p>
+     * 在场即够：每个壳在存在流程里都已跑过自己的起点相，因为 {@link #ensureStarts} 无条件跑；
      * 旧档的起点由读盘路径填回。所以壳在场蕴含起点表可读。
      */
     public static boolean referencesBuildable(ServerLevel level, LevelChunk center) {
@@ -194,7 +205,8 @@ public final class StructureDriver {
      * 自上次扫描以来是否有格的壳变过。±8 的就绪性只取决于壳在场这一条单调条件，所以一个全局标志就
      * 够，不需要每项计数：没有新壳，就没有任何一项可能从「不就绪」变成「就绪」。
      *
-     * <p>置位点有两处：{@link #cellChanged} 与 {@link #clearChunk}。只登记未提升的项本来就不扫，
+     * <p>
+     * 置位点有两处：{@link #cellChanged} 与 {@link #clearChunk}。只登记未提升的项本来就不扫，
      * 见 {@link #tick} 里的那一段。
      */
     private static volatile boolean shellChanged = true;
@@ -207,7 +219,8 @@ public final class StructureDriver {
     /**
      * 每 tick 重试：门过了就跑续作、撤本中心补的票；没过就留下；壳没了就丢项并撤票。主线程调用。
      *
-     * <p>撤票在续作之后，因为引用相正是在续作里读那些格的起点表。
+     * <p>
+     * 撤票在续作之后，因为引用相正是在续作里读那些格的起点表。
      */
     public static void tick() {
         if (AWAITING.isEmpty() || !shellChanged) {

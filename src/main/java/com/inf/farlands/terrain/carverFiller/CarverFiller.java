@@ -5,6 +5,7 @@ import com.inf.farlands.mixin.noise.HeightmapInvoker;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.LevelSystems;
+import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.util.window.WindowedChunk;
 import com.inf.farlands.util.world.WorldBounds;
 
@@ -62,6 +63,7 @@ public final class CarverFiller {
         if (!hasCarversPending(chunk)) {
             return new int[0];
         }
+        long t0 = System.nanoTime();
         ((LevelSystems) level).carverSystem().applyCarvers(level, chunk);
         // carve 会修改方块，必须标脏，否则写盘丢雕刻结果。fill 与 surface 已标脏的重复标无害。
         List<Integer> list = new ArrayList<>();
@@ -81,6 +83,8 @@ public final class CarverFiller {
         if (carved.length > 0) {
             primeFinalHeightmaps(chunk);
         }
+        StageMetrics.stageWork(StageMetrics.STAGE_CARVERS, System.nanoTime() - t0);
+        StageMetrics.stageSections(StageMetrics.STAGE_CARVERS, carved.length);
         return carved;
     }
 

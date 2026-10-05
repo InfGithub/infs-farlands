@@ -3,8 +3,6 @@ package com.inf.farlands.terrain.decorationFiller;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -12,6 +10,11 @@ import java.util.function.Supplier;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.serialize.SectionSerializer;
 import com.inf.farlands.util.window.WindowedChunk;
+
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -111,19 +114,19 @@ public final class DecorationRegion implements WorldGenLevel {
     private final int centerChunkZ;
 
     /** 主线程交进来的九格句柄，键是 {@link ChunkPos#pack(int, int)}。 */
-    private final Map<Long, LevelChunk> handles;
+    private final Long2ObjectMap<LevelChunk> handles;
 
     /** 本次装饰建出的方块实体，主线程收尾安装；安装前不持有 live level。 */
     private final Map<BlockPos, BlockEntity> pendingBlockEntities = new HashMap<>();
 
     /** 本次装饰写到过的 chunk，收尾按它补发下发标记。写域是九格，键是 pack。 */
-    private final Set<Long> writtenChunks = ConcurrentHashMap.newKeySet();
+    private final LongSet writtenChunks = new LongOpenHashSet();
 
     private final AtomicLong subTickCount = new AtomicLong();
 
     private Supplier<String> currentlyGenerating;
 
-    DecorationRegion(ServerLevel level, LevelChunk center, Map<Long, LevelChunk> handles, int readRadius) {
+    DecorationRegion(ServerLevel level, LevelChunk center, Long2ObjectMap<LevelChunk> handles, int readRadius) {
         this.level = level;
         this.center = center;
         this.centerChunkX = center.getPos().x();
@@ -145,19 +148,13 @@ public final class DecorationRegion implements WorldGenLevel {
      * 17×17 起点网格要扫的范围。
      */
     public static DecorationRegion readingFrom(ServerLevel level, LevelChunk center, int readRadius) {
-        Map<Long, LevelChunk> lazy = new java.util.AbstractMap<>() {
+        // 必须重写 get(long)：调用点传的是 long，重载解析命中 Long2ObjectFunction.get(long)，
+        // 不会走 Map.get(Object)，写成 AbstractMap 那套会永远返回 null，把每一次读打成 not-handed-in。
+        Long2ObjectMap<LevelChunk> lazy = new Long2ObjectOpenHashMap<LevelChunk>() {
             @Override
-            public LevelChunk get(Object key) {
-                if (!(key instanceof Long packed)) {
-                    return null;
-                }
+            public LevelChunk get(long packed) {
                 return com.inf.farlands.serialize.SectionLifecycle.latestChunk(level, ChunkPos.getX(packed),
                         ChunkPos.getZ(packed));
-            }
-
-            @Override
-            public Set<Map.Entry<Long, LevelChunk>> entrySet() {
-                return Set.of();
             }
         };
         return new DecorationRegion(level, center, lazy, readRadius);
@@ -169,7 +166,7 @@ public final class DecorationRegion implements WorldGenLevel {
     }
 
     /** 本次装饰写到过的 chunk 键。收尾补发下发标记用。 */
-    Set<Long> writtenChunks() {
+    LongSet writtenChunks() {
         return this.writtenChunks;
     }
 
@@ -330,7 +327,7 @@ public final class DecorationRegion implements WorldGenLevel {
             if (blockEntity != null) {
                 this.pendingBlockEntities.put(pos.immutable(), blockEntity);
             }
-        } else {
+        } else if (!this.pendingBlockEntities.isEmpty()) {
             this.pendingBlockEntities.remove(pos);
         }
         this.writtenChunks.add(owner.getPos().pack());

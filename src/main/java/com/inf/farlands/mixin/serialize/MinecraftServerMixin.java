@@ -8,6 +8,7 @@ import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.decorationFiller.DecorationClaim;
 import com.inf.farlands.terrain.decorationFiller.DecorationFiller;
 import com.inf.farlands.terrain.pipeline.GenQueue;
+import com.inf.farlands.terrain.pipeline.NeighborhoodTickets;
 import com.inf.farlands.terrain.pipeline.SpawnPreload;
 import com.inf.farlands.terrain.structure.StructureDriver;
 import com.inf.farlands.util.network.ChunkDataSender;
@@ -72,6 +73,7 @@ public abstract class MinecraftServerMixin {
         StructureDriver.clearWorldState();
         ChunkDataSender.clearWorldState();
         SpawnPreload.clearAll();
+        NeighborhoodTickets.clearWorldState();
         SystemsSender.clearWorldState();
         ChunkReadiness.clearAll();
         SectionStage.clearAll();

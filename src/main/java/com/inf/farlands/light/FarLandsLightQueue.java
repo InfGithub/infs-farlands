@@ -133,7 +133,11 @@ public final class FarLandsLightQueue {
     /** 取下一个有任务的 chunk key；无则 Long.MIN_VALUE。 */
     public long nextDirty() {
         synchronized (pendingWork) {
-            return pendingWork.isEmpty() ? Long.MIN_VALUE : pendingWork.dequeueLong();
+            if (pendingWork.isEmpty()) {
+                return Long.MIN_VALUE;
+            }
+            long key = pendingWork.dequeueLong();
+            return key;
         }
     }
 

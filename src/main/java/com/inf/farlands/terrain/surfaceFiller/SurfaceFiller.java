@@ -3,6 +3,7 @@ package com.inf.farlands.terrain.surfaceFiller;
 import com.inf.farlands.serialize.SectionIO;
 import com.inf.farlands.serialize.SectionStage;
 import com.inf.farlands.terrain.LevelSystems;
+import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.util.window.WindowedChunk;
 import com.inf.farlands.util.world.WorldBounds;
 
@@ -51,7 +52,9 @@ public final class SurfaceFiller {
         if (!hasSurfacePending(chunk)) {
             return new int[0];
         }
+        long t0 = System.nanoTime();
         ((LevelSystems) level).surfaceSystem().applySurface(level, chunk);
+        StageMetrics.stageWork(StageMetrics.STAGE_SURFACE, System.nanoTime() - t0);
         // surface 修改方块，读回的 section 未标脏，不标就会写盘丢 surface 结果。
         // fill 已标脏的重复标无害，幂等。
         List<Integer> list = new ArrayList<>();
@@ -68,6 +71,7 @@ public final class SurfaceFiller {
             SectionStage.setStage(chunk, sy, SectionStage.SURFACE);
             ((WindowedChunk) chunk).markSectionDirty(sy);
         }
+        StageMetrics.stageSections(StageMetrics.STAGE_SURFACE, surfaced.length);
         return surfaced;
     }
 }
