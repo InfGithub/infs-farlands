@@ -171,14 +171,14 @@ public class FarlandsConfig {
     public static final ConfigEntry<Boolean> LOG_BLOCK_LOOKUP_SWAP = DEBUG.setBoolean("logBlockLookupSwap")
             .comment("en_us", "Log the BlockUtil lookup generation swap every 200 ticks")
             .comment("zh_cn", "每 200 tick 打印 BlockUtil.lookup 换代")
-            .define(true)
+            .define(false)
             .build();
     public static final boolean logBlockLookupSwap;
 
     public static final ConfigEntry<Boolean> LOG_SECTION_LOOKUP_TRIM = DEBUG.setBoolean("logSectionLookupTrim")
             .comment("en_us", "Log the SectionUtil lookup trim every 200 ticks")
             .comment("zh_cn", "每 200 tick 打印 SectionUtil.lookup 回收")
-            .define(true)
+            .define(false)
             .build();
     public static final boolean logSectionLookupTrim;
 
@@ -186,14 +186,14 @@ public class FarlandsConfig {
             .setBoolean("logAquiferLookupTrim")
             .comment("en_us", "Log the AquiferUtil lookup trim every 200 ticks")
             .comment("zh_cn", "每 200 tick 打印 AquiferUtil.lookup 回收")
-            .define(true)
+            .define(false)
             .build();
     public static final boolean logAquiferLookupTrim;
 
     public static final ConfigEntry<Boolean> LOG_STAGE_METRICS = DEBUG.setBoolean("logStageMetrics")
             .comment("en_us", "Log the FLSTAGE throughput reading every 200 ticks")
             .comment("zh_cn", "每 200 tick 打印 FLSTAGE 就绪吞吐读数")
-            .define(true)
+            .define(false)
             .build();
     public static final boolean logStageMetrics;
 
