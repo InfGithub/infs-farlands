@@ -51,15 +51,16 @@ public final class SectionSerializer {
     }
 
     /**
-     * 打包调色板的按 chunk 条带锁。
+     * 调色板容器的按 chunk 条带锁，所有会进 PalettedContainer 线程检测器的调用点共用同一把键。
      *
-     * <p>同一批 LevelChunkSection 在服务端有四个打包者：编码池上的 fsa 编码 SectionLifecycle.encodeNow、
-     * 主线程的 §5 段包 ChunkDataSender.flushPendingSections、主线程的 chunk 包构造与 biomes 包构造。四者都进
-     * PalettedContainer 的 ThreadingDetector，两个线程同时打包同一个容器就直接抛 Accessing
-     * PalettedContainer from multiple threads。编码搬到池上之前四者都在主线程，天然互斥，所以这四处在写
-     * 之前都要取同一把键的锁。
+     * <p>服务端同一批 LevelChunkSection 有五个碰点：编码池上的 fsa 编码 SectionLifecycle.encodeNow、
+     * 主线程的窗口滑动段包 ChunkDataSender.flushPendingSections、主线程的 chunk 包构造与 biomes 包构造，
+     * 以及主线程写方块那一次 LevelChunkSection.setBlockState。前四个是打包，第五个是写入。两个线程同时
+     * 碰同一个容器就直接抛 Accessing PalettedContainer from multiple threads，所以五处都要在碰容器之前
+     * 取同一把键的锁。编码搬到池上之前它们都在主线程，天然互斥，那把隐式互斥随搬池一起消失了。
      *
-     * <p>粒度按 chunk：不同 chunk 不互卡，只有同一 chunk 正在被编码时主线程才短暂等一次打包。
+     * <p>粒度按 chunk：不同 chunk 不互卡，只有同一 chunk 正在被编码或被打包时，写入者才短暂等一次
+     * 调色板打包。
      */
     private static final Object[] PACK_LOCKS = new Object[64];
 
@@ -69,23 +70,30 @@ public final class SectionSerializer {
         }
     }
 
-    /** 取该 chunk 的打包锁。四处打包点必须用同一 key。 */
+    /** 取该 chunk 的打包锁。五个碰点必须用同一 key。 */
     public static Object packLockFor(long chunkKey) {
         return PACK_LOCKS[(int) (chunkKey & 63)];
     }
 
-    /** 编码：section 加两个光照层加 stage，产出含长度头的 fsa 条目字节。 */
+    /**
+     * 编码：section 加两个光照层加 stage，产出含长度头的 fsa 条目字节。
+     *
+     * <p>chunkKey 只用于取打包锁。锁只包两次 codec 调用，即碰调色板容器的那一段，不含后面的 NBT 与
+     * LZ4，否则主线程写方块的等待上限会从一次打包拉长到整段编码。
+     */
     public static byte[] encode(LevelChunkSection section, DataLayer blockLight, DataLayer skyLight,
-            int stage, PalettedContainerFactory containerFactory, int sectionY) {
+            int stage, PalettedContainerFactory containerFactory, int sectionY, long chunkKey) {
         CompoundTag tag = new CompoundTag();
         tag.putInt("DataVersion", SharedConstants.getCurrentVersion().dataVersion().version());
         tag.putInt("Y", sectionY);
-        tag.put("block_states",
-                containerFactory.blockStatesContainerCodec().encodeStart(NbtOps.INSTANCE, section.getStates())
-                        .getOrThrow());
-        tag.put("biomes",
-                containerFactory.biomeContainerCodec().encodeStart(NbtOps.INSTANCE, section.getBiomes())
-                        .getOrThrow());
+        synchronized (packLockFor(chunkKey)) {
+            tag.put("block_states",
+                    containerFactory.blockStatesContainerCodec().encodeStart(NbtOps.INSTANCE, section.getStates())
+                            .getOrThrow());
+            tag.put("biomes",
+                    containerFactory.biomeContainerCodec().encodeStart(NbtOps.INSTANCE, section.getBiomes())
+                            .getOrThrow());
+        }
         if (blockLight != null && !blockLight.isEmpty()) {
             tag.putByteArray("BlockLight", blockLight.getData());
         }

@@ -21,6 +21,7 @@ import com.inf.farlands.terrain.terrainFiller.TerrainSystemContext;
 import com.inf.farlands.util.map.Long2ObjectStripedMap;
 import com.inf.farlands.util.network.ChunkDataSender;
 import com.inf.farlands.util.window.WindowedChunk;
+import com.inf.farlands.util.world.WorldBounds;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -230,9 +231,20 @@ public final class DecorationFiller {
      * <p>
      * 登记不去重：已提交的项由 {@link DecorationClaim} 挡住重复提交，门没过的项本来就要留表。
      * 段集合取并集，见 {@link #PENDING_SECTIONS}。
+     *
+     * <p>
+     * 段界之外的 chunk 按 VOID 装饰处理，见 {@link #completeAsVoid}：它们的 blockpos 已经溢出，
+     * 装饰只会在写域外空转，而那条越域日志没有上限。
      */
     public static void register(LevelChunk chunk, int[] carvedSections) {
         if (!(chunk.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        // 装饰体按 chunk 推 blockpos，chunkX 一旦越过可表示段上界，chunkX << 4 就溢出成负，之后每一次
+        // 写都落在写域外。界外 chunk 因此不装饰，但必须把这一步记成已完成，否则它就绪不了。
+        ChunkPos pos = chunk.getPos();
+        if (!WorldBounds.inChunkRange(pos.x(), pos.z())) {
+            completeAsVoid(chunk);
             return;
         }
         Set<Integer> sections = PENDING_SECTIONS.computeIfAbsent(keyOf(chunk),
@@ -263,6 +275,36 @@ public final class DecorationFiller {
             return;
         }
         PENDING.put(keyOf(chunk), level);
+    }
+
+    /**
+     * 界外 chunk 的装饰按 VOID 处理：不放任何地物与结构，但装饰这一步必须记成已完成。
+     *
+     * <p>就绪判据要求已物化段都不低于 LIGHTED，而停在 CARVERS 的段只由装饰推进。把界外 chunk 的段
+     * 留在 CARVERS，它的 FULL 就永远补不上，任何跨界的阻塞取 chunk 都会把主线程挂死。
+     *
+     * <p>形状与 VOID 装饰系统一致：那边什么都不放，段照样升 DECORATED、照样点亮。这里一个绝对坐标
+     * 都不推，所以不会有越域写入。
+     */
+    private static void completeAsVoid(LevelChunk chunk) {
+        List<Integer> carvers = new ArrayList<>();
+        SectionStage.forEachStage(chunk, (sy, stage) -> {
+            if (stage == SectionStage.CARVERS) {
+                carvers.add(sy);
+            }
+        });
+        if (carvers.isEmpty()) {
+            return;
+        }
+        for (int sy : carvers) {
+            SectionStage.setStage(chunk, sy, SectionStage.DECORATED);
+            ((WindowedChunk) chunk).markSectionDirty(sy);
+        }
+        StageMetrics.stageSections(StageMetrics.STAGE_DECORATED, carvers.size());
+        // 这一格的段刚从 CARVERS 升到 DECORATED：对它八个邻居的门来说，这一格的状态变了。
+        cellChanged(chunk.getPos().pack());
+        // DECORATED 到 LIGHTED 只能由光照回调推进，所以这里必须触发一次光照。
+        GenQueue.notifyGenerated(chunk);
     }
 
     /**
@@ -391,6 +433,11 @@ public final class DecorationFiller {
      * collectSegments 只收未 TERRAIN 的段，而 surface 与 carvers 的 pending 判据都不认 CARVERS 段。
      * 有过段这一条不能省：一个段都没有的 chunk 既可能还没开始生成，也可能地形已产出但没建段，只有
      * 后者能承载装饰。
+     *
+     * <p>
+     * 段界之外的邻居是例外：它们只要求在场，段条目与阶段都不参与判据。它们本来就在可玩范围之外，
+     * 段也永不被推进，拿它们当门会让紧贴可玩边界的中心恒过不了门，段停在 CARVERS 后主线程在跨界读
+     * 上挂死。写域仍按九格收句柄，所以地物写进那一圈用的是中心推导出的坐标，不会溢出。
      */
     private static Long2ObjectMap<LevelChunk> neighborhood(ServerLevel level, LevelChunk center, int readRadius) {
         Long2ObjectMap<LevelChunk> handles = new Long2ObjectOpenHashMap<>(
@@ -407,6 +454,12 @@ public final class DecorationFiller {
                     continue;
                 }
                 long neighborKey = neighbor.getPos().pack();
+                // 段界之外的邻居只要求在场：它们的段永不被推进，拿它们的段条目或阶段当门，紧贴可玩
+                // 边界的中心就恒过不了门，段停在 CARVERS，主线程随后在跨界的阻塞读上挂死。
+                if (!WorldBounds.inChunkRange(neighbor.getPos().x(), neighbor.getPos().z())) {
+                    handles.put(neighborKey, neighbor);
+                    continue;
+                }
                 boolean[] any = { false };
                 boolean[] belowCarvers = { false };
                 SectionStage.forEachStage(neighbor, (sy, stage) -> {

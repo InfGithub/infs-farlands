@@ -56,9 +56,10 @@ import org.spongepowered.asm.mixin.Unique;
  * 扫描区间取 {@link EntitySectionWindow#ranges()} 的每一段，不取 {@code chunk.getMinY()}，也不取
  * 本 chunk 的段容器 {@code allSections}。容器是历次窗口的并集，客户端由
  * {@code releaseSectionsOutsideWindow} 收，服务端的清理又会跳过在途 chunk，所以竖直跳变之后
- * 旧窗口带仍留在容器里，按它取跨度就是 {@code note.md} 第 37 条那条教训。段两端先夹到
- * {@link WorldBounds#MIN_SECTION} 与 {@link WorldBounds#MAX_SECTION} 再左移四位，因为
- * {@link EntitySectionWindow#update} 不夹取。
+ * 旧窗口带仍留在容器里，那个集合的边界不由当前窗口定义。段两端先夹到
+ * {@link WorldBounds#MIN_PLAYABLE_SECTION} 与 {@link WorldBounds#MAX_PLAYABLE_SECTION} 再左移四位，
+ * 因为 {@link EntitySectionWindow#update} 不夹取；夹到可玩段界而不是可表示段界，是因为后者下端左移
+ * 四位得 {@code Integer.MIN_VALUE}，而这条 Y 循环的下端取它就是一条走不完的递减循环。
  *
  * <p>
  * 同一对段端也是 {@code frozenOceanExtension} 复制体的循环两端。原版那条循环的下界是海平面
@@ -300,10 +301,13 @@ public abstract class SurfaceSystemMixin {
         BlockPos.MutableBlockPos blockPos = new BlockPos.MutableBlockPos();
 
         // 扫描区间取玩家窗口并集的每一段，不取本 chunk 的段容器。容器是历次窗口的并集，跨度随
-        // 会话历史增长，竖直跳变之后旧窗口带还留在里面，按它取跨度就是 note.md 第 37 条那条教训：
-        // 要在并集上取数，先问边界由谁定义。段两端先夹到可表示段范围再移位，因为
-        // EntitySectionWindow.update 不夹取，玩家在高位时 c + verticalSimulationDistance 会越过
-        // MAX_SECTION。
+        // 会话历史增长，竖直跳变之后旧窗口带还留在里面，按它取跨度就是拿一个边界不由当前窗口
+        // 定义的集合在取数。段两端要先夹再移位，因为 EntitySectionWindow.update 不夹取，玩家在高位时
+        // c + verticalSimulationDistance 会越过段界。
+        //
+        // 夹到可玩段界而不是可表示段界，与 collectSegments、hasWorkInWindow、hasUnprocessed、seedSection
+        // 四处判据面同宽。可表示段界下端 MIN_SECTION 左移四位正好是 Integer.MIN_VALUE，而下面的 Y 循环
+        // 是 int 递减到 endY，走到 MIN_VALUE 时 y-- 会回绕到 MAX_VALUE，循环永不结束。
         int[] ranges = EntitySectionWindow.ranges();
         if (ranges.length == 0) {
             return;
@@ -312,10 +316,10 @@ public abstract class SurfaceSystemMixin {
         int[] segBot = new int[segCount];
         int[] segTop = new int[segCount];
         for (int i = 0; i < segCount; i++) {
-            int loSy = Math.max(Math.min(ranges[i * 2], WorldBounds.MAX_SECTION),
-                    WorldBounds.MIN_SECTION);
-            int hiSy = Math.min(Math.max(ranges[i * 2 + 1], WorldBounds.MIN_SECTION),
-                    WorldBounds.MAX_SECTION);
+            int loSy = Math.max(Math.min(ranges[i * 2], WorldBounds.MAX_PLAYABLE_SECTION),
+                    WorldBounds.MIN_PLAYABLE_SECTION);
+            int hiSy = Math.min(Math.max(ranges[i * 2 + 1], WorldBounds.MIN_PLAYABLE_SECTION),
+                    WorldBounds.MAX_PLAYABLE_SECTION);
             segBot[i] = loSy << 4;
             segTop[i] = (hiSy << 4) + 15;
         }

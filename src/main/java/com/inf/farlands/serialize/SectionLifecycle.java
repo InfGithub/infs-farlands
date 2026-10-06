@@ -592,8 +592,9 @@ public final class SectionLifecycle {
     private static final AtomicInteger ENCODE_FAIL_LOGGED = new AtomicInteger();
 
     /**
-     * 现取现编码单个 section，等待期间的变化会被捕捉。主线程 tick 与编码池卸载共用，
-     * 只做纯读加局部对象，任意线程安全。编码时刻与主线程写串行，没有竞态。
+     * 现取现编码单个 section，等待期间的变化会被捕捉。主线程关服兜底与编码池共用，
+     * 只做纯读加局部对象，任意线程安全。碰调色板容器的那一小段与主线程写方块、以及另外四个
+     * 打包点用 SectionSerializer.packLockFor 互斥，锁取在 SectionSerializer.encode 内部。
      */
     private static byte[] encodeNow(LevelChunk lc, int sy, PalettedContainerFactory factory) {
         try {
@@ -612,10 +613,7 @@ public final class SectionLifecycle {
             if (stage < SectionStage.LIGHTED) {
                 return null;
             }
-            // 与主线程的三处段打包互斥，见 SectionSerializer.packLockFor。
-            synchronized (SectionSerializer.packLockFor(lc.getPos().pack())) {
-                return SectionSerializer.encode(section, bl, sl, stage, factory, sy);
-            }
+            return SectionSerializer.encode(section, bl, sl, stage, factory, sy, lc.getPos().pack());
         } catch (Exception e) {
             // encode 失败就静默返回，数据不写盘也就是丢失，但 dirty 保留，之后重试
             if (ENCODE_FAIL_LOGGED.getAndIncrement() < 20) {

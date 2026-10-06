@@ -5,6 +5,7 @@ import com.inf.farlands.terrain.BiomeSystem;
 import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.terrain.debug.StageMetrics;
 import com.inf.farlands.util.window.EntitySectionWindow;
+import com.inf.farlands.util.world.WorldBounds;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -27,6 +28,7 @@ public final class BiomeFiller {
      * 短路完成：窗口并集内每 section 填 biome 并升 BIOMES。后台线程。
      *
      * <p>调用方只对驱动面内的 chunk 调它，见 {@code farlandsGenerateTail}：视距之外铺了也不会被驱动。
+     * 窗口并集不夹段界，段界之外的段由 {@link #seedSection} 跳过。
      */
     public static void fillChunkBiomes(ServerLevel level, LevelChunk chunk) {
         BiomeSystem sys = ((LevelSystems) level).biomeSystem();
@@ -48,8 +50,15 @@ public final class BiomeFiller {
      * {@code LevelChunkSection.fillBiomesFromNoise} 是 {@code recreate()} 加 64 次
      * {@code getAndSetUnchecked} 再整体换引用，两个线程同时跑会得到一份混合网格（一半 one 次求值、
      * 一半另一次）；stage 的读改写同样需要原子。锁加在 chunk 上，一次填充一次，成本可忽略。
+     *
+     * <p>段界与 fill 的取数面同宽：fill 只吃 {@code WorldBounds.inSection} 的段，界外的段种了也推不动，
+     * 而它会永久留在 stage 表里，把装饰的九宫格门恒挡成假。判断收口在这唯一的写 stage 点，四处调用点
+     * 不必各自过滤。
      */
     private static void seedSection(ServerLevel level, LevelChunk chunk, BiomeSystem sys, int sectionY) {
+        if (!WorldBounds.inSection(sectionY)) {
+            return;
+        }
         synchronized (chunk) {
             if (SectionStage.getStage(chunk, sectionY) >= SectionStage.BIOMES) {
                 return;
