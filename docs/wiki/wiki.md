@@ -1,6 +1,8 @@
 # Wiki
 
 > Wiki 目录。
+>
+> [边境之地 Wiki](../wiki.farlands/wiki.md)
 
 - [使用 Systems](docs/using_systems.md)
 - [创建 Systems](docs/creating_systems.md)
