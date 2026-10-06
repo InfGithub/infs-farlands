@@ -1,13 +1,14 @@
 # Creating Systems
 
-Systems come in four families:
+Systems come in five families:
 
-| Family  | Interface                     | Required method                    |
-| ------- | ----------------------------- | ---------------------------------- |
-| Biome   | `BiomeSystem`                 | `fillBiomes`                       |
-| Terrain | `NoiseSystem` / `BlockSystem` | `createFinalDensity` / `fillBlock` |
-| Surface | `SurfaceSystem`               | `applySurface`                     |
-| Carver  | `CarverSystem`                | `applyCarvers`                     |
+| Family     | Interface                     | Required method                    |
+| ---------- | ----------------------------- | ---------------------------------- |
+| Biome      | `BiomeSystem`                 | `fillBiomes`                       |
+| Terrain    | `NoiseSystem` / `BlockSystem` | `createFinalDensity` / `fillBlock` |
+| Surface    | `SurfaceSystem`               | `applySurface`                     |
+| Carver     | `CarverSystem`                | `applyCarvers`                     |
+| Decoration | `DecorationSystem`            | `applyDecoration`                  |
 
 ## Contract
 

@@ -1,6 +1,6 @@
 # 创建 Systems
 
-Systems 分四族：
+Systems 分五族：
 
 | 族   | 接口                          | 必要方法                           |
 | ---- | ----------------------------- | ---------------------------------- |
@@ -8,6 +8,7 @@ Systems 分四族：
 | 地形 | `NoiseSystem` / `BlockSystem` | `createFinalDensity` / `fillBlock` |
 | 地表 | `SurfaceSystem`               | `applySurface`                     |
 | 雕刻 | `CarverSystem`                | `applyCarvers`                     |
+| 装饰 | `DecorationSystem`            | `applyDecoration`                  |
 
 ## 约定
 
