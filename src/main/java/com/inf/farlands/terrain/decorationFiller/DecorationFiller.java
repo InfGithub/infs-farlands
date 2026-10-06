@@ -118,11 +118,14 @@ public final class DecorationFiller {
     private static final Map<Key, Eval> LAST_EVAL_EPOCH = new ConcurrentHashMap<>();
 
     /**
-     * 光照域锁没抢到时的重试帧数。取 8，与写域认领同一档：曾经改成 2 想让重试更勤，实测无效：每次
-     * 等待的真实长度是那把锁的持有时间，约 0.4 秒，而不是重试间隔，而更勤的重试只把主线程排队从
-     * 0.5 毫秒抬到 174 毫秒。
+     * 光照域锁没抢到时的重试帧数。那把锁的持有期是 1 到 3 毫秒，两帧即 100 毫秒已是它的三十倍以上，
+     * 再长只是白等。
+     *
+     * <p>
+     * 与写域认领那一档分开取值：认领的持有期是「池排队加任务体」，常态 26 到 40 毫秒、尾部到 1.4 秒，
+     * 与这把锁差一个量级，两档的合理间隔因此不同。
      */
-    private static final int DOMAIN_RETRY_FRAMES = 8;
+    private static final int DOMAIN_RETRY_FRAMES = 2;
 
     /**
      * 一次门评估的结论：当时的纪元、当时的帧号、门是否通过、失败是否只是没抢到光照域锁。

@@ -190,6 +190,10 @@ public class FarlandsTick {
             // 就绪吞吐读数：与本周期同档，约 10 秒一行。只报读数，不报解读。
             StageMetrics.flush();
         }
+        // 装饰驱动：判门、认领、提交到 farlands-gen。排在光照配额之前，使取域与本拍那簇光照任务的放行
+        // 错开：那簇任务一放行就取走半径 2 的锁并持有 1 到 3 毫秒，而装饰取域是整块成功或整块失败，撞上
+        // 要多等一个重试窗。代价是本拍由扫描新登记的项要等下一轮尝试。
+        DecorationFiller.tick();
         // 光照引擎每 tick 的任务配额：真 tick 是唯一权威边界。
         // 无 tick 阶段由引擎自己按 tick 间隔兜底，两个入口是 prepareLevels 建世界与 saveEverything 保存。
         for (ServerLevel level : server.getAllLevels()) {
@@ -240,8 +244,6 @@ public class FarlandsTick {
         GenQueue.tick();
         // 动态扫描：每 tick 从玩家当前位置螺旋扫描视距内未生成的 chunk 补入队。
         GenQueue.scanAndEnqueue(server);
-        // 装饰驱动：判门、认领、提交到 farlands-gen。排在扫描之后，本 tick 新登记的项当轮就能走。
-        DecorationFiller.tick();
         // 结构相驱动：重试那些在等 ±8 壳齐的 chunk，过了就跑挂起的续作。
         StructureDriver.tick();
         // 数据就绪驱动：当 tick 变成就绪的 chunk 在同一 tick 放行 promotion 的两个 future。
