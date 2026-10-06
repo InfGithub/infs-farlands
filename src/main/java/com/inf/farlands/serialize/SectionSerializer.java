@@ -53,11 +53,12 @@ public final class SectionSerializer {
     /**
      * 调色板容器的按 chunk 条带锁，所有会进 PalettedContainer 线程检测器的调用点共用同一把键。
      *
-     * <p>服务端同一批 LevelChunkSection 有五个碰点：编码池上的 fsa 编码 SectionLifecycle.encodeNow、
-     * 主线程的窗口滑动段包 ChunkDataSender.flushPendingSections、主线程的 chunk 包构造与 biomes 包构造，
-     * 以及主线程写方块那一次 LevelChunkSection.setBlockState。前四个是打包，第五个是写入。两个线程同时
-     * 碰同一个容器就直接抛 Accessing PalettedContainer from multiple threads，所以五处都要在碰容器之前
-     * 取同一把键的锁。编码搬到池上之前它们都在主线程，天然互斥，那把隐式互斥随搬池一起消失了。
+     * <p>服务端同一批 LevelChunkSection 有六个碰点：编码池上的 fsa 编码 SectionLifecycle.encodeNow、
+     * 主线程的窗口滑动段包 ChunkDataSender.flushPendingSections、主线程的 chunk 包构造与 biomes 包构造、
+     * 主线程写方块那一次 LevelChunkSection.setBlockState，以及装饰期 {@code OreFeature.doPlace} 那一次
+     * 无检测器的段写。前五个是打包与带检测的写入，第六个是绕开区域入口的直接写入。两个线程同时碰同一个
+     * 容器就直接抛 Accessing PalettedContainer from multiple threads，所以六处都要在碰容器之前取同一
+     * 把键的锁。编码搬到池上之前它们都在主线程，天然互斥，那把隐式互斥随搬池一起消失了。
      *
      * <p>粒度按 chunk：不同 chunk 不互卡，只有同一 chunk 正在被编码或被打包时，写入者才短暂等一次
      * 调色板打包。

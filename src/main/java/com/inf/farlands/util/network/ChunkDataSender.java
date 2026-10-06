@@ -337,9 +337,9 @@ public final class ChunkDataSender {
                 queue.remove(e.getKey()); // 未加载：剪掉，重载时标记或 chunk 包会补
                 continue;
             }
-            if (GenQueue.isChunkBusy(lc)) {
-                // 生成或光照在途：整块留队列，不读半成品 section。genPool 正在写 section 时
-                // 序列化会撞 vanilla 的 PalettedContainer 多线程检测，直接 CTD。
+            if (GenQueue.isGeneratingOrLighting(lc)) {
+                // 生成与光照在途：整块留队列，不读半成品 section。它们的段写不取包锁，序列化会撞
+                // vanilla 的 PalettedContainer 多线程检测，直接 CTD。装饰的段写取那把锁，不必让开。
                 continue;
             }
             Iterator<Integer> it = e.getValue().iterator();

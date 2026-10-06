@@ -357,10 +357,12 @@ public final class DecorationRegion implements WorldGenLevel {
         int localZ = pos.getZ() & 15;
         boolean wasEmpty = section.hasOnlyAir();
         BlockState oldState;
+        // 段写与四张高度图必须在同一把锁内：玩家写那边由 serialize/LevelChunkMixin 同样把高度图更新
+        // 纳入这把锁，两侧因此互斥，否则并发写会撞同一个 BitStorage。
         synchronized (SectionSerializer.packLockFor(owner.getPos().pack())) {
             oldState = section.setBlockState(localX, localY, localZ, state, false);
+            this.updateHeightmaps(owner, localX, y, localZ, state);
         }
-        this.updateHeightmaps(owner, localX, y, localZ, state);
         boolean isEmpty = section.hasOnlyAir();
         if (wasEmpty != isEmpty) {
             // 服务端下 updateSectionStatus 只入队，池上调用与 fill 同类。
@@ -382,7 +384,13 @@ public final class DecorationRegion implements WorldGenLevel {
         return true;
     }
 
-    /** 四张最终高度图增量更新，与 vanilla setBlockState 的同名四行同源。 */
+    /**
+     * 四张最终高度图增量更新，与 vanilla setBlockState 的同名四行同源。
+     *
+     * <p>必须在 {@link SectionSerializer#packLockFor(long)} 内调用：玩家写那边由
+     * {@code serialize/LevelChunkMixin} 把同样四次更新纳入了同一把锁。这四张图在 LevelChunk 构造时
+     * 就已建好，所以这里的取用只是查表，不会改那张 map。
+     */
     private void updateHeightmaps(LevelChunk owner, int localX, int y, int localZ, BlockState state) {
         owner.getOrCreateHeightmapUnprimed(Heightmap.Types.MOTION_BLOCKING).update(localX, y, localZ, state);
         owner.getOrCreateHeightmapUnprimed(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES).update(localX, y, localZ, state);
@@ -410,12 +418,34 @@ public final class DecorationRegion implements WorldGenLevel {
     // ---- 不属于本步的两块：位置门与方块实体辅助 ----
 
     /**
-     * 无锁的 {@link BulkSectionAccess} 替身，供 {@code OreFeature} 用。
+     * 最近一次经 {@link UnlockedSectionAccess} 交出去的段所属 chunk 键。
+     *
+     * <p>矿石那一路绕过 {@link #setBlock} 直接写段，而 {@code LevelChunkSection} 不持有 chunk 引用，
+     * 写点拿不到锁键，所以由取段那一侧把键留在线程上，写点照它取同一把包锁。装饰整段跑在同一条池线程
+     * 上，任务收尾清掉。
+     */
+    private static final ThreadLocal<Long> HANDED_CHUNK_KEY = new ThreadLocal<>();
+
+    /** 最近交出去的段所属 chunk 键，没有则 null。供 OreFeatureSectionAccessMixin 取锁用。 */
+    public static Long handedChunkKey() {
+        return HANDED_CHUNK_KEY.get();
+    }
+
+    /** 清掉本线程的记录。装饰任务收尾调用，防同一条池线程把上一个任务的值带给下一个。 */
+    public static void clearHandedChunkKey() {
+        HANDED_CHUNK_KEY.remove();
+    }
+
+    /**
+     * 无锁取段的 {@link BulkSectionAccess} 替身，供 {@code OreFeature} 用。
      *
      * <p>
      * vanilla 那个在 getSection 里对段调 acquire，那是调色板的并发检测器：抢失败靠抛异常把许可
      * 交出去，而异常被编码侧的 catch 吞掉之后许可就永久占用。这里只需要读，而
      * {@code LevelChunkSection.getBlockState} 走调色板的 get，本来就不加锁。
+     *
+     * <p>它交出去的段随后由矿石直接写，那一次写由 {@code OreFeatureSectionAccessMixin} 用同一把包锁
+     * 包住；键从本类的 {@link #handedChunkKey()} 取。
      */
     public static final class UnlockedSectionAccess extends BulkSectionAccess {
 
@@ -433,9 +463,10 @@ public final class DecorationRegion implements WorldGenLevel {
             // 可空是 vanilla BulkSectionAccess 的契约，OreFeature 判空之后才写；段没物化时返回 null，
             // 与这次写没有落点同义。
             if (section != null) {
-                // 它绕过本区域的 setBlock 直接写段，所以写过的 chunk 要在这里补记，收尾才补得上下发。
-                // 编码互斥靠认领覆盖整片写域，与 fill 的既有取舍同形。
+                // 它绕过本区域的 setBlock 直接写段，所以写过的 chunk 要在这里补记，收尾才补得上下发；
+                // 写那一次要取的包锁键也从这里交出去。
                 this.region.writtenChunks.add(owner.getPos().pack());
+                HANDED_CHUNK_KEY.set(owner.getPos().pack());
             }
             return section;
         }

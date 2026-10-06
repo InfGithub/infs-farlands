@@ -599,6 +599,8 @@ public final class DecorationFiller {
                 // 只在真的装饰过、即 region 非 null 时才存在。
                 DecorationRegion computed = region;
                 long computedOwner = lockOwner;
+                // 侧信道是本线程的，两支收尾都在本方法返回前落下，清在这里最省事也最可靠。
+                DecorationRegion.clearHandedChunkKey();
                 if (computed == null) {
                     finishRegionNull(this.level, this.center, this.key, computedOwner);
                 } else {

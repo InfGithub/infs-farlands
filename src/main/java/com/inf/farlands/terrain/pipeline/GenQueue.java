@@ -463,22 +463,30 @@ public final class GenQueue {
     // 光照衔接：chunk 级去重
 
     /**
-     * 该 chunk 是否有生成、光照或装饰在途，供 fsa 清理判定，在途则不清理该 chunk，保守。
+     * 该 chunk 是否有不取包锁的段写在途，即生成任务与光照。
      *
-     * <p>装饰那一支按写域问：一个 chunk 只要落在某次装饰的九格写域内就可能正被写，编码与下发
-     * 都要让开，所以判据不是中心是不是它，而是它是否被某个写域覆盖。
+     * <p>下发侧要让开的只有这两支：fill 直写段不走 {@code SectionSerializer.packLockFor}，与序列化并发
+     * 会撞调色板的检测；装饰的段写取那把锁，所以它不在此列。
      */
-    public static boolean isChunkBusy(LevelChunk chunk) {
+    public static boolean isGeneratingOrLighting(LevelChunk chunk) {
         long key = chunk.getPos().pack();
         AtomicBoolean gen = CHUNK_IN_FLIGHT.get(key);
         if (gen != null && gen.get()) {
             return true;
         }
         AtomicBoolean light = LIGHT_IN_FLIGHT.get(key);
-        if (light != null && light.get()) {
-            return true;
-        }
-        return DecorationClaim.isClaimed(chunk.getLevel().dimension(), key);
+        return light != null && light.get();
+    }
+
+    /**
+     * 该 chunk 是否有生成、光照或装饰在途，供 fsa 清理与就绪判定用：在途则不清理该 chunk、不补 FULL。
+     *
+     * <p>装饰那一支按写域问：一个 chunk 只要落在某次装饰的九格写域内就可能正被写，清理要避开它。玩家写
+     * 与下发不再由它让开，两处改看 {@link #isGeneratingOrLighting}。
+     */
+    public static boolean isChunkBusy(LevelChunk chunk) {
+        return isGeneratingOrLighting(chunk)
+                || DecorationClaim.isClaimed(chunk.getLevel().dimension(), chunk.getPos().pack());
     }
 
     /**

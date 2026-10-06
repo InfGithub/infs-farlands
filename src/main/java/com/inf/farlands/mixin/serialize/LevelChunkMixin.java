@@ -7,6 +7,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,7 +21,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <p>写入侧：普通方块写最终都落到 setBlockState 里那一次 LevelChunkSection.setBlockState
  * 调用，它走带线程检测的调色板重载，而 fsa 编码在 farlands-encode 池上打包同一个容器，
  * 两者跨线程相遇即 PalettedContainer 抛异常。所以这一次调用要在 SectionSerializer.packLockFor
- * 内做，键与另外四个打包点相同。锁只包这一次调用，不含本方法后面的高度图与光照。
+ * 内做，键与另外五个打包点相同。随后的四张高度图更新同样在这把锁内，因为装饰在池上直写段时也更新
+ * 同一批高度图。锁不含本方法后面的光照。
  *
  * <p>标脏侧：只在修改实际发生时标脏，判据是返回值非 null，vanilla 在 blockstate 等于 state
  * 的分支返回 null 表示没变。双端共享类，客户端标脏无害，SectionLifecycle 是纯服务端，
@@ -43,6 +45,21 @@ public abstract class LevelChunkMixin {
             BlockState state) {
         synchronized (SectionSerializer.packLockFor(((LevelChunk) (Object) this).getPos().pack())) {
             return section.setBlockState(localX, localY, localZ, state);
+        }
+    }
+
+    /**
+     * 四张最终高度图的更新纳入同一把包锁。
+     *
+     * <p>装饰在 farlands-gen 上直写段，并在 {@code DecorationRegion.setBlock} 里更新同一批高度图，而高度图
+     * 是 BitStorage 加一张普通 map。装饰与玩家并发写现在允许了，两侧的高度图更新就必须在同一把锁内，否则
+     * 两个线程会写同一个 BitStorage。本方法内四次 update 是同一个 target，不带 ordinal 一次全覆盖。
+     */
+    @Redirect(method = "setBlockState(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Lnet/minecraft/world/level/block/state/BlockState;", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/levelgen/Heightmap;update(IIILnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean farlands$heightmapsUnderPackLock(Heightmap heightmap, int localX, int localY, int localZ,
+            BlockState state) {
+        synchronized (SectionSerializer.packLockFor(((LevelChunk) (Object) this).getPos().pack())) {
+            return heightmap.update(localX, localY, localZ, state);
         }
     }
 

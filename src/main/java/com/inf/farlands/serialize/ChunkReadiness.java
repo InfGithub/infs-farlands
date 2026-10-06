@@ -67,15 +67,15 @@ public final class ChunkReadiness {
         WATCHED.put(new Key(level.dimension(), chunk.getPos().pack()), new Watched(chunk, holder));
     }
 
-    /** 该 chunk 的数据是否已就绪。主线程调用。 */
-    public static boolean isDataReady(LevelChunk chunk) {
+    /**
+     * 与读回无关的四条判据：生成在途、群系在途、不在等窗口建立、已物化段全部点过亮。整块口径的
+     * {@link #isDataReady} 用它；写入门另走按段的 {@link #isWritableAt}，不共用。
+     */
+    private static boolean isReadyExceptRead(LevelChunk chunk) {
         if (TerrainHooks.isChunkBusy(chunk)) {
             return false;
         }
         if (GenQueue.isBiomeFilling(chunk)) {
-            return false;
-        }
-        if (SectionIO.isReadingAny(chunk.getPos().pack())) {
             return false;
         }
         if (SectionLifecycle.isPendingWindowRead(chunk)) {
@@ -84,15 +84,37 @@ public final class ChunkReadiness {
         return !SectionStage.hasBelowLighted(chunk);
     }
 
+    /** 该 chunk 的数据是否已就绪：任一读回在途即未就绪。存盘门与 FULL 补发用它。主线程调用。 */
+    public static boolean isDataReady(LevelChunk chunk) {
+        return isReadyExceptRead(chunk) && !SectionIO.isReadingAny(chunk.getPos().pack());
+    }
+
+    /**
+     * 该 chunk 的那个段是否可写：判据落在目标段自己身上。
+     *
+     * <p>两条。本段已到 LIGHTED，没到就说明它还在 fill、surface、carve、装饰或光照里，写下去会被覆盖
+     * 或落进空段；本段此刻不在读回，读回会整体替换该段容器。
+     *
+     * <p>装饰不参与判定。装饰的段写取 {@code SectionSerializer.packLockFor} 的同一把锁，与玩家写并发时
+     * 每格后写者胜，撞不坏容器；而认领是按 XZ 写域占一整块的，一次跨段会让视距内几乎每个 chunk 都成为
+     * 装饰中心，认领若参与本判据，玩家要在整片视距内等它排完队。
+     */
+    private static boolean isWritableAt(LevelChunk chunk, int sectionY) {
+        if (SectionStage.getStage(chunk, sectionY) < SectionStage.LIGHTED) {
+            return false;
+        }
+        return !SectionIO.isReading(chunk.getPos().pack(), sectionY);
+    }
+
     /** 按位置取当前的 LevelChunk，未建壳返回 null。非阻塞，供写入门与预加载用。主线程调。 */
     public static LevelChunk chunkAt(ServerLevel level, ChunkPos pos) {
         return SectionLifecycle.latestChunk(level, pos.x(), pos.z());
     }
 
-    /** 该位置是否已就绪。没建壳即未就绪。 */
-    public static boolean isReady(ServerLevel level, ChunkPos pos) {
+    /** 该位置的那个段是否可写。没建壳即不可写。主线程调。 */
+    public static boolean isReady(ServerLevel level, ChunkPos pos, int sectionY) {
         LevelChunk chunk = chunkAt(level, pos);
-        return chunk != null && isDataReady(chunk);
+        return chunk != null && isWritableAt(chunk, sectionY);
     }
 
     /**

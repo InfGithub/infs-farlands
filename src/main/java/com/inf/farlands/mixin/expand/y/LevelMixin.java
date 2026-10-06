@@ -42,8 +42,11 @@ public abstract class LevelMixin {
         }
         // 窗口内但数据未就绪：写下去会被随后的 fill 覆盖，或落进还没读回的空段。拒绝的后果由调用方
         // 承担，命令报 commands.setblock.failed，玩家放置表现为放不下去。
+        //
+        // 读回那一条按段判，不按 chunk：窗口滑动一次会给整片 tracking view 的每个 chunk 打上边缘段的
+        // 读回标记，按 chunk 判会把玩家脚下那一整块的写入一起拒掉，直到那些远段的读回排完队。
         if (self instanceof ServerLevel serverLevel
-                && !ChunkReadiness.isReady(serverLevel, ChunkPos.containing(pos))) {
+                && !ChunkReadiness.isReady(serverLevel, ChunkPos.containing(pos), sectionY)) {
             cir.setReturnValue(false);
         }
     }
