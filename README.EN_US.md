@@ -8,7 +8,7 @@
 ![@Inject](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2FInfGithub%2Fdc5cf49ced449ef6cda0c106718f8e53%2Fraw%2Finject.json)
 ![@Mixin](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2FInfGithub%2Fdc5cf49ced449ef6cda0c106718f8e53%2Fraw%2Fmixin.json)
 
-[Wiki](docs/wiki.EN_US.md)
+[Wiki](docs/wiki.EN_US/wiki.md)
 
 ## Building
 

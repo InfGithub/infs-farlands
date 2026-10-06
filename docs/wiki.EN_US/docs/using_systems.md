@@ -8,4 +8,4 @@ On this page, you can configure the **systems** and their parameters used by eac
 
 As shown below:
 
-![The “Farlands” page](../screenshots/farlands-page.EN_US.png)
+![The “Farlands” page](../screenshots/farlands-page.png)
