@@ -95,6 +95,7 @@
     "fix.xz.WorldGenRegionMixin",
     "fix.xyz.NaturalSpawnerMixin",
     "fix.xyz.EntityFluidInteractionMixin",
+    "fix.y.BlockBlobFeatureMixin",
     "fix.y.HeightmapMixin",
     "fix.y.LevelMixin",
     "fix.y.BeaconBlockEntityMixin",

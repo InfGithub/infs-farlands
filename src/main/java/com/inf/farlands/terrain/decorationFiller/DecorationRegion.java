@@ -101,6 +101,19 @@ public final class DecorationRegion implements WorldGenLevel {
     private final int readRadius;
 
     /**
+     * 地物下行扫描的地板，读域里最低的已物化段再往下 8 格；一个段都没有时是
+     * {@link Integer#MIN_VALUE}，表示不设下界。
+     *
+     * <p>池上的地物循环要一个竖直下界：vanilla 那些柱状下行以世界下界为界，而本 port 的地表在十亿格
+     * 量级、世界下界仍是 -64，于是没有可放置方块的那些列会把整个跨度走完。地板取读域里的最小值，因为
+     * 循环拿不到列坐标，对每一列都成立的地板必须不高于任何一列的最低段。
+     *
+     * <p>取段容器而不是读 {@code getWindowMinY()}：服务端 chunk 的窗口是构造默认的死状态，不跟生成走。
+     * 主线程算好交下来，池上只读这个 final 字段。
+     */
+    private final int descentFloorY;
+
+    /**
      * 本区域自己的随机源。不能借 {@code level.getRandom()}：那是带并发检测的
      * {@code LegacyRandomSource}，而本区域跑在 farlands-gen 上，主线程同时在用它，刷怪与降水都读它，
      * 共用即 "Accessing LegacyRandomSource from multiple threads" 崩溃。vanilla 的 WorldGenRegion
@@ -126,13 +139,15 @@ public final class DecorationRegion implements WorldGenLevel {
 
     private Supplier<String> currentlyGenerating;
 
-    DecorationRegion(ServerLevel level, LevelChunk center, Long2ObjectMap<LevelChunk> handles, int readRadius) {
+    DecorationRegion(ServerLevel level, LevelChunk center, Long2ObjectMap<LevelChunk> handles, int readRadius,
+            int descentFloorY) {
         this.level = level;
         this.center = center;
         this.centerChunkX = center.getPos().x();
         this.centerChunkZ = center.getPos().z();
         this.handles = handles;
         this.readRadius = readRadius;
+        this.descentFloorY = descentFloorY;
         this.random = level.getChunkSource().randomState()
                 .getOrCreateRandomFactory(
                         net.minecraft.resources.Identifier.withDefaultNamespace("worldgen_region_random"))
@@ -157,7 +172,40 @@ public final class DecorationRegion implements WorldGenLevel {
                         ChunkPos.getZ(packed));
             }
         };
-        return new DecorationRegion(level, center, lazy, readRadius);
+        return new DecorationRegion(level, center, lazy, readRadius, lowestSectionFloor(center));
+    }
+
+    /**
+     * 该 chunk 已物化段里最低的那一段，换算成下行地板；一个段都没有时返回 {@link Integer#MIN_VALUE}，
+     * 表示不设下界。
+     *
+     * <p>段容器是读路径的唯一来源：本 port 的 {@code LevelChunk.getBlockState} 只在容器里有该段且该段非
+     * 全空气时才读它，缺段直接是空气。所以地板以下的读永远命中不了 tag，地板只压缩步数。
+     */
+    static int lowestSectionFloor(LevelChunk chunk) {
+        int lowest = Integer.MAX_VALUE;
+        for (int sectionY : ((WindowedChunk) chunk).windowedAllSections().keySet()) {
+            if (sectionY < lowest) {
+                lowest = sectionY;
+            }
+        }
+        return lowest == Integer.MAX_VALUE ? Integer.MIN_VALUE : descentFloor(lowest);
+    }
+
+    /**
+     * 已物化段号换算成下行地板：左移四位得方块 Y，再往下留 8 格。
+     *
+     * <p>留余量是必要的：下行循环的条件形如 {@code y > 地板 + 3}，地板压到最低段本身会漏掉该段内最底
+     * 几格的命中。乘法走 long，可表示段号两端乘 16 正好压在 int 边上。
+     */
+    static int descentFloor(int lowestSectionY) {
+        long floor = (long) lowestSectionY * 16L - 8L;
+        return (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, floor));
+    }
+
+    /** 地物下行扫描的地板。主线程算好交下来，池上只读。没有段时是不设下界的哨兵值。 */
+    public int descentFloorY() {
+        return this.descentFloorY;
     }
 
     /** 本次装饰建出的方块实体。主线程收尾安装。 */

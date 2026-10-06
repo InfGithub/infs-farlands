@@ -393,7 +393,8 @@ public final class DecorationFiller {
             if (!DecorationClaim.tryClaim(level.dimension(), cx, cz)) {
                 continue; // 写域与另一次装饰相交，留表等下一轮
             }
-            DecorationTask task = new DecorationTask(level, center, key, handles, readRadius);
+            int descentFloorY = descentFloorY(handles, center);
+            DecorationTask task = new DecorationTask(level, center, key, handles, readRadius, descentFloorY);
             if (!GenQueue.submitDecoration(task)) {
                 // 池已关，即停服：撤认领、留表等下一轮
                 DecorationClaim.release(level.dimension(), cx, cz);
@@ -416,6 +417,24 @@ public final class DecorationFiller {
      */
     private static FarLandsLightEngine lightEngineOf(ServerLevel level) {
         return level.getChunkSource().getLightEngine() instanceof FarLandsLightEngine engine ? engine : null;
+    }
+
+    /**
+     * 地物下行扫描的地板：读域里最低的已物化段。没有段时是 {@link Integer#MIN_VALUE}，即不设下界。
+     *
+     * <p>取最小值而不是中心那一个，因为下行循环拿不到列坐标，对每一列都成立的地板必须不高于任何一列的
+     * 最低段。走段容器而不是窗口：服务端 chunk 的窗口是构造默认的死状态，不跟生成走。主线程取好交下去，
+     * 池上不再读那些字段。
+     */
+    private static int descentFloorY(Long2ObjectMap<LevelChunk> handles, LevelChunk center) {
+        int floor = DecorationRegion.lowestSectionFloor(center);
+        for (LevelChunk chunk : handles.values()) {
+            int candidate = DecorationRegion.lowestSectionFloor(chunk);
+            if (candidate < floor) {
+                floor = candidate;
+            }
+        }
+        return floor;
     }
 
     /**
@@ -507,14 +526,17 @@ public final class DecorationFiller {
         private final Long2ObjectMap<LevelChunk> handles;
         /** 本任务的读半径：由主线程按中心有无引用定好交下来，池上不再读那张表。 */
         private final int readRadius;
+        /** 本任务的下行地板：由主线程按读域最低已物化段算好交下来，池上不再读那些字段。 */
+        private final int descentFloorY;
 
         DecorationTask(ServerLevel level, LevelChunk center, Key key, Long2ObjectMap<LevelChunk> handles,
-                int readRadius) {
+                int readRadius, int descentFloorY) {
             this.level = level;
             this.center = center;
             this.key = key;
             this.handles = handles;
             this.readRadius = readRadius;
+            this.descentFloorY = descentFloorY;
         }
 
         @Override
@@ -534,7 +556,8 @@ public final class DecorationFiller {
                 }
                 DecorationContext.enter();
                 try {
-                    region = new DecorationRegion(this.level, this.center, this.handles, this.readRadius);
+                    region = new DecorationRegion(this.level, this.center, this.handles, this.readRadius,
+                            this.descentFloorY);
                     // 结构起点的 Y 锚会经 getFirstOccupiedHeight 构造 NoiseChunk，而 NoiseChunk 的
                     // 构造点要求 TerrainSystemContext 已设，否则抛。夹法照 fill 的形状。
                     TerrainSystemContext.set(((LevelSystems) this.level).terrainSystem());
