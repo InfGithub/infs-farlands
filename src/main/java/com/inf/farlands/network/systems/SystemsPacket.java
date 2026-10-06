@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
 /**
- * 某维度四族系统选择的下发包。
+ * 某维度五族系统选择的下发包。
  *
  * <p>选择本身用 {@link SystemsData.LevelSelection} 的 codec 编解码，与磁盘同一份定义：盘上怎么写、
  * 线上就怎么走，将来加参数类型只改一处。

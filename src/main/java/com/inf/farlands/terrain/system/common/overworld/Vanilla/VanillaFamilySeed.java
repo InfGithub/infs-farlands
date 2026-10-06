@@ -7,12 +7,12 @@ import com.inf.farlands.terrain.registry.SystemParamSpec;
 import com.inf.farlands.terrain.registry.SystemsData.Arg;
 
 /**
- * overworld Vanilla 四族共用的 seed 取值源。
+ * overworld Vanilla 五族共用的 seed 取值源。
  *
  * <p>
- * 四族的 seed 参数都声明同一个空框关键字，指向这里的 {@link #next()}。关键字在
- * {@code SystemSelectionParser.fromEmpty} 处求值，四族各求一次；共用同一个静态量，同一次创建里
- * 四个空框因此拿到同一个随机值，而不是四个互不相同的值。
+ * 五族的 seed 参数都声明同一个空框关键字，指向这里的 {@link #next()}。关键字在
+ * {@code SystemSelectionParser.fromEmpty} 处求值，五族各求一次；共用同一个静态量，同一次创建里
+ * 五个空框因此拿到同一个随机值，而不是五个互不相同的值。
  *
  * <p>
  * 会话边界是进页：本类把 {@link #reset()} 登记到 {@link SystemPageHooks} 上，进页时重抽，于是同一次
@@ -29,7 +29,7 @@ public final class VanillaFamilySeed {
     private VanillaFamilySeed() {
     }
 
-    /** 四族共用的 seed 参数声明：空框抽一次，抽到的值在本次会话内固定。 */
+    /** 五族共用的 seed 参数声明：空框抽一次，抽到的值在本次会话内固定。 */
     public static SystemParamSpec seedParam() {
         return SystemParamSpec.ofLong("seed")
                 .keyword("", () -> Arg.ofLong(next()),

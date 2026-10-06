@@ -2,6 +2,7 @@ package com.inf.farlands.mixin.terrain;
 
 import com.inf.farlands.terrain.BiomeSystem;
 import com.inf.farlands.terrain.CarverSystem;
+import com.inf.farlands.terrain.DecorationSystem;
 import com.inf.farlands.terrain.LevelSystems;
 import com.inf.farlands.terrain.SurfaceSystem;
 import com.inf.farlands.terrain.TerrainSystem;
@@ -21,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * 在 ServerLevel 构造末尾按该世界的系统配置建该 level 的四族系统，并作为 LevelSystems 与
+ * 在 ServerLevel 构造末尾按该世界的系统配置建该 level 的五族系统，并作为 LevelSystems 与
  * SystemsHolder 的取值入口。
  *
  * <p>
@@ -42,6 +43,8 @@ public abstract class ServerLevelMixin implements LevelSystems, SystemsHolder {
     private SurfaceSystem farlandsSurfaceSystem;
     @Unique
     private CarverSystem farlandsCarverSystem;
+    @Unique
+    private DecorationSystem farlandsDecorationSystem;
     @Unique
     private TerrainFiller farlandsTerrainFiller;
     @Unique
@@ -68,6 +71,7 @@ public abstract class ServerLevelMixin implements LevelSystems, SystemsHolder {
         this.farlandsBiomeSystem = SystemsIO.biome(selection);
         this.farlandsSurfaceSystem = SystemsIO.surface(selection);
         this.farlandsCarverSystem = SystemsIO.carver(selection);
+        this.farlandsDecorationSystem = SystemsIO.decoration(selection);
         this.farlandsTerrainFiller = new StandardTerrainFiller();
     }
 
@@ -94,6 +98,11 @@ public abstract class ServerLevelMixin implements LevelSystems, SystemsHolder {
     @Override
     public CarverSystem carverSystem() {
         return this.farlandsCarverSystem;
+    }
+
+    @Override
+    public DecorationSystem decorationSystem() {
+        return this.farlandsDecorationSystem;
     }
 
     @Override

@@ -42,7 +42,7 @@ import net.minecraft.util.Mth;
  * 样式 D 的下拉框，选项是注册表里该族系统的 id，下拉下面按该系统的声明生成一组参数文本框。
  *
  * <p>维度不写死：页列表由创建流程喂入，一页对应世界实际拥有的一个维度。系统与维度没有绑定关系，
- * 每页的四族下拉列的都是该族全部系统，任何维度可选任何一个。页标题优先取本模组语言文件里的
+ * 每页的五族下拉列的都是该族全部系统，任何维度可选任何一个。页标题优先取本模组语言文件里的
  * {@code createWorld.tab.infs-farlands.page.<path>}，没有该键时退回维度 id 本身，所以不认得的
  * 维度显示的是可读的 id，而不是未翻译的键名。
  *
@@ -167,14 +167,16 @@ public class FarlandsTab implements Tab {
         return Math.max(1, font.width(pageTitle(dimension)) + TAB_PADDING);
     }
 
-    /** 一个页：四族系统各一块，块内是标题、下拉、以及按声明生成的参数框。默认项是该族的 VOID。 */
+    /** 一个页：五族系统各一块，块内是标题、下拉、以及按声明生成的参数框。默认项是该族的 VOID。 */
     private LinearLayout familyBody(Font font, Identifier page, DropdownSelect.Layer layer,
             DropdownSelect.Revealer revealer) {
         List<SystemId> biomeIds = SystemRegistries.biomeIds();
         List<SystemId> terrainIds = SystemRegistries.terrainIds();
         List<SystemId> surfaceIds = SystemRegistries.surfaceIds();
         List<SystemId> carverIds = SystemRegistries.carverIds();
-        int width = this.fieldWidth(font, List.of(biomeIds, terrainIds, surfaceIds, carverIds));
+        List<SystemId> decorationIds = SystemRegistries.decorationIds();
+        int width = this.fieldWidth(font,
+                List.of(biomeIds, terrainIds, surfaceIds, carverIds, decorationIds));
 
         LinearLayout body = LinearLayout.vertical().spacing(8);
         body.addChild(this.familyBlock(font, Component.translatable("createWorld.tab.infs-farlands.family.biome"),
@@ -189,6 +191,11 @@ public class FarlandsTab implements Tab {
         body.addChild(this.familyBlock(font, Component.translatable("createWorld.tab.infs-farlands.family.carver"),
                 carverIds, page, FamilyKind.CARVER, SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM,
                 SystemRegistries::carverClassOf, layer, revealer, width));
+        body.addChild(this.familyBlock(font,
+                Component.translatable("createWorld.tab.infs-farlands.family.decoration"),
+                decorationIds, page, FamilyKind.DECORATION,
+                SystemRegistries.DECORATION_MISC_VOID_DECORATION_SYSTEM,
+                SystemRegistries::decorationClassOf, layer, revealer, width));
         body.addChild(SpacerElement.height(POPUP_ROOM));
         return body;
     }

@@ -12,6 +12,8 @@ import com.inf.farlands.terrain.system.biome.overworld.Vanilla.VanillaBiomeSyste
 import com.inf.farlands.terrain.system.carver.misc.Void.VoidCarverSystem;
 import com.inf.farlands.terrain.system.carver.overworld.Vanilla.VanillaCarverSystem;
 import com.inf.farlands.terrain.system.common.overworld.Vanilla.VanillaFamilySeed;
+import com.inf.farlands.terrain.system.decoration.misc.Void.VoidDecorationSystem;
+import com.inf.farlands.terrain.system.decoration.overworld.Vanilla.VanillaDecorationSystem;
 import com.inf.farlands.terrain.system.surface.misc.Void.VoidSurfaceSystem;
 import com.inf.farlands.terrain.system.surface.overworld.Vanilla.VanillaSurfaceSystem;
 import com.inf.farlands.terrain.system.terrain.block.misc.Sierpinski.SierpinskiPyramidBlockSystem;
@@ -68,7 +70,7 @@ public class FarlandsRegister {
         }
     }
 
-    /** 16 个内置系统按四族登记，id 与实现类的对应关系集中在此。 */
+    /** 18 个内置系统按五族登记，id 与实现类的对应关系集中在此。 */
     private static void registerSystems() {
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_VOID_NOISE_SYSTEM, VoidNoiseSystem.class);
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OVERWORLD_VANILLA_NOISE_SYSTEM,
@@ -100,6 +102,11 @@ public class FarlandsRegister {
                 VoidCarverSystem.class);
         SystemRegistries.registerCarver(SystemRegistries.CARVER_OVERWORLD_VANILLA_CARVER_SYSTEM,
                 VanillaCarverSystem.class);
+
+        SystemRegistries.registerDecoration(SystemRegistries.DECORATION_MISC_VOID_DECORATION_SYSTEM,
+                VoidDecorationSystem.class);
+        SystemRegistries.registerDecoration(SystemRegistries.DECORATION_OVERWORLD_VANILLA_DECORATION_SYSTEM,
+                VanillaDecorationSystem.class);
     }
 
     public static void register() {

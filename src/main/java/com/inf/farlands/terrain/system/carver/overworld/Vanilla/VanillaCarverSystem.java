@@ -54,7 +54,7 @@ import net.minecraft.world.level.levelgen.carver.ConfiguredWorldCarver;
  */
 public final class VanillaCarverSystem implements CarverSystem {
 
-    /** 声明：seed 由四族共用，见 {@link VanillaFamilySeed}。 */
+    /** 声明：seed 由五族共用，见 {@link VanillaFamilySeed}。 */
     @SystemDefaultParams
     public static final SystemParams DEFAULT_PARAMS = SystemParams.of(VanillaFamilySeed.seedParam());
 

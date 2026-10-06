@@ -49,7 +49,7 @@ import net.minecraft.world.level.levelgen.WorldGenerationContext;
  */
 public final class VanillaSurfaceSystem implements SurfaceSystem {
 
-    /** 声明：seed 由四族共用，见 {@link VanillaFamilySeed}。 */
+    /** 声明：seed 由五族共用，见 {@link VanillaFamilySeed}。 */
     @SystemDefaultParams
     public static final SystemParams DEFAULT_PARAMS = SystemParams.of(VanillaFamilySeed.seedParam());
 

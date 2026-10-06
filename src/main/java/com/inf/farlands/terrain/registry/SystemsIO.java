@@ -10,6 +10,7 @@ import java.util.WeakHashMap;
 
 import com.inf.farlands.terrain.BiomeSystem;
 import com.inf.farlands.terrain.CarverSystem;
+import com.inf.farlands.terrain.DecorationSystem;
 import com.inf.farlands.terrain.SurfaceSystem;
 import com.inf.farlands.terrain.TerrainSystem;
 import com.inf.farlands.terrain.registry.SystemsData.Arg;
@@ -174,16 +175,18 @@ public final class SystemsIO {
                         Map.of("seed", Arg.ofLong(0L))),
                 new SystemSelection(SystemRegistries.BIOME_MISC_VOID_BIOME_SYSTEM.value(), Map.of()),
                 new SystemSelection(SystemRegistries.SURFACE_MISC_VOID_SURFACE_SYSTEM.value(), Map.of()),
-                new SystemSelection(SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM.value(), Map.of()));
+                new SystemSelection(SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM.value(), Map.of()),
+                new SystemSelection(SystemRegistries.DECORATION_MISC_VOID_DECORATION_SYSTEM.value(), Map.of()));
     }
 
-    /** 非原版维度的默认：四族全 VOID。 */
+    /** 非原版维度的默认：五族全 VOID。 */
     private static LevelSelection voidSelection() {
         return new LevelSelection(
                 new SystemSelection(SystemRegistries.TERRAIN_MISC_VOID_NOISE_SYSTEM.value(), Map.of()),
                 new SystemSelection(SystemRegistries.BIOME_MISC_VOID_BIOME_SYSTEM.value(), Map.of()),
                 new SystemSelection(SystemRegistries.SURFACE_MISC_VOID_SURFACE_SYSTEM.value(), Map.of()),
-                new SystemSelection(SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM.value(), Map.of()));
+                new SystemSelection(SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM.value(), Map.of()),
+                new SystemSelection(SystemRegistries.DECORATION_MISC_VOID_DECORATION_SYSTEM.value(), Map.of()));
     }
 
     public static TerrainSystem terrain(LevelSelection selection) {
@@ -200,6 +203,10 @@ public final class SystemsIO {
 
     public static CarverSystem carver(LevelSelection selection) {
         return SystemRegistries.carver(systemId(selection.carver()), args(selection.carver()));
+    }
+
+    public static DecorationSystem decoration(LevelSelection selection) {
+        return SystemRegistries.decoration(systemId(selection.decoration()), args(selection.decoration()));
     }
 
     private static SystemId systemId(SystemSelection selection) {

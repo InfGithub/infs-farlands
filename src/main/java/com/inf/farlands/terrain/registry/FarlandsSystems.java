@@ -2,6 +2,7 @@ package com.inf.farlands.terrain.registry;
 
 import com.inf.farlands.terrain.BiomeSystem;
 import com.inf.farlands.terrain.CarverSystem;
+import com.inf.farlands.terrain.DecorationSystem;
 import com.inf.farlands.terrain.SurfaceSystem;
 import com.inf.farlands.terrain.TerrainSystem;
 
@@ -50,6 +51,11 @@ public final class FarlandsSystems {
     public static void registerCarver(SystemId id, Class<? extends CarverSystem> type) {
         verifyConstructor(id, type);
         SystemRegistries.registerCarver(id, type);
+    }
+
+    public static void registerDecoration(SystemId id, Class<? extends DecorationSystem> type) {
+        verifyConstructor(id, type);
+        SystemRegistries.registerDecoration(id, type);
     }
 
     /**

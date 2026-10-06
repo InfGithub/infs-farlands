@@ -18,7 +18,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
 /**
- * 四族系统选择与传参，落盘为 {@code data/infs-farlands/systems.dat}。
+ * 五族系统选择与传参，落盘为 {@code data/infs-farlands/systems.dat}。
  *
  * <p>
  * 维度为键。level.dat 与 SavedDataStorage 都是世界一份，三个维度共用同一个对象，所以这份数据
@@ -44,7 +44,7 @@ public final class SystemsData extends SavedData {
     public static final SavedDataType<SystemsData> TYPE = new SavedDataType<>(
             ID, SystemsData::new, CODEC, DataFixTypes.SAVED_DATA_WEATHER);
 
-    /** 维度 id 到该维度的四族选择，保插入顺序以便落盘可读。 */
+    /** 维度 id 到该维度的五族选择，保插入顺序以便落盘可读。 */
     private final Map<Identifier, LevelSelection> levels;
 
     /** SavedDataType 要求无参构造器；本 port 不走 computeIfAbsent，这个空对象不会被采用。 */
@@ -66,15 +66,16 @@ public final class SystemsData extends SavedData {
         return this.levels.get(dimension);
     }
 
-    /** 一个维度的四族选择。 */
+    /** 一个维度的五族选择。 */
     public record LevelSelection(SystemSelection terrain, SystemSelection biome, SystemSelection surface,
-            SystemSelection carver) {
+            SystemSelection carver, SystemSelection decoration) {
 
         public static final Codec<LevelSelection> CODEC = RecordCodecBuilder.create(i -> i.group(
                 SystemSelection.CODEC.fieldOf("terrain").forGetter(LevelSelection::terrain),
                 SystemSelection.CODEC.fieldOf("biome").forGetter(LevelSelection::biome),
                 SystemSelection.CODEC.fieldOf("surface").forGetter(LevelSelection::surface),
-                SystemSelection.CODEC.fieldOf("carver").forGetter(LevelSelection::carver))
+                SystemSelection.CODEC.fieldOf("carver").forGetter(LevelSelection::carver),
+                SystemSelection.CODEC.fieldOf("decoration").forGetter(LevelSelection::decoration))
                 .apply(i, LevelSelection::new));
     }
 

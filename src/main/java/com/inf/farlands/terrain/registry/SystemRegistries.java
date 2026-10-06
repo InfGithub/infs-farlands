@@ -5,13 +5,14 @@ import java.util.List;
 import com.inf.farlands.InfsFarlands;
 import com.inf.farlands.terrain.BiomeSystem;
 import com.inf.farlands.terrain.CarverSystem;
+import com.inf.farlands.terrain.DecorationSystem;
 import com.inf.farlands.terrain.SurfaceSystem;
 import com.inf.farlands.terrain.TerrainSystem;
 
 import net.minecraft.resources.Identifier;
 
 /**
- * 系统注册表的静态门面：四张类型化表、16 个内置 id 常量、四个登记入口、四个取用入口与元信息。
+ * 系统注册表的静态门面：五张类型化表、18 个内置 id 常量、五个登记入口、五个取用入口与元信息。
  *
  * <p>
  * 门面不读配置也不引 level：维度到 id 的选择由调用点给出，注册表层因此不依赖任何上层。
@@ -27,6 +28,7 @@ public final class SystemRegistries {
     private static final SystemRegistry<BiomeSystem> BIOME = new SystemRegistry<>(BiomeSystem.class);
     private static final SystemRegistry<SurfaceSystem> SURFACE = new SystemRegistry<>(SurfaceSystem.class);
     private static final SystemRegistry<CarverSystem> CARVER = new SystemRegistry<>(CarverSystem.class);
+    private static final SystemRegistry<DecorationSystem> DECORATION = new SystemRegistry<>(DecorationSystem.class);
 
     // id 与常量名都带所属维度，与实现类的包结构同序：族、维度、实现。misc 包取 misc，overworld 包取
     // overworld。
@@ -54,6 +56,10 @@ public final class SystemRegistries {
     public static final SystemId CARVER_MISC_VOID_CARVER_SYSTEM = id("misc_void_carver_system");
     public static final SystemId CARVER_OVERWORLD_VANILLA_CARVER_SYSTEM = id("overworld_vanilla_carver_system");
 
+    public static final SystemId DECORATION_MISC_VOID_DECORATION_SYSTEM = id("misc_void_decoration_system");
+    public static final SystemId DECORATION_OVERWORLD_VANILLA_DECORATION_SYSTEM = id(
+            "overworld_vanilla_decoration_system");
+
     private SystemRegistries() {
     }
 
@@ -79,6 +85,10 @@ public final class SystemRegistries {
         CARVER.register(id, type);
     }
 
+    public static void registerDecoration(SystemId id, Class<? extends DecorationSystem> type) {
+        DECORATION.register(id, type);
+    }
+
     // ---- 取用 ----
 
     public static TerrainSystem terrain(SystemId id, SystemArgs args) {
@@ -95,6 +105,10 @@ public final class SystemRegistries {
 
     public static CarverSystem carver(SystemId id, SystemArgs args) {
         return CARVER.newInstance(id, args);
+    }
+
+    public static DecorationSystem decoration(SystemId id, SystemArgs args) {
+        return DECORATION.newInstance(id, args);
     }
 
     // ---- 元信息 ----
@@ -115,6 +129,10 @@ public final class SystemRegistries {
         return CARVER;
     }
 
+    static SystemRegistry<DecorationSystem> decorationTable() {
+        return DECORATION;
+    }
+
     public static List<SystemId> terrainIds() {
         return TERRAIN.ids();
     }
@@ -129,6 +147,10 @@ public final class SystemRegistries {
 
     public static List<SystemId> carverIds() {
         return CARVER.ids();
+    }
+
+    public static List<SystemId> decorationIds() {
+        return DECORATION.ids();
     }
 
     public static Class<? extends TerrainSystem> terrainClassOf(SystemId id) {
@@ -147,6 +169,10 @@ public final class SystemRegistries {
         return CARVER.classOf(id);
     }
 
+    public static Class<? extends DecorationSystem> decorationClassOf(SystemId id) {
+        return DECORATION.classOf(id);
+    }
+
     public static boolean terrainContains(SystemId id) {
         return TERRAIN.contains(id);
     }
@@ -161,5 +187,9 @@ public final class SystemRegistries {
 
     public static boolean carverContains(SystemId id) {
         return CARVER.contains(id);
+    }
+
+    public static boolean decorationContains(SystemId id) {
+        return DECORATION.contains(id);
     }
 }

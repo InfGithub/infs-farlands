@@ -32,6 +32,7 @@
   "createWorld.tab.infs-farlands.family.terrain": "Terrain system",
   "createWorld.tab.infs-farlands.family.surface": "Surface system",
   "createWorld.tab.infs-farlands.family.carver": "Carver system",
+  "createWorld.tab.infs-farlands.family.decoration": "Decoration system",
   "createWorld.tab.infs-farlands.error.read.title": "Failed to read the system config",
   "createWorld.tab.infs-farlands.error.read.message": "Defaults are used instead: %s",
   "createWorld.tab.infs-farlands.error.args.title": "Invalid system parameters",

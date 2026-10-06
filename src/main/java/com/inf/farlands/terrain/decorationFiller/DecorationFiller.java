@@ -51,7 +51,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
  * 失败一律不抛：门没过就留表等下一轮，与 surface、carve 两族同形。
  *
  * <p>
- * 地物在这一遍里跑：池上建区域、调 ChunkGenerator.applyBiomeDecoration，写直进真实段；收尾回
+ * 地物在这一遍里跑：池上建区域、按维度系统分派 DecorationSystem，写直进真实段；收尾回
  * 主线程装方块实体、升段、标脏、补发、触发光照。结构的两相不在这里：它必须早于 fill，落在存在流程里。
  */
 public final class DecorationFiller {
@@ -443,7 +443,7 @@ public final class DecorationFiller {
         return handles;
     }
     /**
-     * 一个装饰任务。跑在 farlands-gen 上：建区域、跑 applyBiomeDecoration，然后无论成败都回主线程
+     * 一个装饰任务。跑在 farlands-gen 上：建区域、调该维度的装饰系统，然后无论成败都回主线程
      * 收尾。
      */
     private static final class DecorationTask implements Runnable {
@@ -487,8 +487,8 @@ public final class DecorationFiller {
                     TerrainSystemContext.set(((LevelSystems) this.level).terrainSystem());
                     long decStart = System.nanoTime();
                     try {
-                        this.level.getChunkSource().getGenerator().applyBiomeDecoration(region, this.center,
-                                ScopedStructureManager.of(this.level, region));
+                        ((LevelSystems) this.level).decorationSystem().applyDecoration(this.level, this.center,
+                                region);
                     } finally {
                         TerrainSystemContext.clear();
                         StageMetrics.stageWork(StageMetrics.STAGE_DECORATED, System.nanoTime() - decStart);

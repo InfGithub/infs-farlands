@@ -64,6 +64,7 @@
     "terrain.ServerLevelMixin",
     "terrain.carver.WorldCarverMixin",
     "terrain.decoration.BlockEntityLevelMixin",
+    "terrain.decoration.DecorationSeedMixin",
     "terrain.pipeline.GenerationChunkHolderMixin",
     "terrain.pipeline.SpawnPreloadMixin",
     "terrain.pipeline.SpawnPreloadJoinMixin",

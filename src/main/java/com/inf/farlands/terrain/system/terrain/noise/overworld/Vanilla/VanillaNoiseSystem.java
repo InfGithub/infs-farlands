@@ -27,7 +27,7 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
 public final class VanillaNoiseSystem implements NoiseSystem {
 
     /**
-     * 声明：seed 用四族共用的空框取值源，见 {@link VanillaFamilySeed}。本系统的 seed 只驱动密度
+     * 声明：seed 用五族共用的空框取值源，见 {@link VanillaFamilySeed}。本系统的 seed 只驱动密度
      * 节点重建，aquifer 与矿脉的随机源仍取该 level 的 RandomState。
      */
     @SystemDefaultParams

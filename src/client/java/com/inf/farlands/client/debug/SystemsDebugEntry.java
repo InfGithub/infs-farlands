@@ -19,7 +19,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
- * 调试界面上的当前 level 四族系统。
+ * 调试界面上的当前 level 五族系统。
  *
  * <p>只读客户端收到的那份，服务端在玩家进服或换维度后下发一次。查不到就明写未收到，不做本地回退，
  * 于是包没发、维度对不上、handler 没登记都会在界面上显形。
@@ -27,8 +27,8 @@ import net.minecraft.world.level.chunk.LevelChunk;
  * <p>参数文字直接取 NBT 标签的 SNBT 形式，显示层因此不需要第二份参数类型表。代价是文字带类型后缀，
  * seed 显示成 0L、scaleX 显示成 16.0d。
  *
- * <p>四族放进同一个组。DebugScreenOverlay 按组数对半劈决定左右列，四族拆成四组时那条边界会落在族
- * 中间，参数多的族与其余三族被分到两列；一个组必然同列，组的疏密由组内打包控制。
+ * <p>五族放进同一个组。DebugScreenOverlay 按组数对半劈决定左右列，五族拆成五组时那条边界会落在族
+ * 中间，参数多的族与其余四族被分到两列；一个组必然同列，组的疏密由组内打包控制。
  *
  * <p>组内每族一行族名加系统 id，参数行按行宽最匀切：行数取贪心的最少行数，在该行数下用动态规划
  * 最小化各行宽的平方和。总宽固定时平方和最小等价于方差最小，而行数不变，所以变匀不加高。单个参数
@@ -76,6 +76,7 @@ public class SystemsDebugEntry implements DebugScreenEntry {
         addFamily(lines, limit, "biome", selection.biome());
         addFamily(lines, limit, "surface", selection.surface());
         addFamily(lines, limit, "carver", selection.carver());
+        addFamily(lines, limit, "decoration", selection.decoration());
         return lines;
     }
 

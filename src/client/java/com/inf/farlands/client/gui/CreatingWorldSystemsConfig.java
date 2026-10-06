@@ -25,7 +25,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.storage.LevelResource;
 
 /**
- * 创建世界页签下面全部可编辑状态的暂存处：每个维度页 × 四族各自选中的系统，以及该系统每个参数的文本。
+ * 创建世界页签下面全部可编辑状态的暂存处：每个维度页 × 五族各自选中的系统，以及该系统每个参数的文本。
  *
  * <p>
  * 放静态持有者而不是页签实例上，是因为页签在 CreateWorldScreen.init 里构造，界面重建会重建页签，
@@ -47,10 +47,11 @@ public final class CreatingWorldSystemsConfig {
     /** 没有参数声明的系统退化成自由文本框，它的文本用这个键存，与参数名不可能冲突。 */
     public static final String FREE_KEY = "";
 
-    /** 非原版维度四族统一退到各自的 VOID 系统。 */
+    /** 非原版维度五族统一退到各自的 VOID 系统。 */
     private static final SystemId DEFAULT_BIOME = SystemRegistries.BIOME_MISC_VOID_BIOME_SYSTEM;
     private static final SystemId DEFAULT_SURFACE = SystemRegistries.SURFACE_MISC_VOID_SURFACE_SYSTEM;
     private static final SystemId DEFAULT_CARVER = SystemRegistries.CARVER_MISC_VOID_CARVER_SYSTEM;
+    private static final SystemId DEFAULT_DECORATION = SystemRegistries.DECORATION_MISC_VOID_DECORATION_SYSTEM;
 
     /** 本世界实际拥有的维度，决定界面有几页。由页签构造时喂入。 */
     private static volatile List<Identifier> dimensions = List.of();
@@ -138,7 +139,7 @@ public final class CreatingWorldSystemsConfig {
      * 把当前全部维度页的选择与参数文本编成一份 {@link SystemsData}，供新建世界落盘。
      *
      * <p>
-     * 四个族的注册表取类与参数文本的键都在这里收口，{@link SystemSelectionParser} 只做文本到
+     * 五个族的注册表取类与参数文本的键都在这里收口，{@link SystemSelectionParser} 只做文本到
      * {@code Arg} 的还原。选中的系统不在该族注册表里时 {@code classOf} 抛。
      *
      * <p>
@@ -167,7 +168,7 @@ public final class CreatingWorldSystemsConfig {
 
     /**
      * 一页的选择。地形族的默认按维度分派：原版三维度取主世界 vanilla 噪声系统，其余维度退 VOID。
-     * 另三族不分维度，都退各自的 VOID。
+     * 另五族不分维度，都退各自的 VOID。
      *
      * <p>判据取自 {@link SystemsIO#isVanillaDimension}，与 {@code SystemsIO.defaultFor} 同源。新世界的
      * 维度集合来自界面暂存，那条路在新世界走不到，所以这份默认就是新世界实际拿到的默认；两处若各写一份
@@ -181,7 +182,8 @@ public final class CreatingWorldSystemsConfig {
                 family(page, FamilyKind.TERRAIN, SystemRegistries::terrainClassOf, terrain),
                 family(page, FamilyKind.BIOME, SystemRegistries::biomeClassOf, DEFAULT_BIOME),
                 family(page, FamilyKind.SURFACE, SystemRegistries::surfaceClassOf, DEFAULT_SURFACE),
-                family(page, FamilyKind.CARVER, SystemRegistries::carverClassOf, DEFAULT_CARVER));
+                family(page, FamilyKind.CARVER, SystemRegistries::carverClassOf, DEFAULT_CARVER),
+                family(page, FamilyKind.DECORATION, SystemRegistries::decorationClassOf, DEFAULT_DECORATION));
     }
 
     /** 一族的选择。没选过时用该族的 VOID，与界面的初始选中同一份常量。 */
@@ -205,6 +207,7 @@ public final class CreatingWorldSystemsConfig {
         applySystem(page, FamilyKind.BIOME, selection.biome());
         applySystem(page, FamilyKind.SURFACE, selection.surface());
         applySystem(page, FamilyKind.CARVER, selection.carver());
+        applySystem(page, FamilyKind.DECORATION, selection.decoration());
     }
 
     /**
@@ -238,6 +241,7 @@ public final class CreatingWorldSystemsConfig {
             case BIOME -> SystemRegistries.biomeClassOf(id);
             case SURFACE -> SystemRegistries.surfaceClassOf(id);
             case CARVER -> SystemRegistries.carverClassOf(id);
+            case DECORATION -> SystemRegistries.decorationClassOf(id);
         };
     }
 
