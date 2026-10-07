@@ -161,7 +161,7 @@ $\eta$ 是 $R$ 相对公共因子 $W_xW_yW_z$ 的量级，不是 $R$ 相对第�
 
 $$\frac{C}{W_xW_yW_z}=\ell(\mathbf F)+\rho(\mathbf F),\qquad |\rho|\le\eta\cdot\max_\kappa|g_\kappa|$$
 
-则零集是 $\ell+\rho=0$ ；在 $\nabla\ell\ne0$ 时，它与平面 $\ell=0$ 的距离不超过 $|\rho|/|\nabla\ell|$ ：深区里 $\rho=O(u^{-2})$ ，远小于一格；贴着门槛时 $\max_\kappa|g_\kappa|$ 到 $2^{32}$ 量级，上界放宽到几格。
+则零集是 $\ell+\rho=0$ 。在 $\nabla\ell\ne0$ 时，它在 $\mathbf F$ 空间里到平面 $\ell=0$ 的距离不超过 $|\rho|/|\nabla\ell|$ ；深区里 $\eta=O(u^{-3})$ 、 $\max_\kappa|g_\kappa|=O(u)$ ，故 $\rho=O(u^{-2})$ 并随 $|u_i|$ 增大趋于零。
 
 ### 零集
 
@@ -169,7 +169,7 @@ $\ell=\sum_\kappa\sigma_\kappa g_\kappa$ ： $\sigma_\kappa$ 是常数， $g_\ka
 
 $$\ell(\mathbf F)=\alpha_xF_x+\alpha_yF_y+\alpha_zF_z+\beta$$
 
-$\ell=0$ 在三维里是平面。 $R$ 的量级可忽略，所以零集是这张平面的亚格邻域，即渐近平面。**退化条件**： $\nabla\ell=(\alpha_x,\alpha_y,\alpha_z)\ne0$ ，即 $(a,b,c)\ne(0,0,0)$ ；三者同时为零时 $\ell$ 是常数， $\beta\ne0$ 时零集为空， $\beta=0$ 时领头项整体消失、由 $R$ 主导。
+$\ell=0$ 在三维里是平面。 $R$ 的量级可忽略，所以真实零集渐近收敛于这张平面。退化条件： $\nabla\ell=(\alpha_x,\alpha_y,\alpha_z)\ne0$ ，即 $(a,b,c)\ne(0,0,0)$ ；三者同时为零时 $\ell$ 是常数， $\beta\ne0$ 时零集为空， $\beta=0$ 时领头项整体消失、由 $R$ 主导。
 
 ### $a, b, c, d$
 
@@ -278,6 +278,18 @@ $$\frac{2^{31}}{\sigma_k}=\frac{2^{31}}{s_{\text{ref}}}~2^{~k_{\max}-k}=2^{~k_{\
 记 $T_k:=2^{~k_{\max}-k}E$ ，平面方程即
 
 $$a~x+\frac{b}{2}y+c~z+T_k\bigl(1-2^{-32}\bigr)d+\frac{a+b+c}{2\sigma_k}=0$$
+
+### 方块距离公式
+
+真实零集 $\ell+\rho=0$ 与平面 $\ell=0$ 在方块坐标里的间距是
+
+$$\text{dist}_{\text{block}}=\frac{2|\rho|}{\sigma_k\sqrt{a^2+\frac{b^2}{4}+c^2}}$$
+
+两步得到： $\ell$ 在 $\mathbf F$ 空间的梯度是 $(\alpha_x,\alpha_y,\alpha_z)$，点到平面的距离是 $|\rho|/|\nabla\ell|$ ；换到方块坐标后各轴缩放不同，梯度变成 $\bigl(\sigma_k\alpha_x,\ \frac{\sigma_k}{2}\alpha_y,\ \sigma_k\alpha_z\bigr)$ ，按 $a=2\alpha_x$、 $b=2\alpha_y$、 $c=2\alpha_z$ 代掉即得。
+
+代入 $|\rho|\le\eta\cdot\max_\kappa|g_\kappa|$ 得它的上界
+
+$$\text{dist}_{\text{block}}\le\frac{2~\eta~\max_\kappa|g_\kappa|}{\sigma_k\sqrt{a^2+\frac{b^2}{4}+c^2}}$$
 
 ### 可见性
 
