@@ -33,7 +33,9 @@ $S(u)=u^2(3-2u)$ （[CwgNoise.java#L159-162](../../../../src/main/java/com/inf/f
 
 $S(0)=0$ 、 $S(1)=1$ 、两端斜率为 0。所以 $S(u)$ 在 $[0,1]$ 内，权重也在 $[0,1]$ 内。
 
-### 冻结情形 $u \notin [0,1)$
+### 越界情形 $u \notin [0,1)$
+
+索引冻结与权重越界是两个门槛。正侧索引从 $F=\text{MAX}$ 起就已固定，但那时 $u\in[0,1)$ ，权重还在正常区间，要到 $F=2^{31}$ 才有 $u=1$ ；负侧从 $F=\text{MIN}$ 起就直接落到 $u=-(2^{32}-1)$ 。
 
 记最高阶的每方块缩放为 $s_{\text{ref}}$ 、最高阶号为 $k_{\max}$ ，则
 
@@ -151,13 +153,15 @@ $$\frac{|T_\Lambda(\kappa)|}{\prod_i|W_i|}\ \le\ \prod_{i\in \Lambda}\frac{1}{|u
 
 **相对量级**：
 
-$$\eta:=\sum_{\varnothing\ne \Lambda}\prod_{i\in \Lambda}\frac{1}{|u_i|^3}=\frac{1}{|u_x|^3}+\frac{1}{|u_y|^3}+\frac{1}{|u_z|^3}+O\bigl(u^{-6}\bigr)$$
+$$\eta:=4\sum_i\frac{1}{|u_i|^3}+2\sum_{i<j}\frac{1}{|u_i|^3|u_j|^3}+\prod_i\frac{1}{|u_i|^3}$$
+
+系数来自对 $\kappa$ 的求和：固定 $\Lambda$ 后只钉住 $\Lambda$ 内的位，存活的 $\kappa$ 有 $2^{3-|\Lambda|}$ 个，所以 $|\Lambda|=1,2,3$ 分别带 $4,2,1$ 倍。
 
 $\eta$ 是 $R$ 相对公共因子 $W_xW_yW_z$ 的量级，不是 $R$ 相对第一块 $W_xW_yW_z~\ell$ 的比值：第一块在 $\ell=0$ 上恒为零，那个比值在零集上不存在。写成
 
 $$\frac{C}{W_xW_yW_z}=\ell(\mathbf F)+\rho(\mathbf F),\qquad |\rho|\le\eta\cdot\max_\kappa|g_\kappa|$$
 
-则零集是 $\ell+\rho=0$ ，它与平面 $\ell=0$ 的距离不超过 $|\rho|/|\nabla\ell|$ ：深区里 $\rho=O(u^{-2})$ ，远小于一格；贴着门槛时 $\max_\kappa|g_\kappa|$ 到 $2^{32}$ 量级，上界放宽到几格。
+则零集是 $\ell+\rho=0$ ；在 $\nabla\ell\ne0$ 时，它与平面 $\ell=0$ 的距离不超过 $|\rho|/|\nabla\ell|$ ：深区里 $\rho=O(u^{-2})$ ，远小于一格；贴着门槛时 $\max_\kappa|g_\kappa|$ 到 $2^{32}$ 量级，上界放宽到几格。
 
 ### 零集
 
@@ -165,7 +169,7 @@ $\ell=\sum_\kappa\sigma_\kappa g_\kappa$ ： $\sigma_\kappa$ 是常数， $g_\ka
 
 $$\ell(\mathbf F)=\alpha_xF_x+\alpha_yF_y+\alpha_zF_z+\beta$$
 
-$\ell=0$ 在三维里是平面。 $R$ 的量级可忽略，所以零集是这张平面的亚格邻域，即渐近平面。
+$\ell=0$ 在三维里是平面。 $R$ 的量级可忽略，所以零集是这张平面的亚格邻域，即渐近平面。**退化条件**： $\nabla\ell=(\alpha_x,\alpha_y,\alpha_z)\ne0$ ，即 $(a,b,c)\ne(0,0,0)$ ；三者同时为零时 $\ell$ 是常数， $\beta\ne0$ 时零集为空， $\beta=0$ 时领头项整体消失、由 $R$ 主导。
 
 ### $a, b, c, d$
 
@@ -289,7 +293,7 @@ $$\text{seedEff}=\text{base}+k$$
 
 #### 八分体与符号
 
-两个方向的索引都落到同一对 $\text{MAX}$ 与 $\text{MIN}$ ，因此 $(a,b,c,d)$ 与坐标落在哪个符号侧无关，八个八分体共用同一组系数， $\ell=0$ 在全局坐标里是同一张平面。随象限变化的是公因子 $W_xW_yW_z$ 的符号， $u_i<0$ 时 $W_i<0$ ，也就是实体侧按象限奇偶翻转。
+两个方向的索引都落到同一对 $\text{MAX}$ 与 $\text{MIN}$ ，因此 $(a,b,c,d)$ 与坐标落在哪个符号侧无关，八个八分体共用同一组系数， $\ell=0$ 在全局坐标里是同一张平面。随象限变化的是公因子 $W_xW_yW_z$ 的符号：在 $|u_i|\gg1$ 的区间里 $W_i$ 与 $u_i$ 同号，于是实体侧按象限奇偶翻转。
 
 #### 可达性
 
