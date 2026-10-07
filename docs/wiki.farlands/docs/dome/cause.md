@@ -153,7 +153,7 @@ $$\frac{|T_\Lambda(\kappa)|}{\prod_i|W_i|}\ \le\ \prod_{i\in \Lambda}\frac{1}{|u
 
 **相对量级**：
 
-$$\eta:=4\sum_i\frac{1}{|u_i|^3}+2\sum_{i<j}\frac{1}{|u_i|^3|u_j|^3}+\prod_i\frac{1}{|u_i|^3}$$
+$$\eta:=4\sum_i\frac{1}{|u_i|^3}+2\sum_{i \lt j}\frac{1}{|u_i|^3|u_j|^3}+\prod_i\frac{1}{|u_i|^3}$$
 
 系数来自对 $\kappa$ 的求和：固定 $\Lambda$ 后只钉住 $\Lambda$ 内的位，存活的 $\kappa$ 有 $2^{3-|\Lambda|}$ 个，所以 $|\Lambda|=1,2,3$ 分别带 $4,2,1$ 倍。
 
