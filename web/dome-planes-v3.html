@@ -1,0 +1,4182 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>穹顶</title>
+    <link
+      id="katex-css"
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0e12;
+        --panel: #12161c;
+        --surface: #191e25;
+        --line: #262d37;
+        --fg: #e2e7ee;
+        --dim: #8995a6;
+        --accent: #abc6f4;
+        --err: #ef9494;
+        --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          13px/1.5 "Inter",
+          "Segoe UI",
+          "Microsoft YaHei",
+          system-ui,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      button,
+      input,
+      summary {
+        -webkit-tap-highlight-color: transparent;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        color: inherit;
+        cursor: pointer;
+        border: 1px solid var(--line);
+        background: transparent;
+        border-radius: 7px;
+        transition:
+          background 0.18s,
+          border-color 0.18s,
+          color 0.18s,
+          transform 0.18s;
+      }
+      button:hover {
+        background: #232b35;
+        border-color: #465366;
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+      button:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+      button:focus-visible,
+      summary:focus-visible,
+      .plane:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      button svg {
+        width: 17px;
+        height: 17px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex-shrink: 0;
+      }
+      #app {
+        height: 100%;
+        height: 100dvh;
+        display: grid;
+        grid-template-rows: 72px minmax(0, 1fr);
+        opacity: 1;
+        animation: enter 0.6s var(--ease);
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 0 28px;
+        border-bottom: 1px solid var(--line);
+        background: #10141a;
+        z-index: 20;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        flex-shrink: 0;
+      }
+      .brand-mark {
+        height: 32px;
+        width: 32px;
+        color: #c0cee2;
+      }
+      .brand-mark svg {
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.15;
+        stroke-linejoin: round;
+      }
+      .brand h1 {
+        font-size: 17px;
+        font-weight: 550;
+        letter-spacing: 2px;
+        margin: 0;
+      }
+      .brand-sub {
+        color: #768396;
+        font: 9px/1.6 var(--mono);
+        letter-spacing: 2.1px;
+        margin-top: 2px;
+      }
+      .head-input {
+        display: flex;
+        gap: 9px;
+        align-items: center;
+      }
+      .seed-control {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: #0c1016;
+        border: 1px solid #303946;
+        border-radius: 8px;
+        padding: 0 13px;
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+      }
+      .seed-control:focus-within {
+        border-color: #8aa9d7;
+        box-shadow: 0 0 0 3px #8aa9d712;
+      }
+      .seed-control label {
+        font: 10px var(--mono);
+        letter-spacing: 1.1px;
+        color: #8695a9;
+      }
+      #seed-input {
+        width: 210px;
+        height: 37px;
+        min-width: 0;
+        padding: 0;
+        color: #e9eef5;
+        background: none;
+        border: 0;
+        outline: 0;
+        font: 12px var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+      #seed-input[aria-invalid="true"] {
+        color: var(--err);
+      }
+      #render-btn {
+        height: 39px;
+        padding: 0 17px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        background: #c6d5e9;
+        border-color: #c6d5e9;
+        color: #142034;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      #render-btn:hover {
+        background: #e0e9f7;
+        border-color: #e0e9f7;
+      }
+      #render-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: 356px minmax(0, 1fr);
+        min-height: 0;
+        overflow: hidden;
+      }
+      #panel {
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        z-index: 4;
+        overflow: hidden;
+      }
+      .seed-section {
+        padding: 0 20px;
+        border-bottom: 1px solid var(--line);
+      }
+      .seed-section summary {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        height: 45px;
+        list-style: none;
+        font-size: 11px;
+        color: var(--dim);
+        cursor: pointer;
+      }
+      .seed-section summary::-webkit-details-marker {
+        display: none;
+      }
+      .seed-section summary:after {
+        content: "+";
+        font: 16px var(--mono);
+        color: #9ba8bc;
+      }
+      .seed-section details[open] summary:after {
+        content: "−";
+      }
+      .seed-section details[open] table {
+        animation: enter 0.25s var(--ease);
+      }
+      table.seeds {
+        width: 100%;
+        padding: 0 0 13px;
+        font: 11px/1.8 var(--mono);
+        font-variant-numeric: tabular-nums;
+        border-spacing: 0;
+      }
+      table.seeds td:first-child {
+        color: var(--dim);
+      }
+      table.seeds td:last-child {
+        text-align: right;
+        color: #c0ccdc;
+      }
+      #rows-section {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1;
+      }
+      .section-head {
+        padding: 20px 20px 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .section-head h2 {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 1px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .count {
+        font: 10px var(--mono);
+        color: #9cabc1;
+        background: #222a35;
+        border-radius: 4px;
+        padding: 2px 5px;
+        letter-spacing: 0;
+      }
+      button.mini {
+        padding: 4px 8px;
+        font-size: 10px;
+        line-height: 1.5;
+      }
+      #toggle-all {
+        color: var(--dim);
+        border-color: transparent;
+        padding-right: 0;
+      }
+      #toggle-all:hover {
+        color: var(--fg);
+        background: none;
+      }
+      #rows {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        overscroll-behavior: contain;
+        padding: 0 12px 12px;
+        scrollbar-gutter: stable;
+        scrollbar-width: thin;
+        scrollbar-color: #384251 transparent;
+      }
+      .plane {
+        position: relative;
+        padding: 12px 12px 10px;
+        margin: 0 0 7px;
+        border: 1px solid #29323f;
+        border-left: 2px solid var(--row-color);
+        border-radius: 7px;
+        background: #191f28;
+        transition:
+          background 0.22s,
+          border-color 0.22s,
+          opacity 0.22s;
+        animation: card-in 0.38s var(--ease) both;
+        animation-delay: var(--delay, 0ms);
+        cursor: default;
+        outline: none;
+      }
+      .plane.hot {
+        background: #232d3b;
+        border-top-color: #5c718c;
+        border-right-color: #5c718c;
+        border-bottom-color: #5c718c;
+      }
+      .plane.off {
+        background: #12171e;
+        border-top-color: #202732;
+        border-right-color: #202732;
+        border-bottom-color: #202732;
+      }
+      .plane.off .title,
+      .plane.off .coef,
+      .plane.off .eq,
+      .plane.off .seed-eff {
+        opacity: 0.58;
+      }
+      .plane.gone {
+        opacity: 0.45;
+        border-left-style: dotted;
+      }
+      .plane.pinned {
+        background: #1b2431;
+        border-top-color: #4a5d7c;
+        border-right-color: #4a5d7c;
+        border-bottom-color: #4a5d7c;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        font: 11px var(--mono);
+      }
+      .idx {
+        color: #9aa8ba;
+        font: 10px var(--mono);
+        min-width: 23px;
+      }
+      .title-rest {
+        color: var(--row-color);
+        font-weight: 600;
+      }
+      .order {
+        color: #9aa8ba;
+        font: 10px var(--mono);
+        border-left: 1px solid #35404f;
+        padding-left: 8px;
+        margin-left: 0;
+      }
+      .head-right {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        font-size: 10px;
+        color: #7e8ca0;
+        white-space: nowrap;
+      }
+      .plane .head-right button {
+        min-width: 37px;
+        padding: 2px 5px;
+        border-color: #3b495c;
+        color: #b1c7e5;
+      }
+      .plane.off .head-right button {
+        border-color: #303947;
+        color: #7b8da6;
+      }
+      .plane .eq {
+        margin: 10px 0 7px;
+        font-size: 12px;
+        white-space: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        min-height: 23px;
+        padding: 1px 0;
+        scrollbar-width: thin;
+        scrollbar-color: #3e4d63 transparent;
+        transition: opacity 0.22s;
+      }
+      .plane .eq .katex {
+        font-size: 1.13em;
+      }
+      .plane .coef,
+      .seed-eff {
+        font: 10px/1.8 var(--mono);
+        color: #8898ae;
+        font-variant-numeric: tabular-nums;
+        transition: opacity 0.22s;
+        white-space: nowrap;
+      }
+      .plane .coef {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .seed-eff {
+        font-size: 9px;
+        color: #65758b;
+        margin-top: 2px;
+      }
+      .plane.hot .seed-eff {
+        color: #9eafc5;
+      }
+      .legend-section {
+        position: relative;
+        padding: 14px 20px;
+        border-top: 1px solid var(--line);
+        background: #12161c;
+        flex-shrink: 0;
+      }
+      .family-key {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font: 10px var(--mono);
+        color: #adb7c6;
+      }
+      .family-key span {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .sw {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .legend-section summary {
+        list-style: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: #6f7f95;
+        font-size: 10px;
+        margin-top: 12px;
+      }
+      .legend-section summary::-webkit-details-marker {
+        display: none;
+      }
+      .legend-section summary:after {
+        content: "⌃";
+        font-size: 13px;
+      }
+      .legend-section details[open] summary:after {
+        content: "⌄";
+      }
+      #legend {
+        position: absolute;
+        bottom: 73px;
+        left: 12px;
+        right: 12px;
+        padding: 16px;
+        background: #1a222e;
+        border: 1px solid #3b485c;
+        border-radius: 9px;
+        box-shadow: 0 12px 40px #0005;
+        font-size: 11px;
+        color: #9faec2;
+        line-height: 1.8;
+        z-index: 6;
+        animation: card-in 0.2s var(--ease);
+      }
+      #legend table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+      }
+      #legend th,
+      #legend td {
+        text-align: left;
+        padding: 3px 0;
+        border-bottom: 1px solid #2c3747;
+      }
+      #legend th {
+        font-weight: 500;
+        color: #c0cede;
+      }
+      #legend p {
+        margin: 7px 0 0;
+      }
+      #legend code {
+        font: 10px var(--mono);
+        color: #d0dbea;
+      }
+      #stage {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        background: radial-gradient(
+          ellipse at 50% 43%,
+          #171f2b 0%,
+          #10161e 48%,
+          #0c1118 100%
+        );
+      }
+      #canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        cursor: grab;
+        outline: none;
+      }
+      #canvas:active {
+        cursor: grabbing;
+      }
+      #canvas:focus-visible {
+        box-shadow: inset 0 0 0 2px #abc6f460;
+      }
+      .stage-header {
+        position: absolute;
+        left: 26px;
+        top: 24px;
+        pointer-events: none;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        color: #9eacc0;
+        font-size: 11px;
+        letter-spacing: 1px;
+      }
+      .stage-header:before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #91aac8;
+      }
+      .view-tools {
+        position: absolute;
+        top: 18px;
+        right: 22px;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        padding: 4px;
+        background: #101721cc;
+        border: 1px solid #2c3747;
+        border-radius: 9px;
+        backdrop-filter: blur(12px);
+      }
+      .view-tools button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 30px;
+        border: 0;
+        border-radius: 5px;
+        color: #8596ae;
+        font: 10px var(--mono);
+      }
+      .view-tools button:hover {
+        color: #e0e9f6;
+        background: #263347;
+      }
+      .view-tools button[aria-pressed="true"] {
+        color: #d8e6fa;
+        background: #29394f;
+      }
+      .tool-sep {
+        height: 16px;
+        width: 1px;
+        background: #303c4d;
+        margin: 0 4px;
+      }
+      .stage-footer {
+        position: absolute;
+        left: 26px;
+        bottom: 22px;
+        right: 26px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        pointer-events: none;
+        font: 10px var(--mono);
+        color: #73839a;
+      }
+      .scale-label {
+        display: flex;
+        gap: 9px;
+        align-items: center;
+      }
+      .scale-mark {
+        width: 20px;
+        height: 6px;
+        border: 1px solid #677b96;
+        border-top: 0;
+      }
+      .visible-count {
+        color: #8697ae;
+      }
+      .visible-count b {
+        color: #bfcee1;
+        font-weight: 400;
+      }
+      #labels {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      .axis-label {
+        position: absolute;
+        top: 0;
+        left: 0;
+        white-space: nowrap;
+        font: 10px/1 var(--mono);
+        text-shadow:
+          0 1px 5px #0a0f16,
+          0 0 4px #0a0f16;
+        will-change: transform;
+        transition: opacity 0.16s;
+      }
+      .axis-name {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      #tip {
+        position: absolute;
+        right: 24px;
+        bottom: 58px;
+        max-width: min(410px, calc(100% - 48px));
+        background: #151e2aed;
+        border: 1px solid #41516a;
+        border-radius: 9px;
+        padding: 13px 16px;
+        pointer-events: none;
+        z-index: 5;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(7px);
+        transition:
+          opacity 0.18s,
+          transform 0.24s var(--ease),
+          visibility 0.18s;
+        box-shadow: 0 12px 40px #0003;
+        backdrop-filter: blur(14px);
+      }
+      #tip.visible {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+      }
+      .t-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #a6b7cf;
+        font: 10px var(--mono);
+      }
+      .t-coef {
+        margin: 7px 0;
+        color: #8395ad;
+        font: 10px var(--mono);
+      }
+      .t-eq {
+        overflow-x: auto;
+        white-space: nowrap;
+        font-size: 14px;
+        scrollbar-width: thin;
+      }
+      #ctx-menu {
+        position: absolute;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 4px;
+        background: #202b3b;
+        border: 1px solid #485a75;
+        border-radius: 8px;
+        box-shadow: 0 10px 32px #0005;
+        animation: card-in 0.16s var(--ease);
+      }
+      #ctx-copy,
+      #ctx-pin,
+      #ctx-goto {
+        border: 0;
+        padding: 7px 12px;
+        font-size: 11px;
+      }
+      #goto-panel {
+        position: absolute;
+        z-index: 11;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        padding: 10px;
+        background: #202b3b;
+        border: 1px solid #485a75;
+        border-radius: 8px;
+        box-shadow: 0 10px 32px #0005;
+        animation: card-in 0.16s var(--ease);
+      }
+      .goto-fields {
+        display: flex;
+        gap: 7px;
+      }
+      #goto-panel label {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font: 10px var(--mono);
+        color: #9aa8ba;
+      }
+      #goto-panel input {
+        width: 78px;
+        height: 26px;
+        padding: 0 6px;
+        color: #e9eef5;
+        background: #0c1016;
+        border: 1px solid #303946;
+        border-radius: 5px;
+        font: 11px var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+      #goto-panel input:focus {
+        outline: none;
+        border-color: #8aa9d7;
+      }
+      .goto-error {
+        font-size: 10px;
+        color: var(--err);
+      }
+      .goto-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+      .err,
+      .banner,
+      .status,
+      .check {
+        font-size: 11px;
+        line-height: 1.7;
+        padding: 10px 16px;
+        margin: 0;
+        color: var(--err);
+        background: #301c2380;
+        border-bottom: 1px solid #63323e;
+        overflow-wrap: anywhere;
+      }
+      .status:not(.bad),
+      .check:not(.bad) {
+        color: var(--dim);
+      }
+      #stage-error {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        max-width: 80%;
+        background: #231c25f5;
+        border: 1px solid #704855;
+        color: var(--err);
+        border-radius: 10px;
+        padding: 18px 22px;
+        font-size: 12px;
+        white-space: pre-wrap;
+        line-height: 1.8;
+      }
+      @keyframes enter {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes card-in {
+        from {
+          opacity: 0;
+          transform: translateY(7px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (min-width: 1600px) {
+        .workspace {
+          grid-template-columns: 380px minmax(0, 1fr);
+        }
+        .plane {
+          padding: 14px;
+        }
+        .plane .eq {
+          font-size: 13px;
+        }
+        .plane .coef,
+        .seed-eff {
+          font-size: 10px;
+        }
+      }
+      @media (max-width: 1000px) {
+        .workspace {
+          grid-template-columns: 320px minmax(0, 1fr);
+        }
+        .topbar {
+          padding: 0 20px;
+        }
+        .brand h1 {
+          font-size: 15px;
+        }
+        .plane {
+          padding: 10px;
+        }
+        .plane .coef {
+          font-size: 8.5px;
+        }
+        .stage-header {
+          left: 20px;
+        }
+        .view-tools {
+          right: 16px;
+        }
+      }
+      @media (max-width: 760px) {
+        #app {
+          grid-template-rows: 109px minmax(0, 1fr);
+        }
+        .topbar {
+          padding: 12px 16px;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .brand {
+          gap: 9px;
+        }
+        .brand-mark {
+          width: 24px;
+          height: 24px;
+        }
+        .brand h1 {
+          font-size: 14px;
+          letter-spacing: 2px;
+        }
+        .brand-sub {
+          display: none;
+        }
+        .head-input {
+          width: 100%;
+          gap: 7px;
+        }
+        .seed-control {
+          flex: 1;
+          min-width: 0;
+        }
+        #seed-input {
+          width: 100%;
+          height: 32px;
+          font-size: 11px;
+        }
+        #render-btn {
+          height: 34px;
+          padding: 0 14px;
+        }
+        .workspace {
+          grid-template-columns: 1fr;
+          grid-template-rows: minmax(180px, 1fr) minmax(190px, 37%);
+        }
+        #stage {
+          grid-row: 1;
+        }
+        #panel {
+          grid-row: 2;
+          border-right: 0;
+          border-top: 1px solid var(--line);
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto minmax(0, 1fr);
+        }
+        .seed-section {
+          display: none;
+        }
+        #rows-section {
+          grid-row: 2;
+        }
+        .section-head {
+          padding: 11px 16px 9px;
+        }
+        .legend-section {
+          position: absolute;
+          top: 12px;
+          right: 16px;
+          border: 0;
+          padding: 0;
+          background: none;
+          z-index: 7;
+        }
+        .legend-section details {
+          display: none;
+        }
+        .family-key {
+          font-size: 9px;
+          gap: 12px;
+        }
+        .workspace > #panel {
+          position: relative;
+        }
+        .section-head #toggle-all {
+          margin-top: 21px;
+        }
+        .section-head {
+          height: 51px;
+          align-items: flex-start;
+        }
+        .section-head h2 {
+          padding-top: 2px;
+        }
+        #rows {
+          display: flex;
+          gap: 8px;
+          padding: 0 12px 12px;
+          overflow-x: auto;
+          overflow-y: auto;
+          scrollbar-gutter: auto;
+        }
+        .plane {
+          flex: 0 0 290px;
+          align-self: flex-start;
+          margin: 0;
+        }
+        .stage-header {
+          top: 19px;
+          left: 16px;
+          font-size: 10px;
+        }
+        .view-tools {
+          top: 10px;
+          right: 12px;
+          padding: 3px;
+        }
+        .view-tools button {
+          width: 27px;
+          height: 28px;
+        }
+        .stage-footer {
+          bottom: 14px;
+          left: 16px;
+          right: 16px;
+          font-size: 9px;
+        }
+        #tip {
+          bottom: 43px;
+          right: 14px;
+          padding: 10px 12px;
+          max-width: calc(100% - 28px);
+        }
+        .t-eq {
+          font-size: 12px;
+        }
+        .t-coef {
+          font-size: 9px;
+        }
+        .t-head {
+          font-size: 9px;
+        }
+        .axis-label {
+          font-size: 9px;
+        }
+      }
+      @media (max-height: 650px) and (min-width: 761px) {
+        .legend-section {
+          padding-top: 10px;
+          padding-bottom: 10px;
+        }
+        .seed-section summary {
+          height: 35px;
+        }
+        .section-head {
+          padding-top: 13px;
+        }
+      }
+      @media (max-width: 760px) {
+        #panel {
+          display: flex;
+          flex-direction: column;
+        }
+        .seed-section {
+          display: block;
+          position: relative;
+          flex-shrink: 0;
+          padding: 0 16px;
+        }
+        .seed-section summary {
+          height: 31px;
+          font-size: 10px;
+        }
+        .seed-section details[open] table {
+          position: absolute;
+          top: 31px;
+          left: 12px;
+          width: calc(100% - 24px);
+          z-index: 12;
+          background: #1a222e;
+          border: 1px solid #3b485c;
+          border-radius: 7px;
+          padding: 10px 14px;
+          box-shadow: 0 10px 20px #0005;
+        }
+        .section-head {
+          height: auto;
+          align-items: center;
+          padding: 10px 16px;
+        }
+        .section-head #toggle-all {
+          margin: 0;
+        }
+        .legend-section {
+          position: relative;
+          top: auto;
+          right: auto;
+          padding: 8px 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-top: 1px solid var(--line);
+        }
+        .legend-section details {
+          display: block;
+        }
+        .legend-section summary {
+          margin: 0;
+          font-size: 9px;
+          gap: 7px;
+        }
+        .legend-section #legend {
+          bottom: 35px;
+          left: 12px;
+          right: 12px;
+        }
+        .family-key {
+          gap: 14px;
+        }
+        #rows {
+          min-height: 80px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *:before,
+        *:after {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32">
+              <path
+                d="M16 2 29 9.5v13L16 30 3 22.5v-13Z M3 9.5 16 17l13-7.5 M16 17v13"
+              />
+              <path d="m3 22.5 20-16M9 26l20-16" opacity=".4" />
+            </svg>
+          </div>
+          <div>
+            <h1>穹顶平面分布</h1>
+            <div class="brand-sub">DOME / PLANE EXPLORER</div>
+          </div>
+        </div>
+        <div class="head-input">
+          <div class="seed-control">
+            <label for="seed-input">SEED</label
+            ><input
+              id="seed-input"
+              type="text"
+              inputmode="text"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="long"
+              aria-describedby="seed-error"
+            />
+          </div>
+          <button id="render-btn" type="button">
+            渲染
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M4 10h12m-5-5 5 5-5 5" />
+            </svg>
+          </button>
+        </div>
+      </header>
+      <div class="workspace">
+        <aside id="panel" aria-label="平面列表">
+          <div id="seed-error" class="err" role="alert" hidden></div>
+          <div id="banner" class="banner" role="alert" hidden></div>
+          <div id="statusline" class="status" hidden></div>
+          <section class="seed-section">
+            <details>
+              <summary>派生 seed</summary>
+              <table class="seeds" id="seed-table"></table>
+            </details>
+          </section>
+          <section id="rows-section">
+            <div class="section-head">
+              <h2>平面 <span class="count" id="row-count">15</span></h2>
+              <button id="toggle-all" class="mini" type="button" disabled>
+                全部禁用
+              </button>
+            </div>
+            <div id="rows"></div>
+          </section>
+          <section class="legend-section">
+            <div class="family-key">
+              <span><i class="sw" style="background: #7db2ed"></i>low</span
+              ><span><i class="sw" style="background: #e4a16a"></i>high</span
+              ><span
+                ><i class="sw" style="background: #b399df"></i>selector</span
+              >
+            </div>
+            <details>
+              <summary>图例与范围</summary>
+              <div id="legend">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>族</th>
+                      <th>色</th>
+                      <th>阶号</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>low</td>
+                      <td>蓝</td>
+                      <td>9 到 15</td>
+                    </tr>
+                    <tr>
+                      <td>high</td>
+                      <td>橙</td>
+                      <td>9 到 15</td>
+                    </tr>
+                    <tr>
+                      <td>selector</td>
+                      <td>紫</td>
+                      <td>7</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p>同族内 k 越大越亮。</p>
+                <p>
+                  只计算成立范围
+                  <span class="tex" data-tex="|x|,\,|z| \ge T_k"
+                    >|x|, |z| ≥ T_k</span
+                  >、<span class="tex" data-tex="|y| \ge 2T_k">|y| ≥ 2T_k</span>
+                  内的单阶零面。
+                </p>
+                <p>
+                  <code>1</code> 单位 = <code>2^31</code> 方块，刻度每
+                  <code>0.25</code> 单位。
+                </p>
+              </div>
+            </details>
+          </section>
+          <div id="checkline" class="check" hidden></div>
+        </aside>
+        <main id="stage" aria-label="三维平面视图">
+          <canvas
+            id="canvas"
+            tabindex="0"
+            aria-label="拖动旋转，滚轮缩放，右键复制坐标；方向键旋转，加减键缩放"
+          ></canvas>
+          <div id="labels" aria-hidden="true"></div>
+          <div class="stage-header">三维视图</div>
+          <nav class="view-tools" aria-label="视角">
+            <button
+              type="button"
+              data-view="iso"
+              title="三维视角"
+              aria-label="三维视角"
+              aria-pressed="true"
+            >
+              3D
+            </button>
+            <button
+              type="button"
+              data-view="x"
+              title="沿 X 轴观察"
+              aria-label="沿 X 轴观察"
+              aria-pressed="false"
+            >
+              X
+            </button>
+            <button
+              type="button"
+              data-view="y"
+              title="沿 Y 轴观察"
+              aria-label="沿 Y 轴观察"
+              aria-pressed="false"
+            >
+              Y
+            </button>
+            <button
+              type="button"
+              data-view="z"
+              title="沿 Z 轴观察"
+              aria-label="沿 Z 轴观察"
+              aria-pressed="false"
+            >
+              Z
+            </button>
+            <span class="tool-sep"></span>
+            <button
+              type="button"
+              id="reset-view"
+              title="重置视角"
+              aria-label="重置视角"
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M4.2 6.3A6.2 6.2 0 1 1 4 13M3 3v4.5h4.5" />
+              </svg>
+            </button>
+          </nav>
+          <div class="stage-footer">
+            <span class="scale-label"
+              ><i class="scale-mark"></i>1 单位 = 2³¹ 方块</span
+            ><span id="visible-count" class="visible-count"></span>
+          </div>
+          <div id="tip"></div>
+          <div id="ctx-menu" hidden>
+            <button id="ctx-copy" class="mini" type="button">复制坐标</button>
+            <button id="ctx-pin" class="mini" type="button" hidden>固定</button>
+            <button id="ctx-goto" class="mini" type="button" hidden>定位</button>
+          </div>
+          <div id="goto-panel" hidden>
+            <div class="goto-fields">
+              <label
+                >x<input
+                  id="goto-x"
+                  type="text"
+                  inputmode="numeric"
+                  spellcheck="false"
+                  autocomplete="off"
+              /></label>
+              <label
+                >y<input
+                  id="goto-y"
+                  type="text"
+                  inputmode="numeric"
+                  spellcheck="false"
+                  autocomplete="off"
+              /></label>
+              <label
+                >z<input
+                  id="goto-z"
+                  type="text"
+                  inputmode="numeric"
+                  spellcheck="false"
+                  autocomplete="off"
+              /></label>
+            </div>
+            <div class="goto-error" id="goto-error" role="alert" hidden></div>
+            <div class="goto-actions">
+              <button id="goto-apply" class="mini" type="button">定位</button>
+            </div>
+          </div>
+          <div id="stage-error" role="alert" hidden></div>
+        </main>
+      </div>
+    </div>
+
+    <script id="dome-math">
+      (function (root) {
+        "use strict";
+
+        // ================= java.util.Random 的 48 位 LCG =================
+
+        var RAND_MULT = 0x5deece66dn;
+        var RAND_ADD = 0xbn;
+        var RAND_MASK = (1n << 48n) - 1n;
+
+        function JavaRandom(seedLong) {
+          this.seed = (seedLong ^ RAND_MULT) & RAND_MASK;
+        }
+
+        JavaRandom.prototype.next = function (bits) {
+          this.seed = (this.seed * RAND_MULT + RAND_ADD) & RAND_MASK;
+          return Number(BigInt.asIntN(32, this.seed >> BigInt(48 - bits)));
+        };
+
+        // Java 的 nextInt(bound)：2 的幂走 (int)((bound * (long)next(31)) >> 31)，
+        // 其余走拒绝采样。本页只用到 nextInt(16)，两支都照抄以免以后换表出偏差。
+        JavaRandom.prototype.nextInt = function (bound) {
+          if ((bound & -bound) === bound) {
+            return Number((BigInt(bound) * BigInt(this.next(31))) >> 31n);
+          }
+          var bits = 31 - Math.clz32(bound - 1);
+          var val;
+          do {
+            var raw = this.next(bits);
+            val = raw % bound;
+          } while (((raw - val + (bound - 1)) | 0) < 0);
+          return val;
+        };
+
+        // Java 的 nextLong：((long)(next(32)) << 32) + next(32)，两次符号扩展后按 64 位回绕。
+        JavaRandom.prototype.nextLong = function () {
+          var hi = BigInt(this.next(32));
+          var lo = BigInt(this.next(32));
+          return BigInt.asIntN(64, (hi << 32n) + lo);
+        };
+
+        // CwgNoise.foldSeed 的逐位复刻。
+        function foldSeed(seedLong) {
+          var s = BigInt.asUintN(64, seedLong);
+          var x = (s & 0xffffffffn) ^ (s >> 32n);
+          return Number(BigInt.asIntN(32, x));
+        }
+
+        // seed long 到四路 int seed，顺序 selector、low、high、depth。
+        function seedsFromWorldSeed(seedLong) {
+          var rng = new JavaRandom(BigInt.asIntN(64, seedLong));
+          return {
+            selector: foldSeed(rng.nextLong()),
+            low: foldSeed(rng.nextLong()),
+            high: foldSeed(rng.nextLong()),
+            depth: foldSeed(rng.nextLong()),
+          };
+        }
+
+        // ================= 数值语义 =================
+
+        var TWO_31 = 2147483648.0;
+        var JAVA_INT_MAX = 2147483647;
+        var JAVA_INT_MIN = -2147483648;
+        var MAX_BLOCK = 2147483647;
+        var MIN_BLOCK = -2147483648;
+
+        // Java 的 (int) double：越界饱和、向零截断。与 JS 的 ToInt32 回绕是两回事。
+        function toInt(v) {
+          if (v >= 2147483647) return 2147483647;
+          if (v <= -2147483648) return -2147483648;
+          return Math.trunc(v);
+        }
+
+        // Java 的 Math.round(double)：就近，.5 向正无穷。
+        function javaRound(v) {
+          return toInt(Math.floor(v + 0.5));
+        }
+
+        function sCurve3(a) {
+          return a * a * (3.0 - 2.0 * a);
+        }
+
+        function lerp(a, b, t) {
+          return (1.0 - t) * a + t * b;
+        }
+
+        // ================= 梯度表 =================
+
+        var X_NOISE_GEN = 1619;
+        var Y_NOISE_GEN = 31337;
+        var Z_NOISE_GEN = 6971;
+        var SEED_NOISE_GEN = 1013;
+        var SHIFT_NOISE_GEN = 8;
+
+        var GRADIENTS = (function () {
+          var g = new Array(256 * 4);
+          var gradX = [1, -1, 1, -1, 1, -1, 1, -1, 0, 0, 0, 0, 1, 0, -1, 0];
+          var gradY = [1, 1, -1, -1, 0, 0, 0, 0, 1, -1, 1, -1, 1, -1, 1, -1];
+          // 第 14 位是 0，与 CwgNoise 的静态块一致。
+          var gradZ = [0, 0, 0, 0, 1, 1, -1, -1, 1, 1, -1, -1, 0, 1, 0, -1];
+          var rnd = new JavaRandom(123456789n);
+          for (var i = 0; i < 256; i++) {
+            var j = rnd.nextInt(gradX.length);
+            g[i * 4] = gradX[j] / 2.0;
+            g[i * 4 + 1] = gradY[j] / 2.0;
+            g[i * 4 + 2] = gradZ[j] / 2.0;
+          }
+          return g;
+        })();
+
+        function gradientRow(ix, iy, iz, seedEff) {
+          var v =
+            (Math.imul(X_NOISE_GEN, ix) +
+              Math.imul(Y_NOISE_GEN, iy) +
+              Math.imul(Z_NOISE_GEN, iz) +
+              Math.imul(SEED_NOISE_GEN, seedEff)) |
+            0;
+          v = (v ^ (v >> SHIFT_NOISE_GEN)) | 0;
+          return v & 0xff;
+        }
+
+        function gradient(fx, fy, fz, ix, iy, iz, seed) {
+          var index =
+            (Math.imul(X_NOISE_GEN, ix) +
+              Math.imul(Y_NOISE_GEN, iy) +
+              Math.imul(Z_NOISE_GEN, iz) +
+              Math.imul(SEED_NOISE_GEN, seed)) |
+            0;
+          index = (index ^ (index >> SHIFT_NOISE_GEN)) | 0;
+          index = index & 0xff;
+          return (
+            GRADIENTS[index * 4] * (fx - ix) +
+            GRADIENTS[index * 4 + 1] * (fy - iy) +
+            GRADIENTS[index * 4 + 2] * (fz - iz) +
+            0.5
+          );
+        }
+
+        // 表达式的结合顺序与 CwgNoise 逐字相同，不做代数化简。
+        function coherent(x, y, z, seed) {
+          var x0 = x > 0.0 ? toInt(x) : (toInt(x) - 1) | 0;
+          var y0 = y > 0.0 ? toInt(y) : (toInt(y) - 1) | 0;
+          var z0 = z > 0.0 ? toInt(z) : (toInt(z) - 1) | 0;
+          var x1 = (x0 + 1) | 0;
+          var y1 = (y0 + 1) | 0;
+          var z1 = (z0 + 1) | 0;
+
+          var xs = sCurve3(x - x0);
+          var ys = sCurve3(y - y0);
+          var zs = sCurve3(z - z0);
+
+          var n0 = gradient(x, y, z, x0, y0, z0, seed);
+          var n1 = gradient(x, y, z, x1, y0, z0, seed);
+          var ix0 = lerp(n0, n1, xs);
+          n0 = gradient(x, y, z, x0, y1, z0, seed);
+          n1 = gradient(x, y, z, x1, y1, z0, seed);
+          var ix1 = lerp(n0, n1, xs);
+          var iy0 = lerp(ix0, ix1, ys);
+          n0 = gradient(x, y, z, x0, y0, z1, seed);
+          n1 = gradient(x, y, z, x1, y0, z1, seed);
+          ix0 = lerp(n0, n1, xs);
+          n0 = gradient(x, y, z, x0, y1, z1, seed);
+          n1 = gradient(x, y, z, x1, y1, z1, seed);
+          ix1 = lerp(n0, n1, xs);
+          var iy1 = lerp(ix0, ix1, ys);
+          return lerp(iy0, iy1, zs);
+        }
+
+        // ================= 平面系数 =================
+
+        function coefficients(seedEff) {
+          var sumX = 0.0,
+            sumY = 0.0,
+            sumZ = 0.0;
+          var pairX = 0.0,
+            pairY = 0.0,
+            pairZ = 0.0;
+          for (var kx = 0; kx < 2; kx++) {
+            for (var ky = 0; ky < 2; ky++) {
+              for (var kz = 0; kz < 2; kz++) {
+                var ex = kx === 0 ? 1 : -1;
+                var ey = ky === 0 ? 1 : -1;
+                var ez = kz === 0 ? 1 : -1;
+                var ix = kx === 0 ? JAVA_INT_MAX : JAVA_INT_MIN;
+                var iy = ky === 0 ? JAVA_INT_MAX : JAVA_INT_MIN;
+                var iz = kz === 0 ? JAVA_INT_MAX : JAVA_INT_MIN;
+                var sigma = ex * ey * ez;
+                var row = gradientRow(ix, iy, iz, seedEff);
+                var gx = GRADIENTS[row * 4];
+                var gy = GRADIENTS[row * 4 + 1];
+                var gz = GRADIENTS[row * 4 + 2];
+                sumX += sigma * gx;
+                sumY += sigma * gy;
+                sumZ += sigma * gz;
+                pairX += ey * ez * gx;
+                pairY += ez * ex * gy;
+                pairZ += ex * ey * gz;
+              }
+            }
+          }
+          return [
+            javaRound(2.0 * sumX),
+            javaRound(2.0 * sumY),
+            javaRound(2.0 * sumZ),
+            javaRound(-2.0 * (pairX + pairY + pairZ)),
+          ];
+        }
+
+        // ================= 族与十五行 =================
+
+        var FAMILIES = {
+          low: {
+            name: "low",
+            kMax: 15,
+            c: TWO_31 / 171.103,
+            sigmaXZ: 171.103,
+            hue: 0.58,
+          },
+          high: {
+            name: "high",
+            kMax: 15,
+            c: TWO_31 / 171.103,
+            sigmaXZ: 171.103,
+            hue: 0.08,
+          },
+          selector: {
+            name: "selector",
+            kMax: 7,
+            c: TWO_31 / (684.412 / 80.0 / 4.0),
+            sigmaXZ: 684.412 / 80.0 / 4.0,
+            hue: 0.75,
+          },
+        };
+
+        function threshold(family, k) {
+          return family.c * Math.pow(2.0, family.kMax - k);
+        }
+
+        // low 与 high 各 7 阶，加 selector 顶阶，共十五行。偏移 0。
+        function buildRows(seeds) {
+          var rows = [];
+          var index = 0;
+          var pairs = [
+            [FAMILIES.low, seeds.low],
+            [FAMILIES.high, seeds.high],
+          ];
+          for (var p = 0; p < pairs.length; p++) {
+            var family = pairs[p][0];
+            var intSeed = pairs[p][1];
+            for (var k = family.kMax; k >= family.kMax - 6; k--) {
+              index++;
+              var seedEff = (intSeed + k) | 0;
+              rows.push({
+                index: index,
+                family: family,
+                k: k,
+                seedEff: seedEff,
+                abcd: coefficients(seedEff),
+                t: threshold(family, k),
+              });
+            }
+          }
+          index++;
+          var selSeedEff = (seeds.selector + FAMILIES.selector.kMax) | 0;
+          rows.push({
+            index: index,
+            family: FAMILIES.selector,
+            k: FAMILIES.selector.kMax,
+            seedEff: selSeedEff,
+            abcd: coefficients(selSeedEff),
+            t: threshold(FAMILIES.selector, FAMILIES.selector.kMax),
+          });
+          return rows;
+        }
+
+        // ================= 单阶求值与直接核 =================
+
+        function singleOrder(family, k, seedEff, x, y, z) {
+          var sigma = family.sigmaXZ * Math.pow(2.0, k - family.kMax);
+          var value = coherent(
+            x * sigma,
+            (y * sigma) / 2.0,
+            z * sigma,
+            seedEff,
+          );
+          return value * Math.pow(0.5, k);
+        }
+
+        function directValue(family, k, seedEff, axis, at, x, y, z) {
+          if (axis === 0) return singleOrder(family, k, seedEff, at, y, z);
+          if (axis === 1) return singleOrder(family, k, seedEff, x, at, z);
+          return singleOrder(family, k, seedEff, x, y, at);
+        }
+
+        function saturation(coord, sigma, yScale) {
+          return Math.abs((coord * sigma * yScale) / TWO_31);
+        }
+
+        function candidates(abcd, t, sigma) {
+          var out = [];
+          var coef = [abcd[0], abcd[1] / 2.0, abcd[2]];
+          var d = abcd[3];
+          var mults = [2.2, 4, 8, 16, 32];
+          for (var vary = 0; vary < 3; vary++) {
+            if (coef[vary] === 0.0) continue;
+            for (var mi = 0; mi < mults.length; mi++) {
+              var fixed = mults[mi] * t;
+              if (fixed > 2147483647.0) break;
+              var point = [fixed, fixed, fixed];
+              var sum = 0.0;
+              for (var i = 0; i < 3; i++) {
+                if (i !== vary) sum += coef[i] * point[i];
+              }
+              point[vary] = -(sum + t * d) / coef[vary];
+              if (
+                Math.abs(point[0]) > 2147483647.0 ||
+                Math.abs(point[1]) > 2147483647.0 ||
+                Math.abs(point[2]) > 2147483647.0
+              ) {
+                continue;
+              }
+              var min = Math.min(
+                saturation(point[0], sigma, 1.0),
+                Math.min(
+                  saturation(point[1], sigma, 0.5),
+                  saturation(point[2], sigma, 1.0),
+                ),
+              );
+              out.push([min, vary, point[0], point[1], point[2]]);
+            }
+          }
+          return out;
+        }
+
+        function candidate(abcd, t, sigma) {
+          var best = null;
+          var list = candidates(abcd, t, sigma);
+          for (var i = 0; i < list.length; i++) {
+            if (best === null || list[i][0] > best[0]) best = list[i];
+          }
+          return best;
+        }
+
+        // 沿方程解出的轴二分单阶值，核零点与平面解出的位置。
+        function directCheck(family, k, seedEff, abcd, t) {
+          var sigma = family.sigmaXZ * Math.pow(2.0, k - family.kMax);
+          var best = candidate(abcd, t, sigma);
+          if (best === null)
+            return { verdict: "无系数", deviation: Number.NaN };
+          if (best[0] < 1.0)
+            return { verdict: "结构不可达", deviation: Number.NaN };
+          var vary = best[1];
+          var point = [best[2], best[3], best[4]];
+          var planeAt = point[vary];
+          var lo = planeAt - 16.0;
+          var hi = planeAt + 16.0;
+          var flo = directValue(
+            family,
+            k,
+            seedEff,
+            vary,
+            lo,
+            point[0],
+            point[1],
+            point[2],
+          );
+          var fhi = directValue(
+            family,
+            k,
+            seedEff,
+            vary,
+            hi,
+            point[0],
+            point[1],
+            point[2],
+          );
+          var zero = Number.NaN;
+          if (flo > 0 !== fhi > 0) {
+            for (var i = 0; i < 200 && hi - lo > 1.0e-9; i++) {
+              var mid = 0.5 * (lo + hi);
+              var fm = directValue(
+                family,
+                k,
+                seedEff,
+                vary,
+                mid,
+                point[0],
+                point[1],
+                point[2],
+              );
+              if (fm > 0 === flo > 0) {
+                lo = mid;
+                flo = fm;
+              } else {
+                hi = mid;
+              }
+            }
+            zero = 0.5 * (lo + hi);
+          }
+          var deviation = Math.abs(zero - planeAt);
+          var verdict = Number.isNaN(zero)
+            ? "未过"
+            : deviation <= 1.0
+              ? "过"
+              : "未过";
+          return { verdict: verdict, deviation: deviation, axis: vary };
+        }
+
+        // selector 顶阶按设计不可核，不参与汇总。
+        function directSummary(rows) {
+          var checked = 0,
+            passed = 0,
+            worst = 0.0;
+          var verdicts = [];
+          for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            if (row.family === FAMILIES.selector) continue;
+            checked++;
+            var c = directCheck(
+              row.family,
+              row.k,
+              row.seedEff,
+              row.abcd,
+              row.t,
+            );
+            verdicts.push(c.verdict);
+            if (c.verdict === "过") passed++;
+            if (!Number.isNaN(c.deviation))
+              worst = Math.max(worst, Math.abs(c.deviation));
+          }
+          return {
+            checked: checked,
+            passed: passed,
+            worst: worst,
+            verdicts: verdicts,
+          };
+        }
+
+        // ================= 平面与角块求交 =================
+
+        // 平面 a*x + b*y + c*z + k = 0 与轴对齐盒的交多边形，按绕质心的极角排序。
+        function clipPlaneToBox(a, b, c, k, bx, by, bz) {
+          var pts = [];
+
+          function edge(x0, y0, z0, x1, y1, z1) {
+            var f0 = a * x0 + b * y0 + c * z0 + k;
+            var f1 = a * x1 + b * y1 + c * z1 + k;
+            if (f0 === 0.0) pts.push([x0, y0, z0]);
+            if (f1 === 0.0) pts.push([x1, y1, z1]);
+            if (f0 !== 0.0 && f1 !== 0.0 && f0 > 0.0 !== f1 > 0.0) {
+              var tt = f0 / (f0 - f1);
+              pts.push([
+                x0 + tt * (x1 - x0),
+                y0 + tt * (y1 - y0),
+                z0 + tt * (z1 - z0),
+              ]);
+            }
+          }
+
+          for (var iy = 0; iy < 2; iy++) {
+            for (var iz = 0; iz < 2; iz++) {
+              edge(bx[0], by[iy], bz[iz], bx[1], by[iy], bz[iz]);
+            }
+          }
+          for (var ix = 0; ix < 2; ix++) {
+            for (var iz2 = 0; iz2 < 2; iz2++) {
+              edge(bx[ix], by[0], bz[iz2], bx[ix], by[1], bz[iz2]);
+            }
+          }
+          for (var ix2 = 0; ix2 < 2; ix2++) {
+            for (var iy2 = 0; iy2 < 2; iy2++) {
+              edge(bx[ix2], by[iy2], bz[0], bx[ix2], by[iy2], bz[1]);
+            }
+          }
+
+          if (pts.length < 3) return [];
+
+          var unique = [];
+          for (var p = 0; p < pts.length; p++) {
+            var q = pts[p];
+            var dup = false;
+            var scale = Math.max(
+              1.0,
+              Math.abs(q[0]),
+              Math.abs(q[1]),
+              Math.abs(q[2]),
+            );
+            var tol = 1e-9 * scale;
+            for (var u = 0; u < unique.length; u++) {
+              var r = unique[u];
+              if (
+                Math.abs(q[0] - r[0]) <= tol &&
+                Math.abs(q[1] - r[1]) <= tol &&
+                Math.abs(q[2] - r[2]) <= tol
+              ) {
+                dup = true;
+                break;
+              }
+            }
+            if (!dup) unique.push(q);
+          }
+          if (unique.length < 3) return [];
+
+          var n = unique.length;
+          var cx = 0.0,
+            cy = 0.0,
+            cz = 0.0;
+          for (var m = 0; m < n; m++) {
+            cx += unique[m][0];
+            cy += unique[m][1];
+            cz += unique[m][2];
+          }
+          cx /= n;
+          cy /= n;
+          cz /= n;
+
+          var nx = a,
+            ny = b,
+            nz = c;
+          var nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
+          nx /= nl;
+          ny /= nl;
+          nz /= nl;
+
+          var rx = 0.0,
+            ry = 0.0,
+            rz = 0.0;
+          if (Math.abs(nx) <= Math.abs(ny) && Math.abs(nx) <= Math.abs(nz)) {
+            rx = 1.0;
+          } else if (Math.abs(ny) <= Math.abs(nz)) {
+            ry = 1.0;
+          } else {
+            rz = 1.0;
+          }
+          var dot = rx * nx + ry * ny + rz * nz;
+          var ux = rx - dot * nx,
+            uy = ry - dot * ny,
+            uz = rz - dot * nz;
+          var ul = Math.sqrt(ux * ux + uy * uy + uz * uz);
+          ux /= ul;
+          uy /= ul;
+          uz /= ul;
+          var vx = ny * uz - nz * uy;
+          var vy = nz * ux - nx * uz;
+          var vz = nx * uy - ny * ux;
+
+          var angled = [];
+          for (var s = 0; s < n; s++) {
+            var dx = unique[s][0] - cx;
+            var dy = unique[s][1] - cy;
+            var dz = unique[s][2] - cz;
+            angled.push({
+              p: unique[s],
+              ang: Math.atan2(
+                dx * vx + dy * vy + dz * vz,
+                dx * ux + dy * uy + dz * uz,
+              ),
+            });
+          }
+          angled.sort(function (l, r) {
+            return l.ang - r.ang;
+          });
+          return angled.map(function (o) {
+            return o.p;
+          });
+        }
+
+        // 八个角块：|x|,|z| >= T_k、|y| >= 2T_k，各夹到 ±2^31 的立方体。
+        function planePolygons(row) {
+          var abcd = row.abcd;
+          var a = abcd[0];
+          var halfB = abcd[1] / 2.0;
+          var c = abcd[2];
+          var k = row.t * abcd[3];
+          if (a === 0.0 && halfB === 0.0 && c === 0.0) return [];
+          var polys = [];
+          var yLimit = 2.0 * row.t;
+          var signs = [1, -1];
+          for (var si = 0; si < 2; si++) {
+            for (var sj = 0; sj < 2; sj++) {
+              for (var sk = 0; sk < 2; sk++) {
+                var bx =
+                  signs[si] > 0 ? [row.t, MAX_BLOCK] : [MIN_BLOCK, -row.t];
+                var by =
+                  signs[sj] > 0 ? [yLimit, MAX_BLOCK] : [MIN_BLOCK, -yLimit];
+                var bz =
+                  signs[sk] > 0 ? [row.t, MAX_BLOCK] : [MIN_BLOCK, -row.t];
+                if (bx[0] > bx[1] || by[0] > by[1] || bz[0] > bz[1]) continue;
+                var poly = clipPlaneToBox(a, halfB, c, k, bx, by, bz);
+                if (poly.length >= 3) polys.push(poly);
+              }
+            }
+          }
+          return polys;
+        }
+
+        // ================= 方程文本 =================
+
+        function trim4(v) {
+          var s = v.toFixed(4);
+          while (s.length > 1 && s.charAt(s.length - 1) === "0")
+            s = s.slice(0, -1);
+          if (s.charAt(s.length - 1) === ".") s = s.slice(0, -1);
+          return s;
+        }
+
+        function equationText(abcd, t) {
+          var parts = [];
+          function term(value, name) {
+            if (value === 0.0) return;
+            var abs = Math.abs(value);
+            var number = Number.isInteger(abs) ? String(abs) : trim4(abs);
+            if (abs === 1.0 && name !== "") number = "";
+            parts.push((value < 0 ? " - " : " + ") + number + name);
+          }
+          term(abcd[0], "x");
+          term(abcd[1] / 2.0, "y");
+          term(abcd[2], "z");
+          var constant = t * abcd[3];
+          if (constant !== 0.0) term(constant, "");
+          var text = parts.join("").replace(/^\s+/, "");
+          if (text.indexOf("+ ") === 0) text = text.slice(2);
+          return text + " = 0";
+        }
+
+        // ================= 自检 =================
+        // 期望值全部取自 debug/test/Base0Equations.java 在 seed=0 下的输出。
+
+        var EXPECTED = {
+          coefficients0: [-1, 1, 4, -2],
+          seeds0: {
+            selector: 1878648167,
+            low: -1498760249,
+            high: -332383796,
+            depth: -1860348492,
+          },
+          rows0: [
+            [-4, 0, 0, 6],
+            [-4, 0, 0, 2],
+            [-1, -2, -1, -6],
+            [-2, -2, -2, -2],
+            [1, 5, 4, 2],
+            [5, 0, 1, 4],
+            [3, -4, -1, 4],
+            [-4, 4, 2, -6],
+            [0, 1, -3, 2],
+            [-3, 0, -1, 0],
+            [3, -1, 2, -4],
+            [-2, 3, 1, 4],
+            [-1, -2, -5, 0],
+            [0, -5, 3, -2],
+            [0, -1, 1, 2],
+          ],
+          direct: { checked: 14, passed: 12, worstText: "0.1496" },
+        };
+
+        function sameInts(a, b) {
+          if (a.length !== b.length) return false;
+          for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+          return true;
+        }
+
+        function selfCheck() {
+          var items = [];
+
+          var c0 = coefficients(0);
+          items.push({
+            label: "coefficients(0)",
+            ok: sameInts(c0, EXPECTED.coefficients0),
+            got: "(" + c0.join(",") + ")",
+            want: "(" + EXPECTED.coefficients0.join(",") + ")",
+          });
+
+          var seeds = seedsFromWorldSeed(0n);
+          var seedsOk =
+            seeds.selector === EXPECTED.seeds0.selector &&
+            seeds.low === EXPECTED.seeds0.low &&
+            seeds.high === EXPECTED.seeds0.high &&
+            seeds.depth === EXPECTED.seeds0.depth;
+          items.push({
+            label: "seed=0 四路 seed",
+            ok: seedsOk,
+            got: [seeds.selector, seeds.low, seeds.high, seeds.depth].join(
+              " / ",
+            ),
+            want: [
+              EXPECTED.seeds0.selector,
+              EXPECTED.seeds0.low,
+              EXPECTED.seeds0.high,
+              EXPECTED.seeds0.depth,
+            ].join(" / "),
+          });
+
+          var rows = buildRows(seeds);
+          var rowsOk = rows.length === EXPECTED.rows0.length;
+          var firstBad = -1;
+          if (rowsOk) {
+            for (var i = 0; i < rows.length; i++) {
+              if (!sameInts(rows[i].abcd, EXPECTED.rows0[i])) {
+                rowsOk = false;
+                firstBad = i;
+                break;
+              }
+            }
+          }
+          items.push({
+            label: "seed=0 十五行系数",
+            ok: rowsOk,
+            got: rowsOk
+              ? rows.length + " 行一致"
+              : "第 " +
+                (firstBad + 1) +
+                " 行 " +
+                (firstBad < 0 ? "" : "(" + rows[firstBad].abcd.join(",") + ")"),
+            want: EXPECTED.rows0.length + " 行一致",
+          });
+
+          var summary = directSummary(rows);
+          var directOk =
+            summary.checked === EXPECTED.direct.checked &&
+            summary.passed === EXPECTED.direct.passed &&
+            summary.worst.toFixed(4) === EXPECTED.direct.worstText;
+          items.push({
+            label: "seed=0 直接核",
+            ok: directOk,
+            got:
+              summary.checked +
+              " 行做过 / " +
+              summary.passed +
+              " 行过 / 最大偏差 " +
+              summary.worst.toFixed(4),
+            want:
+              EXPECTED.direct.checked +
+              " 行做过 / " +
+              EXPECTED.direct.passed +
+              " 行过 / 最大偏差 " +
+              EXPECTED.direct.worstText,
+          });
+
+          var ok = true;
+          for (var j = 0; j < items.length; j++) if (!items[j].ok) ok = false;
+          return { ok: ok, items: items };
+        }
+
+        root.DomeMath = {
+          JavaRandom: JavaRandom,
+          foldSeed: foldSeed,
+          seedsFromWorldSeed: seedsFromWorldSeed,
+          coefficients: coefficients,
+          coherent: coherent,
+          singleOrder: singleOrder,
+          directCheck: directCheck,
+          directSummary: directSummary,
+          buildRows: buildRows,
+          threshold: threshold,
+          equationText: equationText,
+          planePolygons: planePolygons,
+          selfCheck: selfCheck,
+          FAMILIES: FAMILIES,
+          EXPECTED: EXPECTED,
+        };
+      })(typeof globalThis !== "undefined" ? globalThis : this);
+    </script>
+
+    <!-- KaTeX 0.16.11
+The MIT License (MIT)
+
+Copyright (c) 2013-2020 Khan Academy and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-->
+    <script
+      defer
+      id="katex-script"
+      src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+    ></script>
+
+    <script id="dome-ui">
+      (function () {
+        "use strict";
+
+        var math = window.DomeMath;
+
+        var el = {
+          app: document.getElementById("app"),
+          seedInput: document.getElementById("seed-input"),
+          renderBtn: document.getElementById("render-btn"),
+          seedError: document.getElementById("seed-error"),
+          banner: document.getElementById("banner"),
+          statusline: document.getElementById("statusline"),
+          seedTable: document.getElementById("seed-table"),
+          rowsHost: document.getElementById("rows"),
+          toggleAll: document.getElementById("toggle-all"),
+          checkline: document.getElementById("checkline"),
+          stageError: document.getElementById("stage-error"),
+          tip: document.getElementById("tip"),
+        };
+
+        var state = {
+          rows: null,
+          fatal: null,
+          highlight: null,
+          enabled: {},
+          hasGeom: {},
+          buttons: {},
+          eqNodes: {},
+        };
+
+        // ---- 状态与错误面 ----
+
+        // 只在最终失败时渲染状态行；加载期间不写任何中间态。
+        function setStatus(text, bad) {
+          el.statusline.hidden = false;
+          el.statusline.textContent = text;
+          el.statusline.className = "status" + (bad ? " bad" : "");
+        }
+
+        // 三维就绪之后收起状态行，只在控制台留读数。
+        function hideStatus() {
+          el.statusline.hidden = true;
+        }
+
+        function fatal(text) {
+          if (state.fatal === null) state.fatal = text;
+          el.stageError.hidden = false;
+          el.stageError.textContent = state.fatal;
+          el.banner.hidden = false;
+          el.banner.textContent = "页面报告：" + state.fatal;
+        }
+
+        window.addEventListener("error", function (e) {
+          var where = e.filename
+            ? " @ " + e.filename + ":" + (e.lineno || 0)
+            : "";
+          fatal("脚本错误：" + (e.message || e.type || "未知") + where);
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          var r = e.reason;
+          fatal(
+            "未处理的 Promise 拒绝：" +
+              (r && r.message ? r.message : String(r)),
+          );
+        });
+
+        // ---- 自检 ----
+        // 通过时不在界面上渲染这一行，只在控制台留一条读数；不通过才显示在面板上。
+
+        var check = math.selfCheck();
+        var parts = [];
+        for (var ci = 0; ci < check.items.length; ci++) {
+          var item = check.items[ci];
+          parts.push(
+            item.label +
+              " " +
+              (item.ok
+                ? "一致"
+                : "不一致，得 " + item.got + "，期 " + item.want),
+          );
+        }
+        if (check.ok) {
+          el.checkline.hidden = true;
+          if (window.console && console.log)
+            console.log("启动自检通过 · " + parts.join(" · "));
+        } else {
+          el.checkline.hidden = false;
+          el.checkline.className = "check bad";
+          el.checkline.textContent = "启动自检不通过 · " + parts.join(" · ");
+          var bad = [];
+          for (var bj = 0; bj < check.items.length; bj++)
+            if (!check.items[bj].ok) bad.push(check.items[bj].label);
+          el.banner.hidden = false;
+          el.banner.textContent =
+            "启动自检不通过，已停止渲染：" + bad.join("、");
+          el.renderBtn.disabled = true;
+        }
+
+        // ---- 方程与列表 ----
+
+        function katexHtml(tex) {
+          if (typeof katex === "undefined") return null;
+          try {
+            return katex.renderToString(tex, {
+              throwOnError: false,
+              displayMode: false,
+            });
+          } catch (e) {
+            return null;
+          }
+        }
+
+        function familyCss(row) {
+          var lightness = 58 + (18 * (row.k - 7)) / 8.0;
+          return (
+            "hsl(" +
+            Math.round(row.family.hue * 360) +
+            ",65%," +
+            lightness.toFixed(1) +
+            "%)"
+          );
+        }
+
+        function fillSeedTable(seedText, seeds) {
+          var entries = [
+            ["selector", seeds.selector],
+            ["low", seeds.low],
+            ["high", seeds.high],
+            ["depth", seeds.depth],
+          ];
+          var html = "<tr><td>seed</td><td>" + seedText + "</td></tr>";
+          for (var i = 0; i < entries.length; i++) {
+            html +=
+              "<tr><td>" +
+              entries[i][0] +
+              "</td><td>" +
+              entries[i][1] +
+              "</td></tr>";
+          }
+          el.seedTable.innerHTML = html;
+        }
+
+        function markCard(index) {
+          var cards = document.querySelectorAll(".plane");
+          for (var i = 0; i < cards.length; i++) {
+            if (Number(cards[i].dataset.row) === index) {
+              cards[i].classList.add("hot");
+            } else {
+              cards[i].classList.remove("hot");
+            }
+          }
+        }
+
+        // 固定：列表里给该行一个常驻标记，与悬停高亮分开。
+        function pinCard(index, on) {
+          var cards = document.querySelectorAll(".plane");
+          for (var i = 0; i < cards.length; i++) {
+            if (Number(cards[i].dataset.row) === index) {
+              cards[i].classList.toggle("pinned", !!on);
+            }
+          }
+        }
+
+        // ---- 逐项与全部渲染开关 ----
+        // 只有有落点的项才有开关；关掉的项不进画布，也不参与悬停命中。
+
+        function isEnabled(index) {
+          return state.enabled[index] !== false;
+        }
+
+        function anyDisabled() {
+          for (var key in state.hasGeom) {
+            if (state.hasGeom[key] && !isEnabled(Number(key))) return true;
+          }
+          return false;
+        }
+
+        function syncButtons() {
+          for (var key in state.buttons) {
+            var button = state.buttons[key];
+            var on = isEnabled(Number(key));
+            button.textContent = on ? "禁用" : "启用";
+            button.setAttribute("aria-pressed", String(on));
+            button.setAttribute(
+              "aria-label",
+              (on ? "禁用" : "启用") + "平面 " + key,
+            );
+            button.title = on ? "关闭这一张的渲染" : "开启这一张的渲染";
+            var card = button.closest ? button.closest(".plane") : null;
+            if (card) card.classList.toggle("off", !on);
+          }
+          el.toggleAll.disabled = state.rows === null;
+          el.toggleAll.textContent = anyDisabled() ? "全部启用" : "全部禁用";
+          var total = 0,
+            visible = 0;
+          for (var id in state.hasGeom) {
+            if (state.hasGeom[id]) {
+              total++;
+              if (isEnabled(Number(id))) visible++;
+            }
+          }
+          document.getElementById("visible-count").innerHTML =
+            "<b>" + visible + "</b> / " + total + " 可见";
+          document.getElementById("row-count").textContent = state.rows
+            ? state.rows.length
+            : 0;
+        }
+
+        function applyVisible(index) {
+          if (window.DomeGL && window.DomeGL.setVisible) {
+            window.DomeGL.setVisible(index, isEnabled(index));
+          }
+        }
+
+        function toggleRow(index) {
+          state.enabled[index] = !isEnabled(index);
+          applyVisible(index);
+          syncButtons();
+        }
+
+        function setAllRows(enabled) {
+          for (var key in state.hasGeom) {
+            if (!state.hasGeom[key]) continue;
+            state.enabled[key] = enabled;
+            applyVisible(Number(key));
+          }
+          syncButtons();
+        }
+
+        // 从有落点的行里随机开 count 张，其余关掉。候选不足 count 时全开。
+        function enableRandomSome(count) {
+          var candidates = [];
+          for (var key in state.hasGeom) {
+            if (state.hasGeom[key]) candidates.push(Number(key));
+          }
+          if (candidates.length === 0) return;
+          for (var i = candidates.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var swap = candidates[i];
+            candidates[i] = candidates[j];
+            candidates[j] = swap;
+          }
+          var picked = {};
+          var take = Math.min(count, candidates.length);
+          for (var k = 0; k < take; k++) picked[candidates[k]] = true;
+          for (var m = 0; m < candidates.length; m++) {
+            state.enabled[candidates[m]] = picked[candidates[m]] === true;
+            applyVisible(candidates[m]);
+          }
+          syncButtons();
+        }
+
+        // 右下角固定的信息框：内容随悬停更新，位置不动。
+        function showInfo(index) {
+          if (!el.tip) return;
+          var row = state.rows ? state.rows[index - 1] : null;
+          if (index < 0 || !row) {
+            el.tip.classList.remove("visible");
+            return;
+          }
+          var tex = math.equationText(row.abcd, row.t);
+          var html = katexHtml(tex);
+          el.tip.innerHTML =
+            '<div class="t-head"><span class="idx">#' +
+            row.index +
+            "</span>" +
+            "<span>" +
+            row.family.name +
+            " / k=" +
+            row.k +
+            " / seedEff=" +
+            row.seedEff +
+            "</span></div>" +
+            '<div class="t-coef">(' +
+            row.abcd.join(",") +
+            ") / T_k=" +
+            math.threshold(row.family, row.k).toFixed(4) +
+            "</div>" +
+            '<div class="t-eq">' +
+            (html === null ? tex : html) +
+            "</div>";
+          el.tip.classList.add("visible");
+        }
+
+        function requestHighlight(index) {
+          showInfo(index);
+          if (state.highlight) {
+            state.highlight(index);
+          } else {
+            markCard(index);
+          }
+        }
+
+        function fillRows(rows) {
+          el.rowsHost.innerHTML = "";
+          state.hasGeom = {};
+          state.buttons = {};
+          state.eqNodes = {};
+          for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var polys = math.planePolygons(row);
+            var card = document.createElement("div");
+            card.className = "plane" + (polys.length === 0 ? " gone" : "");
+            card.dataset.row = String(row.index);
+            card.style.setProperty("--row-color", familyCss(row));
+            card.style.setProperty("--delay", Math.min(i, 7) * 18 + "ms");
+            card.tabIndex = 0;
+            card.setAttribute(
+              "aria-label",
+              "平面 " + row.index + ", " + row.family.name + ", k=" + row.k,
+            );
+
+            var head = document.createElement("div");
+            head.className = "head";
+
+            var title = document.createElement("span");
+            title.className = "title";
+
+            var idx = document.createElement("span");
+            idx.className = "idx";
+            idx.textContent = "#" + row.index;
+
+            var rest = document.createElement("span");
+            rest.className = "title-rest";
+            rest.textContent = row.family.name;
+
+            title.appendChild(idx);
+            title.appendChild(rest);
+            var order = document.createElement("span");
+            order.className = "order";
+            order.textContent = "k " + row.k;
+            title.appendChild(order);
+            head.appendChild(title);
+
+            var right = document.createElement("span");
+            right.className = "head-right";
+            if (polys.length === 0) {
+              right.textContent = "无落点";
+            } else {
+              state.hasGeom[row.index] = true;
+              var blocks = document.createElement("span");
+              blocks.textContent = polys.length + " 块";
+              right.appendChild(blocks);
+
+              var toggle = document.createElement("button");
+              toggle.type = "button";
+              toggle.className = "mini";
+              toggle.dataset.row = String(row.index);
+              toggle.addEventListener("click", function (e) {
+                toggleRow(Number(e.currentTarget.dataset.row));
+              });
+              right.appendChild(toggle);
+              state.buttons[row.index] = toggle;
+            }
+            head.appendChild(right);
+            card.appendChild(head);
+
+            var coef = document.createElement("div");
+            coef.className = "coef";
+            coef.innerHTML =
+              "<span>(" +
+              row.abcd.join(", ") +
+              ")</span><span>T_k " +
+              math.threshold(row.family, row.k).toFixed(4) +
+              "</span>";
+
+            var eq = document.createElement("div");
+            eq.className = "eq";
+            var tex = math.equationText(row.abcd, row.t);
+            var html = katexHtml(tex);
+            if (html === null) {
+              eq.textContent = tex;
+            } else {
+              eq.innerHTML = html;
+            }
+            card.appendChild(eq);
+            card.appendChild(coef);
+            var seedEff = document.createElement("div");
+            seedEff.className = "seed-eff";
+            seedEff.textContent = "seedEff  " + row.seedEff;
+            card.appendChild(seedEff);
+            state.eqNodes[row.index] = eq;
+
+            card.addEventListener(
+              "pointerenter",
+              (function (index) {
+                return function () {
+                  requestHighlight(index);
+                };
+              })(row.index),
+            );
+            card.addEventListener("pointerleave", function () {
+              requestHighlight(-1);
+            });
+            card.addEventListener(
+              "focusin",
+              (function (index) {
+                return function () {
+                  requestHighlight(index);
+                };
+              })(row.index),
+            );
+            card.addEventListener("focusout", function (e) {
+              if (!e.currentTarget.contains(e.relatedTarget))
+                requestHighlight(-1);
+            });
+            card.addEventListener(
+              "keydown",
+              (function (index) {
+                return function (e) {
+                  if (
+                    e.target === e.currentTarget &&
+                    (e.key === " " || e.key === "Enter") &&
+                    state.hasGeom[index]
+                  ) {
+                    e.preventDefault();
+                    toggleRow(index);
+                  }
+                };
+              })(row.index),
+            );
+
+            el.rowsHost.appendChild(card);
+          }
+          syncButtons();
+        }
+
+        // ---- 首次渲染与 KaTeX ----
+        // KaTeX 是 defer 脚本，而且它的字体是首次用到时才开始下载。若先出普通文本、稍后再换成公式，
+        // 宽度与行高都会跳一次，整片列表跟着重排，看起来就是频闪。所以首次渲染推迟到 KaTeX 与它的
+        // 字体就绪之后，公式只以最终形态出现一次；等待设了上限，超时或加载失败都照常渲染。
+
+        var KATEX_WAIT_CAP_MS = 8000;
+        var DEFAULT_SEED = "1119";
+        setTimeout(startFirstRender, KATEX_WAIT_CAP_MS);
+
+        function updateEquationsInPlace() {
+          if (!state.rows) return;
+          for (var i = 0; i < state.rows.length; i++) {
+            var row = state.rows[i];
+            var node = state.eqNodes[row.index];
+            if (!node) continue;
+            var tex = math.equationText(row.abcd, row.t);
+            var html = katexHtml(tex);
+            if (html === null) {
+              node.textContent = tex;
+            } else {
+              node.innerHTML = html;
+            }
+          }
+        }
+
+        // 图例里带公式的那几段。节点里先写着纯文本，KaTeX 就绪后再换成排版结果，
+        // 换失败或没联网就保持纯文本，不会留出空白。
+        function renderLegendMath() {
+          var nodes = document.querySelectorAll(".tex");
+          for (var i = 0; i < nodes.length; i++) {
+            var tex = nodes[i].getAttribute("data-tex");
+            if (!tex) continue;
+            var html = katexHtml(tex);
+            if (html !== null) nodes[i].innerHTML = html;
+          }
+        }
+
+        // 先用一段不可见的公式把字体拉起来，等 fonts.ready 再渲染列表。
+        function warmUpKatexFonts(done) {
+          if (
+            typeof katex === "undefined" ||
+            !document.fonts ||
+            !document.fonts.ready
+          ) {
+            done();
+            return;
+          }
+          var probe = document.createElement("div");
+          probe.style.position = "absolute";
+          probe.style.left = "-9999px";
+          probe.style.visibility = "hidden";
+          probe.innerHTML = katex.renderToString(
+            "x^{2}+\\frac{a}{b}+\\sqrt{c}+\\sum_{0}^{1}",
+            { throwOnError: false },
+          );
+          document.body.appendChild(probe);
+          var settled = false;
+          function finish() {
+            if (settled) return;
+            settled = true;
+            if (probe.parentNode) probe.parentNode.removeChild(probe);
+            done();
+          }
+          setTimeout(finish, KATEX_WAIT_CAP_MS);
+          document.fonts.ready.then(finish, finish);
+        }
+
+        function startFirstRender() {
+          if (state.rows) {
+            updateEquationsInPlace();
+            renderLegendMath();
+            return;
+          }
+          warmUpKatexFonts(function () {
+            renderLegendMath();
+            if (!state.rows) submit(DEFAULT_SEED);
+          });
+        }
+
+        var katexTag = document.getElementById("katex-script");
+        if (katexTag && typeof katex === "undefined") {
+          katexTag.addEventListener("load", startFirstRender);
+          katexTag.addEventListener("error", startFirstRender);
+        } else {
+          startFirstRender();
+        }
+
+        // ---- seed 解析与渲染入口 ----
+
+        var LONG_MIN = -(1n << 63n);
+        var LONG_MAX = (1n << 63n) - 1n;
+
+        function parseSeed(text) {
+          var trimmed = String(text).trim();
+          if (trimmed === "") return { ok: false, message: "请输入 seed。" };
+          if (!/^[+-]?[0-9]+$/.test(trimmed))
+            return { ok: false, message: "只接受十进制整数。" };
+          var value;
+          try {
+            value = BigInt(trimmed);
+          } catch (e) {
+            return { ok: false, message: "无法解析为 64 位整数。" };
+          }
+          if (value < LONG_MIN || value > LONG_MAX) {
+            return {
+              ok: false,
+              message:
+                "超出 long 范围 [-9223372036854775808, 9223372036854775807]。",
+            };
+          }
+          return { ok: true, value: value, text: value.toString() };
+        }
+
+        function submit(text) {
+          var parsed = parseSeed(text);
+          if (!parsed.ok) {
+            el.seedError.textContent = parsed.message;
+            el.seedError.hidden = false;
+            el.seedInput.setAttribute("aria-invalid", "true");
+            return;
+          }
+          if (!check.ok) {
+            el.seedError.textContent = "启动自检不通过，已停止渲染。";
+            el.seedError.hidden = false;
+            el.seedInput.setAttribute("aria-invalid", "true");
+            return;
+          }
+
+          var seeds = math.seedsFromWorldSeed(parsed.value);
+          var rows = math.buildRows(seeds);
+          state.rows = rows;
+          state.enabled = {};
+
+          fillSeedTable(parsed.text, seeds);
+          fillRows(rows);
+          showInfo(-1);
+          // 初次进入与每次点渲染一样：随机开 3 到 5 张有落点的面。
+          enableRandomSome(3 + Math.floor(Math.random() * 3));
+
+          el.seedInput.value = parsed.text;
+          el.seedError.hidden = true;
+          el.seedInput.removeAttribute("aria-invalid");
+
+          if (window.DomeGL) window.DomeGL.enqueue(rows);
+        }
+
+        el.renderBtn.addEventListener("click", function () {
+          submit(el.seedInput.value);
+        });
+        el.seedInput.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") submit(el.seedInput.value);
+        });
+        el.toggleAll.addEventListener("click", function () {
+          setAllRows(anyDisabled());
+        });
+
+        window.DomeUI = {
+          setStatus: setStatus,
+          hideStatus: hideStatus,
+          fatal: fatal,
+          markCard: markCard,
+          requestHighlight: requestHighlight,
+          showInfo: showInfo,
+          pinCard: pinCard,
+          isEnabled: isEnabled,
+          getRows: function () {
+            return state.rows;
+          },
+          setHighlight: function (fn) {
+            state.highlight = fn;
+          },
+          check: check,
+        };
+
+        // 无首屏：首次渲染由下面的 startFirstRender 负责，这里只导出接口。
+      })();
+    </script>
+
+    <!-- Three.js r149
+The MIT License (MIT)
+
+Copyright 2010-2023 Three.js Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-->
+    <!-- three.js 走 dome-gl 内的 CDN 候选链加载：jsdelivr、unpkg、cdnjs 与本地 ./three.min.js 回退，不再内联。 -->
+
+    <script id="dome-gl">
+      (function () {
+        "use strict";
+
+        var ui = window.DomeUI;
+        var UNIT = 1.0 / 2147483648.0;
+
+        // 全局 UMD 构建，走普通 script 标签，不经过模块系统，file:// 下可用。
+        var UMD_SOURCES = [
+          "https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js",
+          "https://unpkg.com/three@0.149.0/build/three.min.js",
+          "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
+          "./three.min.js",
+        ];
+
+        // 若全局构建都拿不到，再试 ESM 构建的动态 import。
+        var ESM_SOURCES = [
+          "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+          "https://unpkg.com/three@0.169.0/build/three.module.js",
+          "https://esm.sh/three@0.169.0",
+        ];
+
+        var gl = {
+          ready: false,
+          pending: null,
+          render: null,
+          resize: null,
+          enqueue: function (rows) {
+            if (gl.ready) {
+              gl.render(rows);
+            } else {
+              gl.pending = rows;
+            }
+          },
+        };
+        window.DomeGL = gl;
+
+        function failAll() {
+          ui.setStatus("三维：不可用，全部候选源均加载失败", true);
+          ui.fatal(
+            "三维渲染不可用：three.js 的所有候选源都没加载成功。\n" +
+              "种子、列表与方程不依赖三维，面板照常可用。\n" +
+              "可试：确认网络能访问 cdn.jsdelivr.net，或把 three.min.js 放到本文件同目录。",
+          );
+          logStatus(
+            "已试过的源：" + UMD_SOURCES.concat(ESM_SOURCES).join(" | "),
+          );
+        }
+
+        function loadScript(url, timeoutMs) {
+          return new Promise(function (resolve, reject) {
+            var s = document.createElement("script");
+            var settled = false;
+            var timer = setTimeout(function () {
+              if (settled) return;
+              settled = true;
+              s.remove();
+              reject(new Error("超时 " + timeoutMs + " ms"));
+            }, timeoutMs);
+            s.src = url;
+            s.async = true;
+            s.onload = function () {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve();
+            };
+            s.onerror = function () {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              s.remove();
+              reject(new Error("网络或 404"));
+            };
+            document.head.appendChild(s);
+          });
+        }
+
+        function boot(THREE, label) {
+          var stage = document.getElementById("stage");
+          var canvas = document.getElementById("canvas");
+          var labelHost = document.getElementById("labels");
+
+          var renderer;
+          try {
+            renderer = new THREE.WebGLRenderer({
+              canvas: canvas,
+              antialias: true,
+              alpha: true,
+              premultipliedAlpha: false,
+              powerPreference: "high-performance",
+            });
+          } catch (e) {
+            var reason = e && e.message ? e.message : String(e);
+            ui.setStatus("三维：WebGL 上下文创建失败 " + reason, true);
+            ui.fatal(
+              "三维渲染不可用：WebGL 上下文创建失败，" +
+                reason +
+                "。\n左侧的种子、列表与方程不依赖三维，仍然可用。",
+            );
+            return;
+          }
+
+          gl.ready = true;
+          ui.hideStatus();
+          if (window.console && console.log)
+            console.log("三维：就绪，源 " + label);
+          // Supersampling also smooths transparent surfaces in the offscreen passes.
+          renderer.setPixelRatio(
+            Math.min(2, Math.max(2, window.devicePixelRatio || 1)),
+          );
+          renderer.setClearColor(0x000000, 0);
+          if ("outputColorSpace" in renderer)
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+          else renderer.outputEncoding = THREE.sRGBEncoding;
+
+          var scene = new THREE.Scene();
+          var camera = new THREE.PerspectiveCamera(42, 1, 0.01, 200);
+
+          var DEFAULT_RADIUS = 5.4;
+          /** 定位要放大到的尺度：视野高约一百万格。 */
+          var LOCATE_BLOCKS = 1000000;
+          // 归一化世界下一百万格只有 4.7e-4，最小视距必须放到同一量级，否则缩不进去。
+          var MIN_RADIUS = 0.0001;
+          var MAX_RADIUS = 24.0;
+          /** 相机环绕并注视的点，默认原点；定位后移到目标点。 */
+          var focus = new THREE.Vector3(0, 0, 0);
+          var targetFocus = new THREE.Vector3(0, 0, 0);
+
+          /** 视野高恰好是 blocks 格时的相机距离。 */
+          function radiusForBlocks(blocks) {
+            var halfFov = Math.tan((camera.fov * Math.PI) / 360);
+            return blocks / BLOCK_UNIT / (2 * halfFov);
+          }
+
+          /**
+           * 定位标记的世界半径：定位视窗高的 0.75%，换算到屏幕上约 13 像素。
+           * 它是场景里的物体，跟着缩放走；缩到屏幕上不足 4 像素时由像素下限兜住。
+           */
+          var MARK_RADIUS = (LOCATE_BLOCKS * 0.015) / 2 * UNIT;
+
+          var theta = 0.62;
+          var phi = 1.12;
+          var radius = DEFAULT_RADIUS;
+          var targetTheta = theta,
+            targetPhi = phi,
+            targetRadius = radius;
+          var reducedMotion = window.matchMedia(
+            "(prefers-reduced-motion: reduce)",
+          );
+          var raf = 0,
+            lastFrame = 0,
+            lastFit = 0;
+          function invalidate() {
+            if (!raf && !document.hidden) raf = requestAnimationFrame(loop);
+          }
+          function clearViewSelection() {
+            document.querySelectorAll("[data-view]").forEach(function (b) {
+              b.setAttribute("aria-pressed", "false");
+            });
+          }
+          function fitRadius() {
+            return Math.max(DEFAULT_RADIUS, 3.7 / Math.max(camera.aspect, 0.5));
+          }
+          function chooseView(name, reset) {
+            var views = {
+              iso: [0.62, 1.12],
+              x: [Math.PI / 2, Math.PI / 2],
+              y: [0, 0.0001],
+              z: [0, Math.PI / 2],
+            };
+            var view = views[name] || views.iso;
+            // Use the nearest equivalent angle so the camera never spins a full revolution.
+            targetTheta =
+              theta +
+              Math.atan2(Math.sin(view[0] - theta), Math.cos(view[0] - theta));
+            targetPhi = view[1];
+            if (reset) {
+              targetRadius = fitRadius();
+              targetFocus.set(0, 0, 0);
+              markGroup.visible = false;
+            }
+            document.querySelectorAll("[data-view]").forEach(function (b) {
+              b.setAttribute("aria-pressed", String(b.dataset.view === name));
+            });
+            setHovered(-1);
+            hideMenu();
+            invalidate();
+          }
+          document.querySelectorAll("[data-view]").forEach(function (b) {
+            b.addEventListener("click", function () {
+              chooseView(b.dataset.view, false);
+            });
+          });
+          document
+            .getElementById("reset-view")
+            .addEventListener("click", function () {
+              chooseView("iso", true);
+            });
+          canvas.addEventListener("keydown", function (e) {
+            var used = true;
+            if (e.key === "ArrowLeft") targetTheta += 0.12;
+            else if (e.key === "ArrowRight") targetTheta -= 0.12;
+            else if (e.key === "ArrowUp")
+              targetPhi = Math.max(0.02, targetPhi - 0.12);
+            else if (e.key === "ArrowDown")
+              targetPhi = Math.min(Math.PI - 0.02, targetPhi + 0.12);
+            else if (e.key === "+" || e.key === "=")
+              targetRadius = Math.max(MIN_RADIUS, targetRadius / 1.15);
+            else if (e.key === "-")
+              targetRadius = Math.min(MAX_RADIUS, targetRadius * 1.15);
+            else if (e.key === "Home") {
+              chooseView("iso", true);
+            } else used = false;
+            if (used) {
+              e.preventDefault();
+              if (e.key !== "Home") clearViewSelection();
+              invalidate();
+            }
+          });
+
+          function updateCamera() {
+            camera.position.set(
+              focus.x + radius * Math.sin(phi) * Math.sin(theta),
+              focus.y + radius * Math.cos(phi),
+              focus.z + radius * Math.sin(phi) * Math.cos(theta),
+            );
+            camera.lookAt(focus);
+            // 允许缩到十万格量级之后，近远平面必须跟着视距走，否则近平面会把整个场景切掉。
+            camera.near = Math.max(radius * 0.01, 1e-8);
+            camera.far = radius * 8 + 4;
+            camera.updateProjectionMatrix();
+            updateAxisWidth();
+          }
+
+          // ---- 坐标轴、刻度与立方体线框 ----
+
+          var guides = new THREE.Group();
+          scene.add(guides);
+
+          /** 可被右键拾取的坐标轴。 */
+          var axisPicks = [];
+
+          /** 目标屏幕宽度，单位 CSS 像素；原来的 Line 在 Windows 上恒为 1 像素。 */
+          var AXIS_PIXELS = 1.5;
+
+          var AXIS_COLORS = { x: 0xca8085, y: 0x8dbba1, z: 0x85a9dc };
+
+          function line(points, color, opacity) {
+            var geometry = new THREE.BufferGeometry().setFromPoints(points);
+            var material = new THREE.LineBasicMaterial({
+              color: color,
+              transparent: true,
+              opacity: opacity === undefined ? 1.0 : opacity,
+              depthWrite: false,
+            });
+            return new THREE.Line(geometry, material);
+          }
+
+          /**
+           * 坐标轴用半径 1 的圆柱画，实际粗细由 updateAxisWidth 的 scale 给。
+           * 不用 Line：线宽在 Windows 的 ANGLE 上被忽略，写多少都是 1 像素。
+           */
+          function axisBar(axis, color) {
+            var geometry = new THREE.CylinderGeometry(1, 1, 2, 16, 1);
+            var material = new THREE.MeshBasicMaterial({
+              color: color,
+              transparent: true,
+              opacity: 0.85,
+            });
+            var bar = new THREE.Mesh(geometry, material);
+            bar.rotation.x = 0;
+            bar.rotation.z = 0;
+            if (axis === "x") bar.rotation.z = Math.PI / 2;
+            if (axis === "z") bar.rotation.x = Math.PI / 2;
+            bar.userData.axis = axis;
+            return bar;
+          }
+
+          /** 把轴的世界半径按当前视距换算成恒定 AXIS_PIXELS 像素宽。 */
+          function updateAxisWidth() {
+            var h = stage.clientHeight;
+            if (h <= 0) return;
+            var halfFov = Math.tan((camera.fov * Math.PI) / 360);
+            var worldRadius = (AXIS_PIXELS * radius * halfFov) / h;
+            for (var i = 0; i < axisPicks.length; i++) {
+              axisPicks[i].scale.set(worldRadius, 1, worldRadius);
+            }
+          }
+
+          function buildGuides() {
+            var tick = 0.018;
+            var ticks = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1];
+
+            var axes = [
+              { axis: "x", color: AXIS_COLORS.x },
+              { axis: "y", color: AXIS_COLORS.y },
+              { axis: "z", color: AXIS_COLORS.z },
+            ];
+            for (var a = 0; a < axes.length; a++) {
+              var bar = axisBar(axes[a].axis, axes[a].color);
+              guides.add(bar);
+              axisPicks.push(bar);
+            }
+
+            for (var i = 0; i < ticks.length; i++) {
+              var t = ticks[i];
+              if (t === 0) continue;
+              guides.add(
+                line(
+                  [
+                    new THREE.Vector3(t, -tick, 0),
+                    new THREE.Vector3(t, tick, 0),
+                  ],
+                  AXIS_COLORS.x,
+                  0.6,
+                ),
+              );
+              guides.add(
+                line(
+                  [
+                    new THREE.Vector3(-tick, t, 0),
+                    new THREE.Vector3(tick, t, 0),
+                  ],
+                  AXIS_COLORS.y,
+                  0.6,
+                ),
+              );
+              guides.add(
+                line(
+                  [
+                    new THREE.Vector3(-tick, 0, t),
+                    new THREE.Vector3(tick, 0, t),
+                  ],
+                  AXIS_COLORS.z,
+                  0.6,
+                ),
+              );
+            }
+
+            var box = new THREE.LineSegments(
+              new THREE.EdgesGeometry(new THREE.BoxGeometry(2, 2, 2)),
+              new THREE.LineBasicMaterial({
+                color: 0x68819f,
+                transparent: true,
+                opacity: 0.4,
+                depthWrite: false,
+              }),
+            );
+            guides.add(box);
+          }
+
+          buildGuides();
+
+          // ---- 轴上刻度标签 ----
+
+          var labelItems = [];
+          var LABEL_AT = [-1, -0.5, 0.5, 1];
+
+          function buildLabels() {
+            var specs = [
+              {
+                color: "#cf969b",
+                axis: "X",
+                at: function (v) {
+                  return new THREE.Vector3(v, 0, 0);
+                },
+              },
+              {
+                color: "#9dbfaa",
+                axis: "Y",
+                at: function (v) {
+                  return new THREE.Vector3(0, v, 0);
+                },
+              },
+              {
+                color: "#94b2de",
+                axis: "Z",
+                at: function (v) {
+                  return new THREE.Vector3(0, 0, v);
+                },
+              },
+            ];
+            for (var i = 0; i < specs.length; i++) {
+              var axisName = document.createElement("div");
+              axisName.className = "axis-label axis-name";
+              axisName.textContent = specs[i].axis;
+              axisName.style.color = specs[i].color;
+              labelHost.appendChild(axisName);
+              labelItems.push({
+                el: axisName,
+                pos: specs[i].at(1.13),
+                name: true,
+                axis: specs[i].axis,
+              });
+              for (var j = 0; j < LABEL_AT.length; j++) {
+                var v = LABEL_AT[j];
+                var element = document.createElement("div");
+                element.className = "axis-label";
+                element.style.color = specs[i].color;
+                element.textContent = (v > 0 ? "+" : "") + v;
+                labelHost.appendChild(element);
+                labelItems.push({
+                  el: element,
+                  pos: specs[i].at(v),
+                  axis: specs[i].axis,
+                });
+              }
+            }
+            var origin = document.createElement("div");
+            origin.className = "axis-label";
+            origin.textContent = "0";
+            labelHost.appendChild(origin);
+            labelItems.push({ el: origin, pos: new THREE.Vector3(0, 0, 0) });
+          }
+
+          buildLabels();
+
+          function updateLabels() {
+            var width = stage.clientWidth;
+            var height = stage.clientHeight;
+            var center = new THREE.Vector3().project(camera);
+            var occupied = [
+              {
+                x: (center.x * 0.5 + 0.5) * width,
+                y: (-center.y * 0.5 + 0.5) * height + 13,
+              },
+            ];
+            var axisLength = {};
+            ["X", "Y", "Z"].forEach(function (axis, i) {
+              var v = new THREE.Vector3(
+                i === 0 ? 1 : 0,
+                i === 1 ? 1 : 0,
+                i === 2 ? 1 : 0,
+              ).project(camera);
+              axisLength[axis] = Math.hypot(
+                ((v.x - center.x) * width) / 2,
+                ((v.y - center.y) * height) / 2,
+              );
+            });
+            for (var i = 0; i < labelItems.length; i++) {
+              var item = labelItems[i];
+              var p = item.pos.clone().project(camera);
+              var x = (p.x * 0.5 + 0.5) * width;
+              var y = (-p.y * 0.5 + 0.5) * height + (item.name ? 0 : 13);
+              var visible =
+                p.z <= 1 &&
+                p.z >= -1 &&
+                x > 12 &&
+                x < width - 12 &&
+                y > 50 &&
+                y < height - 35;
+              if (item.axis) {
+                if (axisLength[item.axis] < (item.name ? 35 : 75))
+                  visible = false;
+                for (var j = 0; visible && j < occupied.length; j++) {
+                  if (
+                    Math.abs(x - occupied[j].x) < 29 &&
+                    Math.abs(y - occupied[j].y) < 17
+                  )
+                    visible = false;
+                }
+                if (visible) occupied.push({ x: x, y: y });
+              }
+              item.el.style.opacity = visible ? "1" : "0";
+              item.el.style.transform =
+                "translate(-50%,-50%) translate(" +
+                x.toFixed(1) +
+                "px," +
+                y.toFixed(1) +
+                "px)";
+            }
+          }
+
+          // ---- 平面 ----
+
+          var planes = new THREE.Group();
+          scene.add(planes);
+
+          /** 定位点标记。关掉深度测试，缩到极小尺度时也不会被别的几何盖住。 */
+          var markGroup = new THREE.Group();
+          var markMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(1, 16, 12),
+            new THREE.MeshBasicMaterial({
+              color: 0xeaf1ff,
+              transparent: true,
+              opacity: 0.95,
+              depthTest: false,
+              depthWrite: false,
+            }),
+          );
+          markGroup.add(markMesh);
+          markGroup.renderOrder = 999;
+          markGroup.visible = false;
+          scene.add(markGroup);
+          /** 定位点的方块坐标，右键复制时直接用它，不走浮点回程。 */
+          var markBlock = null;
+
+          // Weighted blended order-independent transparency (two geometry passes).
+          // Only display compositing changes; triangle positions and analytic picking are untouched.
+          // Half-float accumulation avoids order-dependent dark bands at intersecting planes.
+          var useOIT =
+            renderer.capabilities.isWebGL2 &&
+            !!renderer.extensions.get("EXT_color_buffer_float");
+          var accumTarget,
+            revealTarget,
+            baseTarget,
+            compositeScene,
+            compositeCamera,
+            compositeMaterial;
+          var oitScene = new THREE.Scene();
+          var passUniform = { value: 0 };
+          var depthUniform = { value: null };
+          var sizeUniform = { value: new THREE.Vector2(1, 1) };
+          if (useOIT) {
+            scene.remove(planes);
+            oitScene.add(planes);
+            var targetOptions = {
+              minFilter: THREE.LinearFilter,
+              magFilter: THREE.LinearFilter,
+              depthBuffer: false,
+              stencilBuffer: false,
+            };
+            accumTarget = new THREE.WebGLRenderTarget(
+              1,
+              1,
+              Object.assign({}, targetOptions, { type: THREE.HalfFloatType }),
+            );
+            revealTarget = new THREE.WebGLRenderTarget(1, 1, targetOptions);
+            baseTarget = new THREE.WebGLRenderTarget(1, 1, {
+              minFilter: THREE.LinearFilter,
+              magFilter: THREE.LinearFilter,
+            });
+            baseTarget.depthTexture = new THREE.DepthTexture(
+              1,
+              1,
+              THREE.UnsignedIntType,
+            );
+            depthUniform.value = baseTarget.depthTexture;
+            accumTarget.samples = revealTarget.samples = Math.min(
+              4,
+              renderer.capabilities.maxSamples || 0,
+            );
+            compositeScene = new THREE.Scene();
+            compositeCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            var encodeChunk = THREE.ShaderChunk.colorspace_fragment
+              ? "colorspace_fragment"
+              : "encodings_fragment";
+            compositeMaterial = new THREE.ShaderMaterial({
+              uniforms: {
+                base: { value: baseTarget.texture },
+                accum: { value: accumTarget.texture },
+                reveal: { value: revealTarget.texture },
+              },
+              vertexShader:
+                "varying vec2 vUv; void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}",
+              fragmentShader:
+                "varying vec2 vUv; uniform sampler2D base; uniform sampler2D accum; uniform sampler2D reveal; void main(){vec4 b=texture2D(base,vUv);vec4 a=texture2D(accum,vUv);float r=clamp(texture2D(reveal,vUv).r,0.,1.);float alpha=1.-r;float outAlpha=alpha+b.a*r;vec3 color=(a.rgb/max(a.a,0.00001)*alpha+b.rgb*b.a*r)/max(outAlpha,0.00001);gl_FragColor=vec4(color,outAlpha);\n#include <" +
+                encodeChunk +
+                ">\n}",
+              depthTest: false,
+              depthWrite: false,
+              transparent: false,
+              blending: THREE.NoBlending,
+            });
+            compositeScene.add(
+              new THREE.Mesh(new THREE.PlaneGeometry(2, 2), compositeMaterial),
+            );
+          }
+          function surfaceMaterial(color, edge) {
+            if (!useOIT)
+              return edge
+                ? new THREE.LineBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0,
+                    depthWrite: false,
+                  })
+                : new THREE.MeshBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0,
+                    side: THREE.DoubleSide,
+                    depthWrite: false,
+                  });
+            return new THREE.ShaderMaterial({
+              uniforms: {
+                tint: { value: color },
+                alpha: { value: 0 },
+                pass: passUniform,
+                sceneDepth: depthUniform,
+                resolution: sizeUniform,
+              },
+              vertexShader:
+                "varying float vDistance; void main(){vec4 p=modelViewMatrix*vec4(position,1.);vDistance=-p.z;gl_Position=projectionMatrix*p;}",
+              fragmentShader:
+                "uniform vec3 tint;uniform float alpha;uniform int pass;uniform sampler2D sceneDepth;uniform vec2 resolution;varying float vDistance;void main(){if(gl_FragCoord.z>texture2D(sceneDepth,gl_FragCoord.xy/resolution).r+0.000001)discard;float a=clamp(alpha,0.,0.98);if(pass==0){float w=clamp(10./(0.1+vDistance*vDistance),0.1,8.);gl_FragColor=vec4(tint*a*w,a*w);}else{gl_FragColor=vec4(0.,0.,0.,a);}}",
+              transparent: true,
+              side: THREE.DoubleSide,
+              depthWrite: false,
+              depthTest: false,
+              blending: THREE.CustomBlending,
+              blendEquation: THREE.AddEquation,
+              blendSrc: THREE.OneFactor,
+              blendDst: THREE.OneFactor,
+            });
+          }
+          function setAlpha(material, value) {
+            if (useOIT) material.uniforms.alpha.value = value;
+            else material.opacity = value;
+          }
+          function drawScene() {
+            if (!useOIT) {
+              renderer.render(scene, camera);
+              return;
+            }
+            renderer.setRenderTarget(baseTarget);
+            renderer.setClearColor(0x000000, 0);
+            renderer.clear();
+            renderer.render(scene, camera);
+            passUniform.value = 0;
+            for (var i = 0; i < rowObjects.length; i++)
+              if (rowObjects[i]) {
+                rowObjects[i].fill.blendSrc = rowObjects[i].edge.blendSrc =
+                  THREE.OneFactor;
+                rowObjects[i].fill.blendDst = rowObjects[i].edge.blendDst =
+                  THREE.OneFactor;
+              }
+            renderer.setRenderTarget(accumTarget);
+            renderer.setClearColor(0x000000, 0);
+            renderer.clear();
+            renderer.render(oitScene, camera);
+            passUniform.value = 1;
+            for (var j = 0; j < rowObjects.length; j++)
+              if (rowObjects[j]) {
+                rowObjects[j].fill.blendSrc = rowObjects[j].edge.blendSrc =
+                  THREE.ZeroFactor;
+                rowObjects[j].fill.blendDst = rowObjects[j].edge.blendDst =
+                  THREE.OneMinusSrcAlphaFactor;
+              }
+            renderer.setRenderTarget(revealTarget);
+            renderer.setClearColor(0xffffff, 1);
+            renderer.clear();
+            renderer.render(oitScene, camera);
+            renderer.setRenderTarget(null);
+            renderer.setClearColor(0x000000, 0);
+            renderer.clear();
+            renderer.render(compositeScene, compositeCamera);
+          }
+
+          var rowObjects = [];
+          var hovered = -1;
+
+          function familyColor(row) {
+            var t = (row.k - 7) / 8.0;
+            return new THREE.Color()
+              .setHSL(row.family.hue, 0.65, 0.58 + 0.18 * t)
+              .convertSRGBToLinear();
+          }
+
+          function buildPlane(row) {
+            var polys = window.DomeMath.planePolygons(row);
+            if (polys.length === 0) return null;
+
+            var positions = [];
+            var edges = [];
+            for (var pi = 0; pi < polys.length; pi++) {
+              var poly = polys[pi];
+              var n = poly.length;
+              for (var i = 1; i + 1 < n; i++) {
+                positions.push(
+                  poly[0][0] * UNIT,
+                  poly[0][1] * UNIT,
+                  poly[0][2] * UNIT,
+                  poly[i][0] * UNIT,
+                  poly[i][1] * UNIT,
+                  poly[i][2] * UNIT,
+                  poly[i + 1][0] * UNIT,
+                  poly[i + 1][1] * UNIT,
+                  poly[i + 1][2] * UNIT,
+                );
+              }
+              for (var j = 0; j < n; j++) {
+                var p = poly[j];
+                var q = poly[(j + 1) % n];
+                edges.push(
+                  p[0] * UNIT,
+                  p[1] * UNIT,
+                  p[2] * UNIT,
+                  q[0] * UNIT,
+                  q[1] * UNIT,
+                  q[2] * UNIT,
+                );
+              }
+            }
+
+            var color = familyColor(row);
+            var fillGeometry = new THREE.BufferGeometry();
+            fillGeometry.setAttribute(
+              "position",
+              new THREE.Float32BufferAttribute(positions, 3),
+            );
+            var fillMaterial = surfaceMaterial(color, false);
+            var mesh = new THREE.Mesh(fillGeometry, fillMaterial);
+            mesh.userData.rowIndex = row.index;
+
+            var edgeGeometry = new THREE.BufferGeometry();
+            edgeGeometry.setAttribute(
+              "position",
+              new THREE.Float32BufferAttribute(edges, 3),
+            );
+            var edgeMaterial = surfaceMaterial(
+              color.clone().lerp(new THREE.Color(0xffffff), 0.12),
+              true,
+            );
+            var outline = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+
+            var object = new THREE.Group();
+            object.add(mesh);
+            object.add(outline);
+            object.userData.rowIndex = row.index;
+
+            rowObjects[row.index] = {
+              object: object,
+              mesh: mesh,
+              fill: fillMaterial,
+              edge: edgeMaterial,
+              outline: outline,
+              visibility: 0,
+              targetVisibility: 1,
+              focus: 0,
+            };
+            return object;
+          }
+
+          function setHovered(index) {
+            if (hovered === index) return;
+            hovered = index;
+            invalidate();
+            // 有固定项时悬停不再改变任何高亮；信息框仍跟随指针。
+            if (pinnedCount === 0) ui.markCard(index);
+            ui.showInfo(index);
+          }
+
+          ui.setHighlight(setHovered);
+
+          // 逐项开关：关掉的项整组隐藏，悬停命中也会跳过它。
+          gl.setVisible = function (index, visible) {
+            var entry = rowObjects[index];
+            if (!entry) return;
+            entry.targetVisibility = visible !== false ? 1 : 0;
+            if (entry.targetVisibility) entry.object.visible = true;
+            if (!entry.targetVisibility && hovered === index) setHovered(-1);
+            invalidate();
+          };
+
+          // ---- 渲染一批行 ----
+
+          gl.render = function (rows) {
+            for (var i = 0; i < rowObjects.length; i++) {
+              var entry = rowObjects[i];
+              if (!entry) continue;
+              planes.remove(entry.object);
+              entry.mesh.geometry.dispose();
+              entry.fill.dispose();
+              entry.outline.geometry.dispose();
+              entry.edge.dispose();
+            }
+            rowObjects.length = 0;
+            hovered = -1;
+            for (var pk in pinned) {
+              ui.pinCard(Number(pk), false);
+              delete pinned[pk];
+            }
+            pinnedCount = 0;
+            ui.showInfo(-1);
+
+            for (var j = 0; j < rows.length; j++) {
+              var object = buildPlane(rows[j]);
+              if (object) planes.add(object);
+            }
+            // 按界面当前的开关状态落一次可见性。
+            for (var k = 0; k < rows.length; k++) {
+              var entry = rowObjects[rows[k].index];
+              if (entry) {
+                entry.targetVisibility = ui.isEnabled(rows[k].index) ? 1 : 0;
+                entry.object.visible = !!entry.targetVisibility;
+              }
+            }
+            resize();
+          };
+
+          // ---- 交互：只旋转与缩放 ----
+
+          var dragging = false;
+          var lastX = 0;
+          var lastY = 0;
+
+          canvas.addEventListener("contextmenu", function (e) {
+            e.preventDefault();
+            if (dragging) return;
+            openMenu(e);
+          });
+          canvas.addEventListener("auxclick", function (e) {
+            e.preventDefault();
+          });
+
+          canvas.addEventListener("pointerdown", function (e) {
+            hideMenu();
+            if (e.button !== 0) return;
+            dragging = true;
+            setHovered(-1);
+            lastX = e.clientX;
+            lastY = e.clientY;
+            canvas.setPointerCapture(e.pointerId);
+          });
+
+          canvas.addEventListener("pointerup", function (e) {
+            dragging = false;
+            if (canvas.hasPointerCapture(e.pointerId))
+              canvas.releasePointerCapture(e.pointerId);
+          });
+
+          canvas.addEventListener("pointercancel", function () {
+            dragging = false;
+          });
+          canvas.addEventListener("lostpointercapture", function () {
+            dragging = false;
+          });
+          canvas.addEventListener("pointerleave", function () {
+            if (!dragging) setHovered(-1);
+          });
+
+          canvas.addEventListener("pointermove", function (e) {
+            if (dragging) {
+              targetTheta -= (e.clientX - lastX) * 0.004;
+              targetPhi -= (e.clientY - lastY) * 0.004;
+              targetPhi = Math.max(0.02, Math.min(Math.PI - 0.02, targetPhi));
+              lastX = e.clientX;
+              lastY = e.clientY;
+              clearViewSelection();
+              invalidate();
+            } else {
+              probe(e);
+            }
+          });
+
+          // 滚轮挂在整块右侧区域上，而不是只挂画布，避免指针落在画布之外时滚到别处。
+          stage.addEventListener(
+            "wheel",
+            function (e) {
+              e.preventDefault();
+              hideMenu();
+              var delta =
+                e.deltaY *
+                (e.deltaMode === 1
+                  ? 16
+                  : e.deltaMode === 2
+                    ? stage.clientHeight
+                    : 1);
+              targetRadius = Math.max(
+                MIN_RADIUS,
+                Math.min(MAX_RADIUS, targetRadius * Math.exp(delta * 0.0012)),
+              );
+              setHovered(-1);
+              invalidate();
+            },
+            { passive: false },
+          );
+
+          var raycaster = new THREE.Raycaster();
+          var pointer = new THREE.Vector2();
+
+          function pointerNdc(e) {
+            var rect = canvas.getBoundingClientRect();
+            pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          }
+
+          function visiblePlaneMeshes() {
+            var meshes = [];
+            for (var i = 0; i < rowObjects.length; i++) {
+              if (rowObjects[i] && rowObjects[i].targetVisibility > 0)
+                meshes.push(rowObjects[i].mesh);
+            }
+            return meshes;
+          }
+
+          function probe(e) {
+            pointerNdc(e);
+            raycaster.setFromCamera(pointer, camera);
+            var hits = raycaster.intersectObjects(visiblePlaneMeshes(), false);
+            if (hits.length === 0) {
+              setHovered(-1);
+              return;
+            }
+            setHovered(hits[0].object.userData.rowIndex);
+          }
+
+          // ---- 右键菜单：复制指针所指点的方块坐标 ----
+
+          var ctxMenu = document.getElementById("ctx-menu");
+          var ctxCopy = document.getElementById("ctx-copy");
+          var ctxPin = document.getElementById("ctx-pin");
+          var ctxGoto = document.getElementById("ctx-goto");
+          var gotoPanel = document.getElementById("goto-panel");
+          var gotoX = document.getElementById("goto-x");
+          var gotoY = document.getElementById("goto-y");
+          var gotoZ = document.getElementById("goto-z");
+          var gotoApply = document.getElementById("goto-apply");
+          var gotoError = document.getElementById("goto-error");
+          /** 最近一次右键的位置，面板照着它摆。 */
+          var lastPointer = null;
+          var ctxTarget = null;
+          /** 右键当前指向的行；坐标轴时为 -1。 */
+          var ctxRowIndex = -1;
+          /** 已固定的行：常驻高亮，固定期间悬停不再改变任何高亮。 */
+          var pinned = {};
+          var pinnedCount = 0;
+          function setPinned(index, on) {
+            if (on) {
+              if (!pinned[index]) {
+                pinned[index] = true;
+                pinnedCount++;
+              }
+            } else if (pinned[index]) {
+              delete pinned[index];
+              pinnedCount--;
+            }
+            ui.pinCard(index, on);
+            if (pinnedCount > 0) ui.markCard(-1);
+            invalidate();
+          }
+          var BLOCK_UNIT = 2147483648.0;
+          var BLOCK_MIN = -2147483648;
+          var BLOCK_MAX = 2147483647;
+
+          function clampBlock(v) {
+            var r = Math.round(v);
+            if (!isFinite(r)) return 0;
+            if (r > BLOCK_MAX) return BLOCK_MAX;
+            if (r < BLOCK_MIN) return BLOCK_MIN;
+            return r;
+          }
+
+          /** 相机射线与平面方程 a x + (b/2) y + c z + T_k d = 0 的交点，方块坐标。 */
+          function blockOfPlane(ray, row, hitPoint) {
+            var a = row.abcd[0];
+            var hb = row.abcd[1] / 2;
+            var c = row.abcd[2];
+            var k = row.t * row.abcd[3];
+            var ox = ray.origin.x * BLOCK_UNIT;
+            var oy = ray.origin.y * BLOCK_UNIT;
+            var oz = ray.origin.z * BLOCK_UNIT;
+            var dx = ray.direction.x * BLOCK_UNIT;
+            var dy = ray.direction.y * BLOCK_UNIT;
+            var dz = ray.direction.z * BLOCK_UNIT;
+            var denom = a * dx + hb * dy + c * dz;
+            if (denom === 0) {
+              // 射线与平面平行，解析解不存在；退回射线命中点，它已是 float32 精度。
+              if (!hitPoint) return null;
+              return [
+                hitPoint.x * BLOCK_UNIT,
+                hitPoint.y * BLOCK_UNIT,
+                hitPoint.z * BLOCK_UNIT,
+              ];
+            }
+            var t = -(a * ox + hb * oy + c * oz + k) / denom;
+            if (!isFinite(t)) return null;
+            return [ox + t * dx, oy + t * dy, oz + t * dz];
+          }
+
+          /** 射线与某条坐标轴最近点在轴上的坐标值，方块单位。 */
+          function axisCoordOf(ray, axis) {
+            var o = [
+              ray.origin.x * BLOCK_UNIT,
+              ray.origin.y * BLOCK_UNIT,
+              ray.origin.z * BLOCK_UNIT,
+            ];
+            var d = [
+              ray.direction.x * BLOCK_UNIT,
+              ray.direction.y * BLOCK_UNIT,
+              ray.direction.z * BLOCK_UNIT,
+            ];
+            var e = [
+              axis === "x" ? 1 : 0,
+              axis === "y" ? 1 : 0,
+              axis === "z" ? 1 : 0,
+            ];
+            var dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+            var de = d[0] * e[0] + d[1] * e[1] + d[2] * e[2];
+            var eo = e[0] * o[0] + e[1] * o[1] + e[2] * o[2];
+            var od = o[0] * d[0] + o[1] * d[1] + o[2] * d[2];
+            var denom = dd - de * de;
+            // 射线与轴平行时最近点对不唯一，取射线起点在该轴上的投影。
+            if (Math.abs(denom) < 1e-9) return eo;
+            var t = (eo * de - od) / denom;
+            return t * de + eo;
+          }
+
+          function hideMenu() {
+            ctxMenu.hidden = true;
+            // 定位面板与右键菜单是同一批浮层，同一批手势一起收。
+            gotoPanel.hidden = true;
+            ctxTarget = null;
+            ctxRowIndex = -1;
+          }
+
+          /** 把浮层摆在指针处，越出可视区就夹回来。 */
+          function placeOverlay(el, clientX, clientY) {
+            var rect = stage.getBoundingClientRect();
+            var x = clientX - rect.left + 2;
+            var y = clientY - rect.top + 2;
+            el.style.left =
+              Math.max(2, Math.min(x, stage.clientWidth - el.offsetWidth - 4)) +
+              "px";
+            el.style.top =
+              Math.max(2, Math.min(y, stage.clientHeight - el.offsetHeight - 4)) +
+              "px";
+          }
+
+          function openMenu(e) {
+            pointerNdc(e);
+            raycaster.setFromCamera(pointer, camera);
+            var planeHits = raycaster.intersectObjects(
+              visiblePlaneMeshes(),
+              false,
+            );
+            var axisHits = raycaster.intersectObjects(axisPicks, false);
+            var markHits = markGroup.visible
+              ? raycaster.intersectObject(markMesh, false)
+              : [];
+            // 取最上层：几种命中里离相机更近的那一个。
+            var best = null;
+            var planeHit = null;
+            if (markHits.length > 0) {
+              best = { kind: "mark", distance: markHits[0].distance };
+            }
+            if (
+              axisHits.length > 0 &&
+              (best === null || axisHits[0].distance < best.distance)
+            ) {
+              best = {
+                kind: "axis",
+                axis: axisHits[0].object.userData.axis,
+                distance: axisHits[0].distance,
+              };
+            }
+            if (
+              planeHits.length > 0 &&
+              (best === null || planeHits[0].distance < best.distance)
+            ) {
+              best = {
+                kind: "plane",
+                index: planeHits[0].object.userData.rowIndex,
+                distance: planeHits[0].distance,
+              };
+              planeHit = planeHits[0];
+            }
+            if (best === null) {
+              // 虚空：只给定位。
+              lastPointer = { x: e.clientX, y: e.clientY };
+              ctxTarget = null;
+              ctxRowIndex = -1;
+              ctxCopy.hidden = true;
+              ctxPin.hidden = true;
+              ctxGoto.hidden = false;
+              ctxMenu.hidden = false;
+              placeOverlay(ctxMenu, e.clientX, e.clientY);
+              return;
+            }
+
+            var block = null;
+            if (best.kind === "mark") {
+              block = markBlock ? [markBlock.x, markBlock.y, markBlock.z] : null;
+            } else if (best.kind === "plane") {
+              var rows = ui.getRows() || [];
+              var row = rows[best.index - 1];
+              if (!row) {
+                hideMenu();
+                return;
+              }
+              block = blockOfPlane(
+                raycaster.ray,
+                row,
+                planeHit ? planeHit.point : null,
+              );
+            } else {
+              var s = axisCoordOf(raycaster.ray, best.axis);
+              if (s === null) {
+                hideMenu();
+                return;
+              }
+              block =
+                best.axis === "x"
+                  ? [s, 0, 0]
+                  : best.axis === "y"
+                    ? [0, s, 0]
+                    : [0, 0, s];
+            }
+            if (block === null) {
+              hideMenu();
+              return;
+            }
+
+            ctxTarget =
+              "/tp @s " +
+              clampBlock(block[0]) +
+              " " +
+              clampBlock(block[1]) +
+              " " +
+              clampBlock(block[2]);
+            ctxCopy.textContent = "复制坐标";
+            ctxCopy.hidden = false;
+            ctxGoto.hidden = true;
+            lastPointer = { x: e.clientX, y: e.clientY };
+            ctxRowIndex = best.kind === "plane" ? best.index : -1;
+            ctxPin.hidden = ctxRowIndex < 0;
+            ctxPin.textContent =
+              ctxRowIndex >= 0 && pinned[ctxRowIndex] ? "取消固定" : "固定";
+            ctxMenu.hidden = false;
+            placeOverlay(ctxMenu, e.clientX, e.clientY);
+          }
+
+          function copyText(text, onOk, onFail) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).then(onOk, function () {
+                legacyCopy(text, onOk, onFail);
+              });
+              return;
+            }
+            legacyCopy(text, onOk, onFail);
+          }
+
+          function legacyCopy(text, onOk, onFail) {
+            var area = document.createElement("textarea");
+            area.value = text;
+            area.style.position = "fixed";
+            area.style.left = "-9999px";
+            document.body.appendChild(area);
+            area.select();
+            var ok = false;
+            try {
+              ok = document.execCommand("copy");
+            } catch (err) {
+              ok = false;
+            }
+            document.body.removeChild(area);
+            if (ok) {
+              onOk();
+            } else {
+              onFail();
+            }
+          }
+
+          ctxCopy.addEventListener("click", function () {
+            if (ctxTarget === null) return;
+            copyText(
+              ctxTarget,
+              function () {
+                ctxCopy.textContent = "已复制";
+                setTimeout(hideMenu, 600);
+              },
+              function () {
+                ctxCopy.textContent = "复制失败";
+              },
+            );
+          });
+
+          ctxPin.addEventListener("click", function () {
+            if (ctxRowIndex < 0) return;
+            var index = ctxRowIndex;
+            setPinned(index, !pinned[index]);
+            hideMenu();
+          });
+
+          ctxGoto.addEventListener("click", function () {
+            var at = lastPointer || { x: 0, y: 0 };
+            hideMenu();
+            gotoError.hidden = true;
+            gotoPanel.hidden = false;
+            placeOverlay(gotoPanel, at.x, at.y);
+            if (gotoX.focus) gotoX.focus();
+          });
+
+          function parseBlock(text) {
+            var s = String(text).trim();
+            if (!/^[+-]?[0-9]+$/.test(s)) return null;
+            var v = Number(s);
+            if (!isFinite(v) || v < BLOCK_MIN || v > BLOCK_MAX) return null;
+            return Math.round(v);
+          }
+
+          /**
+           * 把相机平滑转到该点所在方向。相机始终看着原点，所以该点要落在视轴上就得
+           * 让相机方向取该点方向的反向；距离取页面自己的适配半径。
+           */
+          function goTo(bx, by, bz) {
+            // 方块坐标是整数，没有方向的只有原点本身；归一化尺度上的阈值会把原点附近
+            // 上千格的合法点一起判成原点。
+            if (bx === 0 && by === 0 && bz === 0) return false;
+            var px = bx / BLOCK_UNIT;
+            var py = by / BLOCK_UNIT;
+            var pz = bz / BLOCK_UNIT;
+            var len = Math.sqrt(px * px + py * py + pz * pz);
+            if (!(len > 0)) return false;
+            var wantedPhi = Math.acos(Math.max(-1, Math.min(1, -py / len)));
+            var wantedTheta = Math.atan2(-px / len, -pz / len);
+            targetTheta =
+              theta +
+              Math.atan2(
+                Math.sin(wantedTheta - theta),
+                Math.cos(wantedTheta - theta),
+              );
+            targetPhi = Math.max(0.02, Math.min(Math.PI - 0.02, wantedPhi));
+            targetFocus.set(px, py, pz);
+            targetRadius = radiusForBlocks(LOCATE_BLOCKS);
+            markBlock = { x: bx, y: by, z: bz };
+            markGroup.position.set(px, py, pz);
+            markGroup.visible = true;
+            clearViewSelection();
+            hideMenu();
+            invalidate();
+            return true;
+          }
+
+          function applyGoto() {
+            var bx = parseBlock(gotoX.value);
+            var by = parseBlock(gotoY.value);
+            var bz = parseBlock(gotoZ.value);
+            if (bx === null || by === null || bz === null) {
+              gotoError.textContent =
+                "三个坐标都要是 [-2147483648, 2147483647] 内的整数。";
+              gotoError.hidden = false;
+              return;
+            }
+            if (!goTo(bx, by, bz)) {
+              gotoError.textContent = "原点没有方向，换一个点。";
+              gotoError.hidden = false;
+            }
+          }
+
+          gotoApply.addEventListener("click", applyGoto);
+          [gotoX, gotoY, gotoZ].forEach(function (input) {
+            input.addEventListener("keydown", function (e) {
+              if (e.key === "Enter") applyGoto();
+            });
+          });
+
+          window.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") hideMenu();
+          });
+          window.addEventListener("blur", hideMenu);
+
+          // ---- 尺寸与渲染循环 ----
+
+          function resize() {
+            var width = stage.clientWidth;
+            var height = stage.clientHeight;
+            if (width === 0 || height === 0) return;
+            renderer.setPixelRatio(
+              Math.min(
+                2,
+                Math.max(2, window.devicePixelRatio || 1),
+                Math.max(1, Math.sqrt(5000000 / (width * height))),
+              ),
+            );
+            renderer.setSize(width, height, false);
+            if (useOIT) {
+              var size = renderer.getDrawingBufferSize(new THREE.Vector2());
+              accumTarget.setSize(size.x, size.y);
+              revealTarget.setSize(size.x, size.y);
+              baseTarget.setSize(size.x, size.y);
+              sizeUniform.value.copy(size);
+            }
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            var nextFit = fitRadius();
+            if (lastFit) {
+              radius = Math.max(
+                MIN_RADIUS,
+                Math.min(MAX_RADIUS, (radius * nextFit) / lastFit),
+              );
+              targetRadius = Math.max(
+                MIN_RADIUS,
+                Math.min(MAX_RADIUS, (targetRadius * nextFit) / lastFit),
+              );
+            }
+            lastFit = nextFit;
+            updateAxisWidth();
+            invalidate();
+          }
+
+          gl.resize = resize;
+          window.addEventListener("resize", resize);
+          // 面板列表出现滚动条、字体或布局变化都会改右侧区域的尺寸，
+          // 只监听 window 的 resize 不够，量晚了画面会被拉伸或发虚。
+          if (window.ResizeObserver) {
+            new window.ResizeObserver(function () {
+              resize();
+            }).observe(stage);
+          }
+
+          function loop(now) {
+            raf = 0;
+            var dt = Math.min((now - lastFrame) / 1000 || 1 / 60, 0.1);
+            lastFrame = now;
+            var blend = reducedMotion.matches ? 1 : 1 - Math.exp(-dt * 15);
+            var moving = false;
+            function approach(current, target) {
+              if (Math.abs(current - target) < 0.0001) return target;
+              moving = true;
+              return current + (target - current) * blend;
+            }
+            theta = approach(theta, targetTheta);
+            phi = approach(phi, targetPhi);
+            radius = approach(radius, targetRadius);
+            focus.x = approach(focus.x, targetFocus.x);
+            focus.y = approach(focus.y, targetFocus.y);
+            focus.z = approach(focus.z, targetFocus.z);
+            // 标记按世界半径画，跟场景一起缩放；只在屏幕上小到 4 像素时不再缩，
+            // 既看着像场景里的物体，又不会缩远之后找不回来。
+            var markHalfFov = Math.tan((camera.fov * Math.PI) / 360);
+            var markPixelFloor =
+              (4 * radius * markHalfFov) / Math.max(stage.clientHeight, 1);
+            var markScale = Math.max(MARK_RADIUS, markPixelFloor);
+            markGroup.scale.set(markScale, markScale, markScale);
+            for (var i = 0; i < rowObjects.length; i++) {
+              var entry = rowObjects[i];
+              if (!entry) continue;
+              entry.visibility = approach(
+                entry.visibility,
+                entry.targetVisibility,
+              );
+              entry.focus = approach(
+                entry.focus,
+                pinned[i]
+                  ? 1
+                  : pinnedCount > 0
+                    ? 0
+                    : hovered < 0
+                      ? 0
+                      : hovered === i
+                        ? 1
+                        : -1,
+              );
+              entry.object.visible = entry.visibility > 0.0001;
+              var opacity =
+                entry.focus >= 0
+                  ? 0.28 + entry.focus * 0.26
+                  : 0.28 + entry.focus * 0.18;
+              setAlpha(entry.fill, entry.visibility * opacity);
+              setAlpha(
+                entry.edge,
+                entry.visibility * (0.54 + entry.focus * 0.3),
+              );
+            }
+            updateCamera();
+            camera.updateMatrixWorld();
+            drawScene();
+            updateLabels();
+            if (moving) invalidate();
+          }
+          document.addEventListener("visibilitychange", function () {
+            if (document.hidden) {
+              cancelAnimationFrame(raf);
+              raf = 0;
+            } else {
+              lastFrame = performance.now();
+              invalidate();
+            }
+          });
+          canvas.addEventListener("webglcontextlost", function (e) {
+            e.preventDefault();
+            cancelAnimationFrame(raf);
+            raf = 0;
+            ui.setStatus("WebGL 上下文已丢失，正在等待恢复。", true);
+          });
+          canvas.addEventListener("webglcontextrestored", function () {
+            ui.hideStatus();
+            resize();
+            invalidate();
+          });
+          resize();
+          radius = targetRadius = fitRadius();
+          updateCamera();
+          invalidate();
+
+          // 界面脚本先于本脚本运行，默认种子那一批可能在 enqueue 之前就产出了，
+          // 所以这里既收 pending，也直接向界面取当前行，保证首批一定画出来。
+          var initialRows = gl.pending || ui.getRows();
+          gl.pending = null;
+          if (initialRows) gl.render(initialRows);
+
+          window.__DOME_READY = true;
+        }
+
+        // ---- 逐个候选源加载 ----
+        // 中间态只进控制台：状态行只在初始与最终失败两个稳定态渲染，避免随候选源切换频闪。
+
+        function logStatus(text) {
+          if (window.console && console.log) console.log("三维：" + text);
+        }
+
+        function tryUmd(i) {
+          if (i >= UMD_SOURCES.length) return tryEsm(0);
+          var url = UMD_SOURCES[i];
+          logStatus("尝试全局构建 " + url);
+          loadScript(url, 15000)
+            .then(function () {
+              if (window.THREE) {
+                boot(window.THREE, url);
+              } else {
+                logStatus(url + " 加载后没有 THREE 全局");
+                tryUmd(i + 1);
+              }
+            })
+            .catch(function (e) {
+              logStatus(url + " 失败，" + e.message);
+              tryUmd(i + 1);
+            });
+        }
+
+        function tryEsm(i) {
+          if (i >= ESM_SOURCES.length) return failAll();
+          var url = ESM_SOURCES[i];
+          logStatus("尝试模块构建 " + url);
+          import(url)
+            .then(function (mod) {
+              boot(mod, url);
+            })
+            .catch(function (e) {
+              logStatus(url + " 失败，" + (e && e.message ? e.message : e));
+              tryEsm(i + 1);
+            });
+        }
+
+        if (window.THREE) boot(window.THREE, "bundled r149");
+        else tryUmd(0);
+      })();
+    </script>
+  </body>
+</html>
