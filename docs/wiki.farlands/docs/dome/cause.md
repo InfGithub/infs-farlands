@@ -18,16 +18,16 @@ Java 的 `(int)` 对 double 是饱和。
 
 | | 条件 | `(int)F` | 分支 | $x_0$ | $x_1=x_0+1$ |
 |---|---|---|---|---|---|
-| 正 | $F\ge 2^{31}$ | $\text{MAX}$ | `F > 0`，值为 `(int)F` | $\text{MAX}$ | $\text{MAX}+1=\text{MIN}$ |
-| 负 | $F<-2^{31}$ | $\text{MIN}$ | `F ≤ 0`，值为 `(int)F − 1` | $\text{MIN} - 1 = \text{MAX}$ | $\text{MAX}+1=\text{MIN}$ |
+| 正 | $F\ge \text{MAX}$ | $\text{MAX}$ | `F > 0`，值为 `(int)F` | $\text{MAX}$ | $\text{MAX}+1=\text{MIN}$ |
+| 负 | $F\le \text{MIN}$ | $\text{MIN}$ | `F ≤ 0`，值为 `(int)F − 1` | $\text{MIN} - 1 = \text{MAX}$ | $\text{MAX}+1=\text{MIN}$ |
 
-因此，一旦 $|F|\ge 2^{31}$ ，两个格点索引 $x_0, x_1$ 就固定为 $\text{MAX}, \text{MIN}$ ，与坐标无关。
+因此，一旦 $F\ge \text{MAX}$ 或 $F\le \text{MIN}$ ，两个格点索引 $x_0, x_1$ 就固定为 $\text{MAX}, \text{MIN}$ ，与坐标无关。
 
 ## 3. 权重溢出
 
 ### 正常情形 $u \in [0,1)$
 
-$x_0 = \lfloor F\rfloor$ （[CwgNoise.java#L127-130](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L127-130)）， $u:=F-x_0$ 是小数部分，落在 $[0,1)$ 。
+$x_0 = \lfloor F\rfloor$ （[CwgNoise.java#L127-130](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L127-130)）， $u:=F-x_0$ 是小数部分，落在 $[0,1)$ 。唯一的例外是 $F$ 为非正整数，0 也在内：此时代码走 `(int)F − 1` 分支， $x_0=F-1$ 、 $u=1$ ，两个权重变成 $(0,1)$ 。
 
 $S(u)=u^2(3-2u)$ （[CwgNoise.java#L159-162](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L159-162)）是标准 smoothstep。
 
@@ -45,7 +45,7 @@ $$\sigma_k=s_{\text{ref}}~2^{~k-k_{\max}}$$
 
 $$S(u)=3u^2-2u^3,\qquad 1-S(u)=1-3u^2+2u^3$$
 
-当 $u\gg1$ 时
+当 $|u|\gg1$ 时
 
 $$|2u^3| \gg |3u^2| \gg 1$$
 
@@ -55,7 +55,7 @@ $$1-S(u)=+2u^3-3u^2+1,\qquad S(u)=-2u^3+3u^2$$
 
 **两个特性**：
 
-1. $(+2u^3-3u^2+1)+(-2u^3+3u^2)=1$ ，所以即使越界，混合方式依然是正常的。
+1. $(+2u^3-3u^2+1)+(-2u^3+3u^2)=1$ ，两个权重仍构成 partition of unity，和为 1；但两者都已离开 $[0,1]$ ，此时不再是插值。
 2. 可以改为统一写法。设每个轴一个标量 $W = 2u^3 - 3u^2$ ，于是
 
 $$w_i(\kappa_i)=\varepsilon_{\kappa_i}W_i+\delta_{\kappa_i,0}$$
@@ -151,9 +151,13 @@ $$\frac{|T_\Lambda(\kappa)|}{\prod_i|W_i|}\ \le\ \prod_{i\in \Lambda}\frac{1}{|u
 
 **相对量级**：
 
-$$\eta:=\sum_{\varnothing\ne \Lambda}\prod_{i\in \Lambda}\frac{1}{|u_i|^3}=\frac{1}{u_x^3}+\frac{1}{u_y^3}+\frac{1}{u_z^3}+O\bigl(u^{-6}\bigr)$$
+$$\eta:=\sum_{\varnothing\ne \Lambda}\prod_{i\in \Lambda}\frac{1}{|u_i|^3}=\frac{1}{|u_x|^3}+\frac{1}{|u_y|^3}+\frac{1}{|u_z|^3}+O\bigl(u^{-6}\bigr)$$
 
-即 $R$ 相对第一块是 $O(u^{-3})$ 。**可以忽略。**
+$\eta$ 是 $R$ 相对公共因子 $W_xW_yW_z$ 的量级，不是 $R$ 相对第一块 $W_xW_yW_z~\ell$ 的比值：第一块在 $\ell=0$ 上恒为零，那个比值在零集上不存在。写成
+
+$$\frac{C}{W_xW_yW_z}=\ell(\mathbf F)+\rho(\mathbf F),\qquad |\rho|\le\eta\cdot\max_\kappa|g_\kappa|$$
+
+则零集是 $\ell+\rho=0$ ，它与平面 $\ell=0$ 的距离不超过 $|\rho|/|\nabla\ell|$ ：深区里 $\rho=O(u^{-2})$ ，远小于一格；贴着门槛时 $\max_\kappa|g_\kappa|$ 到 $2^{32}$ 量级，上界放宽到几格。
 
 ### 零集
 
@@ -161,7 +165,7 @@ $\ell=\sum_\kappa\sigma_\kappa g_\kappa$ ： $\sigma_\kappa$ 是常数， $g_\ka
 
 $$\ell(\mathbf F)=\alpha_xF_x+\alpha_yF_y+\alpha_zF_z+\beta$$
 
-$\ell=0$ 在三维里是平面。同时 $R$ 的量级可忽略，所以零集是平面。
+$\ell=0$ 在三维里是平面。 $R$ 的量级可忽略，所以零集是这张平面的亚格邻域，即渐近平面。
 
 ### $a, b, c, d$
 
@@ -281,11 +285,11 @@ $$\text{seedEff}=\text{base}+k$$
 
 [CwgNoise.java#L89-94](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L89-L94)
 
-所以每一阶各有一组 $(a,b,c,d)$ ，也就各有一张面。`CwgNoiseSystem` 建了四个噪声，`low` 与 `high` 各 16 阶、`selector` 8 阶，共 40 组候选。`depth` 的 Y 频率为 0，三轴永不冻结，不在此列。
+所以每一阶各有一组 $(a,b,c,d)$ ，也就各有一张面。`CwgNoiseSystem` 建了四个噪声，`low` 与 `high` 各 16 阶、`selector` 8 阶，共 40 组候选。`depth` 的 Y 频率为 0，Y 永不冻结，不在候选面。
 
-#### 八分体
+#### 八分体与符号
 
-两个方向的索引都落到同一对 $\text{MAX}$ 与 $\text{MIN}$ ，因此 $(a,b,c,d)$ 与坐标落在哪个符号侧无关，八个八分体共用同一组。而公因子 $W_xW_yW_z$ 的符号随象限翻转， $u_i<0$ 时 $W_i<0$ ，所以每个八分体各有一份镜像面，实体侧相反。
+两个方向的索引都落到同一对 $\text{MAX}$ 与 $\text{MIN}$ ，因此 $(a,b,c,d)$ 与坐标落在哪个符号侧无关，八个八分体共用同一组系数， $\ell=0$ 在全局坐标里是同一张平面。随象限变化的是公因子 $W_xW_yW_z$ 的符号， $u_i<0$ 时 $W_i<0$ ，也就是实体侧按象限奇偶翻转。
 
 #### 可达性
 
@@ -295,7 +299,7 @@ $$\frac{T_k}{h}\le \text{MAX}$$
 
 代 $T_k=2^{~k_{\max}-k}E$ 得
 
-$$k\ \ge\ k_{\max}-\Bigl\lfloor\log_2\frac{h\text{MAX}}{C}\Bigr\rfloor,\qquad C:=\frac{2^{31}}{s_{\text{ref}}}$$
+$$k\ \ge\ k_{\max}-\Bigl\lfloor\log_2\frac{h\text{MAX}}{E}\Bigr\rfloor$$
 
 门槛不够小的阶进不了顶点区，平面自身的落点也可能越出 $|F|\le \text{MAX}$ 。
 
