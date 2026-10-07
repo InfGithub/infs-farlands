@@ -37,7 +37,7 @@ $S(0)=0$ 、 $S(1)=1$ 、两端斜率为 0。所以 $S(u)$ 在 $[0,1]$ 内，权
 
 记最高阶的每方块缩放为 $s_{\text{ref}}$ 、最高阶号为 $k_{\max}$ ，则
 
-$$\sigma_k=s_{\text{ref}}\,2^{\,k-k_{\max}}$$
+$$\sigma_k=s_{\text{ref}}~2^{~k-k_{\max}}$$
 
 越界之后 $x_0 = \text{MAX}$ ，此时 $u = F - \text{MAX}$ 变为越界量，所以 $F$ 与 $u$ 同时递增 $\sigma_k$ 。
 
@@ -129,11 +129,11 @@ $$C=\sum_{\kappa\in\{0,1\}^3}\Bigl[\prod_{i\in\{x,y,z\}}w_i(\kappa_i)\Bigr]g_\ka
 
 $$C=\sum_{\kappa}\Bigl[\sigma_\kappa W_xW_yW_z+\sum_{\varnothing\ne \Lambda}T_\Lambda(\kappa)\Bigr]g_\kappa$$
 
-$$C=\sum_{\kappa}\sigma_\kappa W_xW_yW_z\,g_\kappa+\sum_{\kappa}\Bigl[\sum_{\varnothing\ne \Lambda}T_\Lambda(\kappa)\Bigr]g_\kappa$$
+$$C=\sum_{\kappa}\sigma_\kappa W_xW_yW_z~g_\kappa+\sum_{\kappa}\Bigl[\sum_{\varnothing\ne \Lambda}T_\Lambda(\kappa)\Bigr]g_\kappa$$
 
 $W_xW_yW_z$ 与 $\kappa$ **无关**，于是：
 
-$$\sum_{\kappa}\sigma_\kappa W_xW_yW_z\,g_\kappa=W_xW_yW_z\cdot\sum_{\kappa}\sigma_\kappa g_\kappa$$
+$$\sum_{\kappa}\sigma_\kappa W_xW_yW_z~g_\kappa=W_xW_yW_z\cdot\sum_{\kappa}\sigma_\kappa g_\kappa$$
 
 **命名**：
 
@@ -141,7 +141,7 @@ $$C=W_xW_yW_z\underbrace{\sum_{\kappa}\sigma_\kappa g_\kappa}_{=:\ \ell(\mathbf 
 
 **即**：
 
-$$C=W_xW_yW_z\,\ell(\mathbf F)+R$$
+$$C=W_xW_yW_z~\ell(\mathbf F)+R$$
 
 #### $R$ 的量级
 
@@ -169,7 +169,7 @@ $\ell=0$ 在三维里是平面。同时 $R$ 的量级可忽略，所以零集是
 
 把 $g_\kappa$ 代进 $\ell$ ：
 
-$$\ell=\sum_{i}\Bigl[\sum_{\kappa}\sigma_\kappa G_{\kappa,i}\Bigr]F_i-\sum_{i}\sum_{\kappa}\sigma_\kappa G_{\kappa,i}\,i_{\kappa_i}+\frac12\sum_{\kappa}\sigma_\kappa$$
+$$\ell=\sum_{i}\Bigl[\sum_{\kappa}\sigma_\kappa G_{\kappa,i}\Bigr]F_i-\sum_{i}\sum_{\kappa}\sigma_\kappa G_{\kappa,i}~i_{\kappa_i}+\frac12\sum_{\kappa}\sigma_\kappa$$
 
 #### $\tfrac12$ 项消失
 
@@ -197,7 +197,7 @@ $$i_{\kappa_i}=i_0-\kappa_i\bigl(2^{32}-1\bigr),\qquad i_0=\text{MAX}$$
 
 代入 $\ell$ 展开式的第二项：
 
-$$\beta=-\sum_{i}\sum_{\kappa}\sigma_\kappa G_{\kappa,i}\,i_{\kappa_i}=-i_0\sum_i\alpha_i+\bigl(2^{32}-1\bigr)\sum_iQ_i$$
+$$\beta=-\sum_{i}\sum_{\kappa}\sigma_\kappa G_{\kappa,i}~i_{\kappa_i}=-i_0\sum_i\alpha_i+\bigl(2^{32}-1\bigr)\sum_iQ_i$$
 
 $$Q_i:=\sum_{\kappa}\sigma_\kappa\kappa_i G_{\kappa,i}$$
 
@@ -253,7 +253,7 @@ $$F_x=\sigma_kx,\qquad F_y=\frac{\sigma_k}{2}y,\qquad F_z=\sigma_kz$$
 
 代入 $\ell=0$ ，整体除以 $\frac{\sigma_k}{2}$ ，则
 
-$$a\,x+\frac{b}{2}y+c\,z+\frac{a+b+c}{2\sigma_k}+\frac{2^{32}-1}{2\sigma_k}d=0$$
+$$a~x+\frac{b}{2}y+c~z+\frac{a+b+c}{2\sigma_k}+\frac{2^{32}-1}{2\sigma_k}d=0$$
 
 ### $T_k$
 
@@ -265,11 +265,11 @@ $$\frac{2^{32}-1}{2\sigma_k}=\frac{2^{31}}{\sigma_k}\Bigl(1-2^{-32}\Bigr)$$
 
 于是
 
-$$\frac{2^{31}}{\sigma_k}=\frac{2^{31}}{s_{\text{ref}}}\,2^{\,k_{\max}-k}=2^{\,k_{\max}-k}E,\qquad E:=\frac{2^{31}}{s_{\text{ref}}}$$
+$$\frac{2^{31}}{\sigma_k}=\frac{2^{31}}{s_{\text{ref}}}~2^{~k_{\max}-k}=2^{~k_{\max}-k}E,\qquad E:=\frac{2^{31}}{s_{\text{ref}}}$$
 
-记 $T_k:=2^{\,k_{\max}-k}E$ ，平面方程即
+记 $T_k:=2^{~k_{\max}-k}E$ ，平面方程即
 
-$$a\,x+\frac{b}{2}y+c\,z+T_k\bigl(1-2^{-32}\bigr)d+\frac{a+b+c}{2\sigma_k}=0$$
+$$a~x+\frac{b}{2}y+c~z+T_k\bigl(1-2^{-32}\bigr)d+\frac{a+b+c}{2\sigma_k}=0$$
 
 ### 可见性
 
@@ -293,7 +293,7 @@ $$\text{seedEff}=\text{base}+k$$
 
 $$\frac{T_k}{h}\le \text{MAX}$$
 
-代 $T_k=2^{\,k_{\max}-k}E$ 得
+代 $T_k=2^{~k_{\max}-k}E$ 得
 
 $$k\ \ge\ k_{\max}-\Bigl\lfloor\log_2\frac{h\text{MAX}}{C}\Bigr\rfloor,\qquad C:=\frac{2^{31}}{s_{\text{ref}}}$$
 
