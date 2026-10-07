@@ -33,11 +33,12 @@ public final class CwgNoise {
     private static final double[] GRADIENTS = new double[256 * 4];
 
     static {
-        // vanilla 的整数梯度分量除以 2。逐行的抽样顺序固定，必须与建表时消费同一随机流的
-        // 那一步一致，否则每行拿到的梯度会整体错位。
+        // vanilla 的整数梯度分量除以 2。三张表按 1.12.2 NoiseGeneratorImproved 的 GRAD_X、GRAD_Y、
+        // GRAD_Z 逐位照抄：这些位会经抽样进入 256 行梯度表，任何一位按对称性补齐都会改地形。
+        // 逐行的抽样顺序固定，必须与建表时消费同一随机流的那一步一致，否则每行拿到的梯度会整体错位。
         int[] gradX = { 1, -1, 1, -1, 1, -1, 1, -1, 0, 0, 0, 0, 1, 0, -1, 0 };
         int[] gradY = { 1, 1, -1, -1, 0, 0, 0, 0, 1, -1, 1, -1, 1, -1, 1, -1 };
-        int[] gradZ = { 0, 0, 0, 0, 1, 1, -1, -1, 1, 1, -1, -1, 0, 1, 1, -1 };
+        int[] gradZ = { 0, 0, 0, 0, 1, 1, -1, -1, 1, 1, -1, -1, 0, 1, 0, -1 };
         Random random = new Random(123456789);
         for (int i = 0; i < 256; i++) {
             int j = random.nextInt(gradX.length);
