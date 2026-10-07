@@ -12,7 +12,7 @@ Last Update: 2026/10/07
 
 记 $\text{MAX} = 2147483647, \text{MIN} = -2147483648$ 。
 
-[CwgNoise.java#L120-126](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L120-126)
+[CwgNoise.java#L121-127](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L121-127)
 
 Java 的 `(int)` 对 double 是饱和。
 
@@ -27,9 +27,9 @@ Java 的 `(int)` 对 double 是饱和。
 
 ### 正常情形 $u \in [0,1)$
 
-$x_0 = \lfloor F\rfloor$ （[CwgNoise.java#L127-130](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L127-130)）， $u:=F-x_0$ 是小数部分，落在 $[0,1)$ 。唯一的例外是 $F$ 为非正整数，0 也在内：此时代码走 `(int)F − 1` 分支， $x_0=F-1$ 、 $u=1$ ，两个权重变成 $(0,1)$ 。
+$x_0 = \lfloor F\rfloor$ （[CwgNoise.java#L128-131](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L128-131)）， $u:=F-x_0$ 是小数部分，落在 $[0,1)$ 。唯一的例外是 $F$ 为非正整数，0 也在内：此时代码走 `(int)F − 1` 分支， $x_0=F-1$ 、 $u=1$ ，两个权重变成 $(0,1)$ 。
 
-$S(u)=u^2(3-2u)$ （[CwgNoise.java#L159-162](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L159-162)）是标准 smoothstep。
+$S(u)=u^2(3-2u)$ （[CwgNoise.java#L160-163](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L160-163)）是标准 smoothstep。
 
 $S(0)=0$ 、 $S(1)=1$ 、两端斜率为 0。所以 $S(u)$ 在 $[0,1]$ 内，权重也在 $[0,1]$ 内。
 
@@ -70,9 +70,9 @@ $$\varepsilon_0=+1,\qquad \varepsilon_1=-1,\qquad \delta_{\kappa_i,0}=(\kappa_i=
 
 用 $\kappa = (\kappa_x, \kappa_y, \kappa_z) \in \{0, 1\}^3$ 记代码中的八次 `gradient` 调用。
 
-（[CwgNoise.java#L131-133](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L131-133), [CwgNoise.java#L134-136](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L134-136), [CwgNoise.java#L138-140](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L138-140), [CwgNoise.java#L141-143](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L141-143)）
+（[CwgNoise.java#L132-134](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L132-134), [CwgNoise.java#L135-137](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L135-137), [CwgNoise.java#L139-141](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L139-141), [CwgNoise.java#L142-144](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L142-144)）
 
-自 [**CwgNoise.java#L149-158**](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L149-158)：
+自 [**CwgNoise.java#L150-159**](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L150-159)：
 
 | 记号 | 代码 | 值 |
 |---|---|---|
@@ -253,7 +253,7 @@ $$\ell=\frac{a}{2}F_x+\frac{b}{2}F_y+\frac{c}{2}F_z+\frac{a+b+c}{4}+\frac{2^{32}
 
 ### 坐标
 
-`sample` 先把方块坐标乘上基准频率（[CwgNoise.java#L84-87](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L84-L87)），之后每进一阶，把这三个缩放坐标再各乘 2（[CwgNoise.java#L94-97](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L94-L97)）。Y 的基准频率是 XZ 的一半（[CwgNoiseSystem.java#L44-45](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoiseSystem.java#L44-L45)）。
+`sample` 先把方块坐标乘上基准频率（[CwgNoise.java#L85-88](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L85-L88)），之后每进一阶，把这三个缩放坐标再各乘 2（[CwgNoise.java#L95-98](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L95-L98)）。Y 的基准频率是 XZ 的一半（[CwgNoiseSystem.java#L44-45](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoiseSystem.java#L44-L45)）。
 
 于是
 
@@ -299,7 +299,7 @@ $a,b,c,d$ 由 $\sum_\kappa\sigma_\kappa G_{\kappa,i}$ 这类和决定，而 $\ma
 
 $$\text{seedEff}=\text{base}+k$$
 
-[CwgNoise.java#L89-94](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L89-L94)
+[CwgNoise.java#L90-95](../../../../src/main/java/com/inf/farlands/terrain/system/terrain/noise/overworld/Cwg/CwgNoise.java#L90-L95)
 
 所以每一阶各有一组 $(a,b,c,d)$ ，也就各有一张面。`CwgNoiseSystem` 建了四个噪声，`low` 与 `high` 各 16 阶、`selector` 8 阶，共 40 组候选。`depth` 的 Y 频率为 0，Y 永不冻结，不在候选面。
 
