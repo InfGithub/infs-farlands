@@ -654,7 +654,8 @@
         text-shadow:
           0 1px 5px #0a0f16,
           0 0 4px #0a0f16;
-        will-change: transform;
+        /* 不写 will-change: transform。上限 1024 个坐标系时标签节点可达数万，
+           逐个提升合成层会吃光显存；标签的位移每帧只写一次 transform，本来就便宜。 */
         transition: opacity 0.16s;
       }
       .axis-name {
@@ -719,11 +720,20 @@
         animation: card-in 0.16s var(--ease);
       }
       #ctx-copy,
+      #ctx-frame,
+      #ctx-delete,
       #ctx-pin,
       #ctx-goto {
         border: 0;
         padding: 7px 12px;
         font-size: 11px;
+      }
+      .ctx-error {
+        max-width: 190px;
+        padding: 3px 12px 5px;
+        font-size: 10px;
+        line-height: 1.6;
+        color: var(--err);
       }
       #goto-panel {
         position: absolute;
@@ -1270,8 +1280,17 @@
           <div id="tip"></div>
           <div id="ctx-menu" hidden>
             <button id="ctx-copy" class="mini" type="button">复制坐标</button>
+            <button id="ctx-frame" class="mini" type="button" hidden>
+              创建坐标系
+            </button>
+            <button id="ctx-delete" class="mini" type="button" hidden>
+              删除坐标系
+            </button>
             <button id="ctx-pin" class="mini" type="button" hidden>固定</button>
-            <button id="ctx-goto" class="mini" type="button" hidden>定位</button>
+            <button id="ctx-goto" class="mini" type="button" hidden>
+              定位
+            </button>
+            <div class="ctx-error" id="ctx-error" role="alert" hidden></div>
           </div>
           <div id="goto-panel" hidden>
             <div class="goto-fields">
@@ -2112,7 +2131,6 @@ SOFTWARE.
         var math = window.DomeMath;
 
         var el = {
-          app: document.getElementById("app"),
           seedInput: document.getElementById("seed-input"),
           renderBtn: document.getElementById("render-btn"),
           seedError: document.getElementById("seed-error"),
@@ -2694,7 +2712,6 @@ SOFTWARE.
           hideStatus: hideStatus,
           fatal: fatal,
           markCard: markCard,
-          requestHighlight: requestHighlight,
           showInfo: showInfo,
           pinCard: pinCard,
           isEnabled: isEnabled,
@@ -2704,7 +2721,6 @@ SOFTWARE.
           setHighlight: function (fn) {
             state.highlight = fn;
           },
-          check: check,
         };
 
         // 无首屏：首次渲染由下面的 startFirstRender 负责，这里只导出接口。
@@ -2876,7 +2892,7 @@ SOFTWARE.
            * 定位标记的世界半径：定位视窗高的 0.75%，换算到屏幕上约 13 像素。
            * 它是场景里的物体，跟着缩放走；缩到屏幕上不足 4 像素时由像素下限兜住。
            */
-          var MARK_RADIUS = (LOCATE_BLOCKS * 0.015) / 2 * UNIT;
+          var MARK_RADIUS = ((LOCATE_BLOCKS * 0.015) / 2) * UNIT;
 
           var theta = 0.62;
           var phi = 1.12;
@@ -2918,6 +2934,9 @@ SOFTWARE.
               targetRadius = fitRadius();
               targetFocus.set(0, 0, 0);
               markGroup.visible = false;
+              // 回到原点即附着回全域坐标系。
+              attachedId = "root";
+              refreshHighlight();
             }
             document.querySelectorAll("[data-view]").forEach(function (b) {
               b.setAttribute("aria-pressed", String(b.dataset.view === name));
@@ -2985,17 +3004,6 @@ SOFTWARE.
 
           var AXIS_COLORS = { x: 0xca8085, y: 0x8dbba1, z: 0x85a9dc };
 
-          function line(points, color, opacity) {
-            var geometry = new THREE.BufferGeometry().setFromPoints(points);
-            var material = new THREE.LineBasicMaterial({
-              color: color,
-              transparent: true,
-              opacity: opacity === undefined ? 1.0 : opacity,
-              depthWrite: false,
-            });
-            return new THREE.Line(geometry, material);
-          }
-
           /**
            * 坐标轴用半径 1 的圆柱画，实际粗细由 updateAxisWidth 的 scale 给。
            * 不用 Line：线宽在 Windows 的 ANGLE 上被忽略，写多少都是 1 像素。
@@ -3013,68 +3021,325 @@ SOFTWARE.
             if (axis === "x") bar.rotation.z = Math.PI / 2;
             if (axis === "z") bar.rotation.x = Math.PI / 2;
             bar.userData.axis = axis;
+            bar.userData.baseColor = material.color.clone();
             return bar;
           }
 
-          /** 把轴的世界半径按当前视距换算成恒定 AXIS_PIXELS 像素宽。 */
+          /** 每个坐标系的轴柱按当前视距换算成恒定 AXIS_PIXELS 像素宽，长度按各自半跨度。 */
           function updateAxisWidth() {
             var h = stage.clientHeight;
             if (h <= 0) return;
             var halfFov = Math.tan((camera.fov * Math.PI) / 360);
             var worldRadius = (AXIS_PIXELS * radius * halfFov) / h;
-            for (var i = 0; i < axisPicks.length; i++) {
-              axisPicks[i].scale.set(worldRadius, 1, worldRadius);
+            for (var f = 0; f < frames.length; f++) {
+              var frame = frames[f];
+              var halfNorm = frame.half * UNIT;
+              for (var i = 0; i < frame.axes.length; i++) {
+                frame.axes[i].scale.set(worldRadius, halfNorm, worldRadius);
+              }
             }
           }
 
-          function buildGuides() {
-            var tick = 0.018;
-            var ticks = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1];
+          /** 半块方块，世界单位。焦点收敛的下限：比它小就认为已经落到位。 */
+          var HALF_BLOCK = 0.5 / 2147483648.0;
 
-            var axes = [
-              { axis: "x", color: AXIS_COLORS.x },
-              { axis: "y", color: AXIS_COLORS.y },
-              { axis: "z", color: AXIS_COLORS.z },
-            ];
-            for (var a = 0; a < axes.length; a++) {
-              var bar = axisBar(axes[a].axis, axes[a].color);
-              guides.add(bar);
+          // ---- 坐标系 ----
+          // 一个坐标系是一套轴柱、刻度、标签与立方体框。全域坐标系覆盖 int32 全域，
+          // 其余由创建产生。center 与 half 都是方块单位，half 换到归一化世界是 half * UNIT。
+
+          var frames = [];
+          /** 创建出来的坐标系的编号。 */
+          var frameSeq = 0;
+          /** 创建出来的坐标系上限。 */
+          var FRAME_LIMIT = 1024;
+          /** 新坐标系的候选半跨度 = 视野跨度乘这个系数。 */
+          var FRAME_ZOOM_FRACTION = 0.25;
+          /** 逐层内切时留的边距，按所属坐标系半跨度取比例。 */
+          var FRAME_FIT_MARGIN = 0.08;
+          /** 半跨度小于这个方块数就不建。 */
+          var FRAME_MIN_BLOCKS = 1;
+          /** 中心点句柄的屏幕直径，单位 CSS 像素。 */
+          var FRAME_DOT_PIXELS = 6;
+          /** 当前附着的坐标系；默认全域那一个。 */
+          var attachedId = "root";
+          /** 附着提示把轴柱颜色朝它靠。 */
+          var FRAME_HL_COLOR = new THREE.Color(0xffffff);
+          /** 右键拾取坐标轴的屏幕容差，单位 CSS 像素。 */
+          var AXIS_PICK_PIXELS = 5;
+          /** 点击与拖拽的判别阈值，单位 CSS 像素。 */
+          var CLICK_SLOP_PIXELS = 4;
+          /** 刻度不再摆出来的尺度：自身跨度小于视野的这个比例时只留轴与立方体框。 */
+          var FRAME_LOD_MIN = 0.125;
+
+          /** 网格刻度的目标屏幕长度，单位 CSS 像素。 */
+          var TICK_PIXELS = 6;
+          /** 强调刻度的屏幕长度。 */
+          var MARK_PIXELS = 15;
+          /** 每条轴上网格刻度的对象池大小。 */
+          var GRID_TICKS = 7;
+          /** 视野内希望出现的网格刻度个数，用来定换挡步长。 */
+          var TICK_TARGET = 5;
+          /**
+           * 常显且加长的强调值，单位方块，每项是一对 [正, 负]。
+           * 三个 2 的幂边界取 MAX 与 ~MAX，与本仓库 MIN_SECTION = ~MAX_SECTION 同规；
+           * 边境之地那一对按给定值照录，不由取反推出。
+           */
+          var EMPHASIS_PAIRS = [
+            [12550821, -12550824],
+            [33554431, -33554432],
+            [268435455, -268435456],
+            [2147483647, -2147483648],
+          ];
+          var BLOCKS_MAX = 2147483647;
+          var BLOCKS_MIN = ~BLOCKS_MAX;
+          var BLOCKS_UNIT = 1 / UNIT;
+
+          var AXIS_DEFS = [
+            {
+              key: "x",
+              name: "X",
+              css: "#cf969b",
+              color: AXIS_COLORS.x,
+              tick: [0, 1, 0],
+              world: function (b) {
+                return [b * UNIT, 0, 0];
+              },
+            },
+            {
+              key: "y",
+              name: "Y",
+              css: "#9dbfaa",
+              color: AXIS_COLORS.y,
+              tick: [1, 0, 0],
+              world: function (b) {
+                return [0, b * UNIT, 0];
+              },
+            },
+            {
+              key: "z",
+              name: "Z",
+              css: "#94b2de",
+              color: AXIS_COLORS.z,
+              tick: [0, 1, 0],
+              world: function (b) {
+                return [0, 0, b * UNIT];
+              },
+            },
+          ];
+
+          function makeLabel(className, css, text) {
+            var el = document.createElement("div");
+            el.className = className;
+            if (css) el.style.color = css;
+            el.textContent = text;
+            labelHost.appendChild(el);
+            return el;
+          }
+
+          /** 刻度是一条局部长度 2 的短线，屏幕长度由每帧的 scale 给。 */
+          function makeTick(def, pixels, emphasis) {
+            var geometry = new THREE.BufferGeometry().setFromPoints([
+              new THREE.Vector3(-def.tick[0], -def.tick[1], -def.tick[2]),
+              new THREE.Vector3(def.tick[0], def.tick[1], def.tick[2]),
+            ]);
+            var seg = new THREE.Line(
+              geometry,
+              new THREE.LineBasicMaterial({
+                color: def.color,
+                transparent: true,
+                opacity: emphasis ? 1 : 0.5,
+                depthWrite: false,
+              }),
+            );
+            return {
+              def: def,
+              line: seg,
+              pixels: pixels,
+              blocks: 0,
+              local: 0,
+              pos: new THREE.Vector3(),
+              axis: def.name,
+              big: false,
+              order: emphasis ? 0 : 1,
+              el: null,
+            };
+          }
+
+          /** 坐标系在轴 d 上的中心方块坐标。 */
+          function frameCenterOn(frame, d) {
+            return d === 0
+              ? frame.center.x
+              : d === 1
+                ? frame.center.y
+                : frame.center.z;
+          }
+
+          /** 强调值是否落在该坐标系跨度内。全域坐标系的半跨度是全域，八个值都在内。 */
+          function emphasisExpressible(frame, d, value) {
+            return Math.abs(value - frameCenterOn(frame, d)) <= frame.half;
+          }
+
+          /**
+           * 建一个坐标系。全域坐标系的 center 是原点、half 是全域；创建出来的按创建时的缩放定 half。
+           * 3D 件挂在 frame.group 上，组只平移不缩放，所以轴柱与刻度自身的 scale 就是最终尺度。
+           */
+          function makeFrame(spec) {
+            var frame = {
+              id: spec.id,
+              root: !!spec.root,
+              parent: spec.parent || null,
+              center: {
+                x: spec.center[0],
+                y: spec.center[1],
+                z: spec.center[2],
+              },
+              half: spec.half,
+              group: new THREE.Group(),
+              axes: [],
+              cube: null,
+              grid: [],
+              emphasis: [],
+              labels: [],
+              /** 该坐标系三条轴各自的屏幕长度与标签门限，每帧重算。 */
+              axisLen: { X: 0, Y: 0, Z: 0 },
+              axisGate: 75,
+              axisGateBig: 35,
+              /** 与视野尺度的对数距离，标签防重叠时用。 */
+              rank: 0,
+            };
+            frame.centerVec = new THREE.Vector3(
+              frame.center.x * UNIT,
+              frame.center.y * UNIT,
+              frame.center.z * UNIT,
+            );
+            var halfNorm = frame.half * UNIT;
+            frame.group.position.set(
+              frame.center.x * UNIT,
+              frame.center.y * UNIT,
+              frame.center.z * UNIT,
+            );
+            guides.add(frame.group);
+
+            for (var a = 0; a < AXIS_DEFS.length; a++) {
+              var bar = axisBar(
+                AXIS_DEFS[a].key,
+                AXIS_COLORS[AXIS_DEFS[a].key],
+              );
+              frame.group.add(bar);
+              frame.axes.push(bar);
               axisPicks.push(bar);
             }
 
-            for (var i = 0; i < ticks.length; i++) {
-              var t = ticks[i];
-              if (t === 0) continue;
-              guides.add(
-                line(
-                  [
-                    new THREE.Vector3(t, -tick, 0),
-                    new THREE.Vector3(t, tick, 0),
-                  ],
-                  AXIS_COLORS.x,
-                  0.6,
+            for (var d = 0; d < AXIS_DEFS.length; d++) {
+              var def = AXIS_DEFS[d];
+              frame.grid.push([]);
+              for (var i = 0; i < GRID_TICKS; i++) {
+                var t = makeTick(def, TICK_PIXELS, false);
+                // 初始必须收起：刻度线默认可见、长度是 1 个局部单位，即 2 个世界单位，
+                // 位置还在自身原点，而长度与位置要到 updateLabels 才被写成像素尺度。
+                // 不进放置表的那部分，也就是超尺度、出屏、被强调值顶掉的，会永远停在初始态。
+                t.line.visible = false;
+                t.el = makeLabel("axis-label tick-label", null, "");
+                t.el.style.opacity = "0";
+                t.el.dataset.axis = def.key;
+                t.el.dataset.frame = frame.id;
+                t.frame = frame;
+                // 本地坐标系的读数才是主体：创建出来的坐标系让网格刻度排在强调值之前；
+                // 全域坐标系相反，那几个地标值才是主角。最终显隐仍由防重叠决定。
+                t.order = frame.root ? 1 : 0;
+                frame.group.add(t.line);
+                frame.grid[d].push(t);
+              }
+              // 强调点只画该坐标系能表达的那些。全域坐标系八个全在。
+              for (var e = 0; e < EMPHASIS_PAIRS.length; e++) {
+                for (var s = 0; s < 2; s++) {
+                  var blocks = EMPHASIS_PAIRS[e][s];
+                  if (!emphasisExpressible(frame, d, blocks)) continue;
+                  var m = makeTick(def, MARK_PIXELS, true);
+                  m.blocks = blocks;
+                  m.local = blocks - frameCenterOn(frame, d);
+                  var lw = def.world(m.local);
+                  m.line.position.set(lw[0], lw[1], lw[2]);
+                  // 与网格刻度同规：初始收起，长度与显隐由 updateLabels 给。
+                  m.line.visible = false;
+                  // 标签位置必须与刻度线同源：都是"该坐标系中心 + 局部偏移"。
+                  m.pos = new THREE.Vector3(
+                    frame.center.x * UNIT + lw[0],
+                    frame.center.y * UNIT + lw[1],
+                    frame.center.z * UNIT + lw[2],
+                  );
+                  m.el = makeLabel(
+                    "axis-label tick-label tick-mark",
+                    def.css,
+                    String(blocks),
+                  );
+                  m.el.style.opacity = "0";
+                  m.el.dataset.axis = def.key;
+                  m.el.dataset.blocks = String(blocks);
+                  m.el.dataset.frame = frame.id;
+                  m.frame = frame;
+                  m.order = frame.root ? 0 : 1;
+                  frame.group.add(m.line);
+                  frame.emphasis.push(m);
+                }
+              }
+              var nameEl = makeLabel("axis-label axis-name", def.css, def.name);
+              nameEl.style.opacity = "0";
+              // def.world 吃方块单位，所以传该坐标系的半跨度而不是归一化半跨度。
+              var nw = def.world(1.13 * frame.half);
+              frame.labels.push({
+                el: nameEl,
+                frame: frame,
+                order: -1,
+                pos: new THREE.Vector3(
+                  frame.center.x * UNIT + nw[0],
+                  frame.center.y * UNIT + nw[1],
+                  frame.center.z * UNIT + nw[2],
                 ),
+                axis: def.name,
+                big: true,
+              });
+            }
+            // 中心坐标标签：全域坐标系写 0，创建出来的写自己的绝对方块坐标。
+            // 它与其它标签一起参与防重叠：被别的标签压住就不显示。
+            var originEl = makeLabel(
+              "axis-label tick-label",
+              "#c8d4e4",
+              frame.root
+                ? "0"
+                : frame.center.x + "," + frame.center.y + "," + frame.center.z,
+            );
+            if (frame.root) originEl.dataset.origin = "1";
+            else originEl.dataset.center = "1";
+            originEl.dataset.frame = frame.id;
+            originEl.style.opacity = "0";
+            frame.labels.push({
+              el: originEl,
+              frame: frame,
+              order: -1,
+              pos: frame.centerVec.clone(),
+              axis: null,
+              big: true,
+            });
+
+            // 创建出来的坐标系带一个中心点句柄：左键点它附着，右键点它也能再建。
+            if (!frame.root) {
+              var dot = new THREE.Sprite(
+                new THREE.SpriteMaterial({
+                  map: sharedMarkTexture(),
+                  transparent: true,
+                  depthTest: false,
+                  depthWrite: false,
+                }),
               );
-              guides.add(
-                line(
-                  [
-                    new THREE.Vector3(-tick, t, 0),
-                    new THREE.Vector3(tick, t, 0),
-                  ],
-                  AXIS_COLORS.y,
-                  0.6,
-                ),
-              );
-              guides.add(
-                line(
-                  [
-                    new THREE.Vector3(-tick, 0, t),
-                    new THREE.Vector3(tick, 0, t),
-                  ],
-                  AXIS_COLORS.z,
-                  0.6,
-                ),
-              );
+              dot.renderOrder = 998;
+              // 初始必须归零并藏起来：Sprite 的默认缩放是 1 个世界单位，而 1 单位是整个
+              // int32 全域，所以它在第一帧就是一张铺满屏幕的白片，而尺寸要到 updateLabels
+              // 才被改成几个像素，那一趟又排在绘制之后，结果就是创建时闪一帧白。
+              dot.scale.set(0, 0, 1);
+              dot.visible = false;
+              frame.group.add(dot);
+              frame.dot = dot;
             }
 
             var box = new THREE.LineSegments(
@@ -3086,128 +3351,310 @@ SOFTWARE.
                 depthWrite: false,
               }),
             );
-            guides.add(box);
+            box.scale.set(halfNorm, halfNorm, halfNorm);
+            frame.group.add(box);
+            frame.cube = box;
+
+            frames.push(frame);
+            return frame;
           }
 
-          buildGuides();
+          // 全域坐标系：中心原点，归一化半跨度 1，方块单位就是 2^31，即 BLOCKS_MAX 的取反。
+          makeFrame({
+            id: "root",
+            root: true,
+            center: [0, 0, 0],
+            half: BLOCKS_MAX + 1,
+          });
 
-          // ---- 轴上刻度标签 ----
+          /**
+           * 逐帧复用的容器与判据。updateLabels 是唯一的逐帧热路径，数组、向量与排序判据
+           * 都提到函数外，运行期不再分配。
+           */
+          var focusBlockBuf = [0, 0, 0];
+          var pendingEntries = [];
+          var occupiedPoints = [];
+          var occupiedCount = 0;
+          var scratchVec = new THREE.Vector3();
+          var scratchProj = new THREE.Vector3();
 
-          var labelItems = [];
-          var LABEL_AT = [-1, -0.5, 0.5, 1];
+          /**
+           * pending 的次序：先按种类，轴名与中心标签为 -1、强调值为 0、网格刻度为 1；
+           * 同种类内创建出来的坐标系先于全域那一个，再按与视野尺度的接近程度。
+           * 第二条是必需的：两把尺度相同的刻度会落在完全相同的像素上，只按尺度排序
+           * 会让全域坐标系恰好赢一格，创建出来的那个读数就一条都留不下。
+           */
+          function byOrder(a, b) {
+            if (a.order !== b.order) return a.order - b.order;
+            var fa = a.frame && a.frame.root ? 1 : 0;
+            var fb = b.frame && b.frame.root ? 1 : 0;
+            if (fa !== fb) return fa - fb;
+            var ra = a.frame ? a.frame.rank : 0;
+            var rb = b.frame ? b.frame.rank : 0;
+            return ra - rb;
+          }
 
-          function buildLabels() {
-            var specs = [
-              {
-                color: "#cf969b",
-                axis: "X",
-                at: function (v) {
-                  return new THREE.Vector3(v, 0, 0);
-                },
-              },
-              {
-                color: "#9dbfaa",
-                axis: "Y",
-                at: function (v) {
-                  return new THREE.Vector3(0, v, 0);
-                },
-              },
-              {
-                color: "#94b2de",
-                axis: "Z",
-                at: function (v) {
-                  return new THREE.Vector3(0, 0, v);
-                },
-              },
-            ];
-            for (var i = 0; i < specs.length; i++) {
-              var axisName = document.createElement("div");
-              axisName.className = "axis-label axis-name";
-              axisName.textContent = specs[i].axis;
-              axisName.style.color = specs[i].color;
-              labelHost.appendChild(axisName);
-              labelItems.push({
-                el: axisName,
-                pos: specs[i].at(1.13),
-                name: true,
-                axis: specs[i].axis,
-              });
-              for (var j = 0; j < LABEL_AT.length; j++) {
-                var v = LABEL_AT[j];
-                var element = document.createElement("div");
-                element.className = "axis-label";
-                element.style.color = specs[i].color;
-                element.textContent = (v > 0 ? "+" : "") + v;
-                labelHost.appendChild(element);
-                labelItems.push({
-                  el: element,
-                  pos: specs[i].at(v),
-                  axis: specs[i].axis,
-                });
+          /** 记一个已占用的屏幕点，供标签防重叠用；点对象按需扩容后复用。 */
+          function occupyPoint(x, y) {
+            var o = occupiedPoints[occupiedCount];
+            if (!o) {
+              o = { x: 0, y: 0 };
+              occupiedPoints[occupiedCount] = o;
+            }
+            o.x = x;
+            o.y = y;
+            occupiedCount++;
+          }
+
+          /** 该值在该坐标系里是否已被强调点占用，占用则网格刻度让位。 */
+          function isEmphasised(frame, value) {
+            for (var i = 0; i < frame.emphasis.length; i++) {
+              if (frame.emphasis[i].blocks === value) return true;
+            }
+            return false;
+          }
+
+          /** 该坐标系的全部刻度先收起，供超尺度与丢帧用。 */
+          function hideFrameTicks(frame) {
+            for (var d = 0; d < frame.grid.length; d++) {
+              for (var i = 0; i < frame.grid[d].length; i++) {
+                frame.grid[d][i].line.visible = false;
+                frame.grid[d][i].el.style.opacity = "0";
               }
             }
-            var origin = document.createElement("div");
-            origin.className = "axis-label";
-            origin.textContent = "0";
-            labelHost.appendChild(origin);
-            labelItems.push({ el: origin, pos: new THREE.Vector3(0, 0, 0) });
+            for (var k = 0; k < frame.emphasis.length; k++) {
+              frame.emphasis[k].line.visible = false;
+              frame.emphasis[k].el.style.opacity = "0";
+            }
           }
 
-          buildLabels();
+          /** 该坐标系的轴名与中心标签收起。 */
+          function hideFrameLabels(frame) {
+            for (var i = 0; i < frame.labels.length; i++) {
+              frame.labels[i].el.style.opacity = "0";
+            }
+          }
 
           function updateLabels() {
             var width = stage.clientWidth;
             var height = stage.clientHeight;
-            var center = new THREE.Vector3().project(camera);
-            var occupied = [
-              {
-                x: (center.x * 0.5 + 0.5) * width,
-                y: (-center.y * 0.5 + 0.5) * height + 13,
-              },
-            ];
-            var axisLength = {};
-            ["X", "Y", "Z"].forEach(function (axis, i) {
-              var v = new THREE.Vector3(
-                i === 0 ? 1 : 0,
-                i === 1 ? 1 : 0,
-                i === 2 ? 1 : 0,
-              ).project(camera);
-              axisLength[axis] = Math.hypot(
-                ((v.x - center.x) * width) / 2,
-                ((v.y - center.y) * height) / 2,
+            if (width <= 0 || height <= 0) return;
+            var halfFov = Math.tan((camera.fov * Math.PI) / 360);
+            var pixelScale = (radius * halfFov) / height;
+            // 视野内可见的方块跨度。全域坐标系的步长跟它走，其余跟自身跨度。
+            var visibleBlocks = (2 * radius * halfFov) / UNIT;
+            focusBlockBuf[0] = focus.x * BLOCKS_UNIT;
+            focusBlockBuf[1] = focus.y * BLOCKS_UNIT;
+            focusBlockBuf[2] = focus.z * BLOCKS_UNIT;
+            pendingEntries.length = 0;
+
+            for (var f = 0; f < frames.length; f++) {
+              var frame = frames[f];
+              scratchVec.copy(frame.centerVec).project(camera);
+              var offScreen =
+                Math.abs(scratchVec.x) > 1.15 || Math.abs(scratchVec.y) > 1.15;
+              // 超尺度只看下界：跨度比视野小得多时只留轴与立方体框，放大进去仍要摆刻度。
+              var ratio = (2 * frame.half) / visibleBlocks;
+              var detailed = frame.root || ratio >= FRAME_LOD_MIN;
+              frame.rank = Math.abs(Math.log2(Math.max(ratio, 1e-9)));
+              // 轴太短就别摆标签，这个门限按该坐标系自己的尺度算。
+              var spanPx = (2 * frame.half * UNIT) / pixelScale;
+              frame.axisGate = frame.root ? 75 : Math.min(75, spanPx * 0.25);
+              frame.axisGateBig = frame.root ? 35 : Math.min(35, spanPx * 0.25);
+              var halfNorm = frame.half * UNIT;
+              for (var a = 0; a < AXIS_DEFS.length; a++) {
+                var ad = AXIS_DEFS[a];
+                var ex = ad.key === "x" ? halfNorm : 0;
+                var ey = ad.key === "y" ? halfNorm : 0;
+                var ez = ad.key === "z" ? halfNorm : 0;
+                scratchVec
+                  .set(
+                    frame.centerVec.x - ex,
+                    frame.centerVec.y - ey,
+                    frame.centerVec.z - ez,
+                  )
+                  .project(camera);
+                var ax0 = scratchVec.x;
+                var ay0 = scratchVec.y;
+                var az0 = scratchVec.z;
+                scratchVec
+                  .set(
+                    frame.centerVec.x + ex,
+                    frame.centerVec.y + ey,
+                    frame.centerVec.z + ez,
+                  )
+                  .project(camera);
+                // 端点跑出视锥时投影出来的不是真实屏幕距离，"轴长"可能是垃圾值，
+                // 从而被"轴太短"门整片拒掉。这时退回该坐标系的屏幕跨度。
+                var az1 = scratchVec.z;
+                frame.axisLen[ad.name] =
+                  az0 < -1 || az0 > 1 || az1 < -1 || az1 > 1
+                    ? spanPx
+                    : Math.hypot(
+                        (scratchVec.x - ax0) * width * 0.5,
+                        (scratchVec.y - ay0) * height * 0.5,
+                      );
+              }
+              if (frame.dot) {
+                var dotDist = camera.position.distanceTo(frame.centerVec);
+                var dotScale =
+                  (FRAME_DOT_PIXELS * 2 * dotDist * halfFov) / height;
+                frame.dot.scale.set(dotScale, dotScale, 1);
+                // 中心点不是常驻件：只按"该坐标系跨度是否接近视野"决定，纳入尺度才出现。
+                frame.dot.visible = !offScreen && detailed;
+              }
+              if (offScreen) {
+                hideFrameTicks(frame);
+                hideFrameLabels(frame);
+                continue;
+              }
+              if (!detailed) hideFrameTicks(frame);
+              var gridAxes = detailed ? AXIS_DEFS.length : 0;
+              var emphasisCount = detailed ? frame.emphasis.length : 0;
+              // 步长与扫描范围是两件事：步长跟「自身跨度」与「当前视野」中较小者走，
+              // 所以放大进一个坐标系里刻度会细化；扫描范围夹在两者交集内，否则细步长
+              // 会把七个刻度全摆到另一端、视野内一个都不剩。
+              var frameSpan = 2 * frame.half;
+              var stepSpan = frame.root
+                ? visibleBlocks
+                : Math.min(frameSpan, visibleBlocks);
+              var step = Math.pow(
+                2,
+                Math.ceil(Math.log2(Math.max(stepSpan / TICK_TARGET, 1))),
               );
-            });
-            for (var i = 0; i < labelItems.length; i++) {
-              var item = labelItems[i];
-              var p = item.pos.clone().project(camera);
-              var x = (p.x * 0.5 + 0.5) * width;
-              var y = (-p.y * 0.5 + 0.5) * height + (item.name ? 0 : 13);
-              var visible =
-                p.z <= 1 &&
-                p.z >= -1 &&
+              var half = Math.min(frameSpan / 2, frame.half);
+              var viewHalf = visibleBlocks / 2;
+
+              for (var d = 0; d < gridAxes; d++) {
+                var def = AXIS_DEFS[d];
+                var centre = frame.root
+                  ? focusBlockBuf[d]
+                  : frameCenterOn(frame, d);
+                // 全域坐标系的刻度夹在 int32 内；创建出来的允许越过该边界，所以不夹。
+                var lo = Math.max(
+                  centre - half,
+                  frameCenterOn(frame, d) - frame.half,
+                  focusBlockBuf[d] - viewHalf,
+                  frame.root ? BLOCKS_MIN : -Infinity,
+                );
+                var hi = Math.min(
+                  centre + half,
+                  frameCenterOn(frame, d) + frame.half,
+                  focusBlockBuf[d] + viewHalf,
+                  frame.root ? BLOCKS_MAX : Infinity,
+                );
+                var first = Math.ceil(lo / step) * step;
+                for (var i = 0; i < GRID_TICKS; i++) {
+                  var t = frame.grid[d][i];
+                  var value = first + i * step;
+                  var show = value <= hi && !isEmphasised(frame, value);
+                  t.line.visible = show;
+                  if (!show) {
+                    t.el.style.opacity = "0";
+                    continue;
+                  }
+                  t.local = value - frameCenterOn(frame, d);
+                  var lw = def.world(t.local);
+                  t.line.position.set(lw[0], lw[1], lw[2]);
+                  var sw = t.pixels * pixelScale;
+                  t.line.scale.set(sw, sw, sw);
+                  var text = String(value);
+                  if (t.el.textContent !== text) {
+                    t.el.textContent = text;
+                    t.el.dataset.blocks = text;
+                  }
+                  // 标签位置与刻度线同源：该坐标系中心 + 局部偏移。
+                  // def.world 给的是"过原点的全域轴"上的点，直接拿它当标签位置，
+                  // 创建出来的坐标系的读数就会被画到全域那三根轴上。
+                  t.pos.set(
+                    frame.center.x * UNIT + lw[0],
+                    frame.center.y * UNIT + lw[1],
+                    frame.center.z * UNIT + lw[2],
+                  );
+                  pendingEntries.push(t);
+                }
+              }
+
+              for (var k = 0; k < emphasisCount; k++) {
+                var m = frame.emphasis[k];
+                var mw = m.pixels * pixelScale;
+                m.line.scale.set(mw, mw, mw);
+                // 超尺度时 hideFrameTicks 把它们设成不可见，回到尺度内要恢复。
+                m.line.visible = true;
+                pendingEntries.push(m);
+              }
+
+              // 轴名与中心标签先占位，其次强调值，最后网格刻度。
+              for (var n = 0; n < frame.labels.length; n++) {
+                var lab = frame.labels[n];
+                // 中心坐标标签与刻度同一套尺度规则：超尺度时一起收起。
+                // 轴名带 axis，不受这一条约束。
+                if (!detailed && !lab.axis) {
+                  lab.el.style.opacity = "0";
+                  continue;
+                }
+                pendingEntries.push(lab);
+              }
+            }
+
+            pendingEntries.sort(byOrder);
+
+            // 屏幕中心先占一格，避免标签压在原点上。
+            scratchProj.set(0, 0, 0).project(camera);
+            occupiedCount = 0;
+            occupyPoint(
+              (scratchProj.x * 0.5 + 0.5) * width,
+              (-scratchProj.y * 0.5 + 0.5) * height + 13,
+            );
+
+            for (var w = 0; w < pendingEntries.length; w++) {
+              var it = pendingEntries[w];
+              scratchProj.copy(it.pos).project(camera);
+              var x = (scratchProj.x * 0.5 + 0.5) * width;
+              var y = (-scratchProj.y * 0.5 + 0.5) * height + (it.big ? 0 : 13);
+              var inView =
+                scratchProj.z <= 1 &&
+                scratchProj.z >= -1 &&
                 x > 12 &&
                 x < width - 12 &&
                 y > 50 &&
                 y < height - 35;
-              if (item.axis) {
-                if (axisLength[item.axis] < (item.name ? 35 : 75))
-                  visible = false;
-                for (var j = 0; visible && j < occupied.length; j++) {
-                  if (
-                    Math.abs(x - occupied[j].x) < 29 &&
-                    Math.abs(y - occupied[j].y) < 17
-                  )
-                    visible = false;
+              var axisOK = true;
+              var collOK = true;
+              if (inView && it.frame) {
+                // 轴长门限只对带轴的条目有意义，也就是刻度、强调值与轴名。
+                if (it.axis) {
+                  var axisGate = it.big
+                    ? it.frame.axisGateBig
+                    : it.frame.axisGate;
+                  axisOK = !(it.frame.axisLen[it.axis] < axisGate);
                 }
-                if (visible) occupied.push({ x: x, y: y });
+                // 防重叠对每个标签都生效，中心坐标标签也在内：它会被别的标签压住而不显示。
+                if (axisOK) {
+                  // 第 0 格是屏幕原点那一格，它只为全域坐标系自己的读数让位。
+                  var from = it.frame.root ? 0 : 1;
+                  for (var j = from; j < occupiedCount; j++) {
+                    if (
+                      Math.abs(x - occupiedPoints[j].x) < 29 &&
+                      Math.abs(y - occupiedPoints[j].y) < 17
+                    ) {
+                      collOK = false;
+                      break;
+                    }
+                  }
+                }
               }
-              item.el.style.opacity = visible ? "1" : "0";
-              item.el.style.transform =
-                "translate(-50%,-50%) translate(" +
-                x.toFixed(1) +
-                "px," +
-                y.toFixed(1) +
-                "px)";
+              var visible = inView && axisOK && collOK;
+              if (visible && it.frame) occupyPoint(x, y);
+              it.el.style.opacity = visible ? "1" : "0";
+              if (visible) {
+                it.el.style.transform =
+                  "translate(-50%,-50%) translate(" +
+                  x.toFixed(1) +
+                  "px," +
+                  y.toFixed(1) +
+                  "px)";
+              }
             }
           }
 
@@ -3216,14 +3663,48 @@ SOFTWARE.
           var planes = new THREE.Group();
           scene.add(planes);
 
+          /**
+           * 定位标记与中心点句柄共用的一张软边圆片。
+           * 用 16×12 的球时，放大到几十像素轮廓就是折线，而基色那一路没有多重采样，
+           * 硬边只会更难看。圆片的边缘由纹理 alpha 渐隐，任何缩放倍率下都平滑。
+           */
+          function makeMarkTexture() {
+            var size = 64;
+            var canvas = document.createElement("canvas");
+            canvas.width = size;
+            canvas.height = size;
+            var ctx = canvas.getContext("2d");
+            var c = size / 2;
+            var grad = ctx.createRadialGradient(c, c, 0, c, c, c);
+            grad.addColorStop(0, "rgba(255,255,255,1)");
+            grad.addColorStop(0.5, "rgba(240,246,255,0.95)");
+            grad.addColorStop(0.62, "rgba(170,198,240,0.62)");
+            grad.addColorStop(0.82, "rgba(150,182,228,0.12)");
+            grad.addColorStop(1, "rgba(150,182,228,0)");
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(c, c, c, 0, Math.PI * 2);
+            ctx.fill();
+            return new THREE.CanvasTexture(canvas);
+          }
+
+          /**
+           * 全场共用一张。每个坐标系各建一张的话，上限 1024 个就是 1024 张 64×64 画布
+           * 加同样多的 GPU 纹理，而它们的内容完全相同。
+           */
+          var markTexture = null;
+
+          function sharedMarkTexture() {
+            if (!markTexture) markTexture = makeMarkTexture();
+            return markTexture;
+          }
+
           /** 定位点标记。关掉深度测试，缩到极小尺度时也不会被别的几何盖住。 */
           var markGroup = new THREE.Group();
-          var markMesh = new THREE.Mesh(
-            new THREE.SphereGeometry(1, 16, 12),
-            new THREE.MeshBasicMaterial({
-              color: 0xeaf1ff,
+          var markMesh = new THREE.Sprite(
+            new THREE.SpriteMaterial({
+              map: sharedMarkTexture(),
               transparent: true,
-              opacity: 0.95,
               depthTest: false,
               depthWrite: false,
             }),
@@ -3534,6 +4015,10 @@ SOFTWARE.
           var dragging = false;
           var lastX = 0;
           var lastY = 0;
+          /** 按下点与是否越过了点击阈值，用来区分点击与拖拽。 */
+          var downX = 0;
+          var downY = 0;
+          var dragMoved = false;
 
           canvas.addEventListener("contextmenu", function (e) {
             e.preventDefault();
@@ -3551,13 +4036,22 @@ SOFTWARE.
             setHovered(-1);
             lastX = e.clientX;
             lastY = e.clientY;
+            downX = e.clientX;
+            downY = e.clientY;
+            dragMoved = false;
             canvas.setPointerCapture(e.pointerId);
           });
 
           canvas.addEventListener("pointerup", function (e) {
+            var wasClick = dragging && !dragMoved && e.button === 0;
             dragging = false;
             if (canvas.hasPointerCapture(e.pointerId))
               canvas.releasePointerCapture(e.pointerId);
+            // 没拖动就算点击：命中哪个坐标系的轴柱或中心点，就把环绕中心附着上去。
+            if (wasClick) {
+              var frame = framePickAt(e);
+              if (frame && frame.id !== attachedId) attachTo(frame);
+            }
           });
 
           canvas.addEventListener("pointercancel", function () {
@@ -3572,6 +4066,12 @@ SOFTWARE.
 
           canvas.addEventListener("pointermove", function (e) {
             if (dragging) {
+              if (
+                Math.abs(e.clientX - downX) > CLICK_SLOP_PIXELS ||
+                Math.abs(e.clientY - downY) > CLICK_SLOP_PIXELS
+              ) {
+                dragMoved = true;
+              }
               targetTheta -= (e.clientX - lastX) * 0.004;
               targetPhi -= (e.clientY - lastY) * 0.004;
               targetPhi = Math.max(0.02, Math.min(Math.PI - 0.02, targetPhi));
@@ -3640,6 +4140,9 @@ SOFTWARE.
 
           var ctxMenu = document.getElementById("ctx-menu");
           var ctxCopy = document.getElementById("ctx-copy");
+          var ctxFrame = document.getElementById("ctx-frame");
+          var ctxDelete = document.getElementById("ctx-delete");
+          var ctxError = document.getElementById("ctx-error");
           var ctxPin = document.getElementById("ctx-pin");
           var ctxGoto = document.getElementById("ctx-goto");
           var gotoPanel = document.getElementById("goto-panel");
@@ -3651,6 +4154,9 @@ SOFTWARE.
           /** 最近一次右键的位置，面板照着它摆。 */
           var lastPointer = null;
           var ctxTarget = null;
+          /** 菜单当前给出的方块坐标与它的所属坐标系，创建坐标系用。 */
+          var ctxBlock = null;
+          var ctxParent = null;
           /** 右键当前指向的行；坐标轴时为 -1。 */
           var ctxRowIndex = -1;
           /** 已固定的行：常驻高亮，固定期间悬停不再改变任何高亮。 */
@@ -3709,32 +4215,328 @@ SOFTWARE.
             return [ox + t * dx, oy + t * dy, oz + t * dz];
           }
 
-          /** 射线与某条坐标轴最近点在轴上的坐标值，方块单位。 */
-          function axisCoordOf(ray, axis) {
-            var o = [
-              ray.origin.x * BLOCK_UNIT,
-              ray.origin.y * BLOCK_UNIT,
-              ray.origin.z * BLOCK_UNIT,
-            ];
-            var d = [
-              ray.direction.x * BLOCK_UNIT,
-              ray.direction.y * BLOCK_UNIT,
-              ray.direction.z * BLOCK_UNIT,
-            ];
-            var e = [
-              axis === "x" ? 1 : 0,
-              axis === "y" ? 1 : 0,
-              axis === "z" ? 1 : 0,
-            ];
-            var dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
-            var de = d[0] * e[0] + d[1] * e[1] + d[2] * e[2];
-            var eo = e[0] * o[0] + e[1] * o[1] + e[2] * o[2];
-            var od = o[0] * d[0] + o[1] * d[1] + o[2] * d[2];
+          /**
+           * 射线与某条坐标轴最近点，方块坐标三元组。
+           * 轴是过 base 沿该轴方向的那条线：创建出来的坐标系的轴不过原点，另两轴分量是 base 的分量，
+           * 不能像只有全域坐标系时那样写死为 0。
+           */
+          function axisCoordOf(ray, axis, base) {
+            var ox = ray.origin.x * BLOCK_UNIT - base[0];
+            var oy = ray.origin.y * BLOCK_UNIT - base[1];
+            var oz = ray.origin.z * BLOCK_UNIT - base[2];
+            var dx = ray.direction.x * BLOCK_UNIT;
+            var dy = ray.direction.y * BLOCK_UNIT;
+            var dz = ray.direction.z * BLOCK_UNIT;
+            var ex = axis === "x" ? 1 : 0;
+            var ey = axis === "y" ? 1 : 0;
+            var ez = axis === "z" ? 1 : 0;
+            var dd = dx * dx + dy * dy + dz * dz;
+            var de = dx * ex + dy * ey + dz * ez;
+            var eo = ex * ox + ey * oy + ez * oz;
+            var od = ox * dx + oy * dy + oz * dz;
             var denom = dd - de * de;
             // 射线与轴平行时最近点对不唯一，取射线起点在该轴上的投影。
-            if (Math.abs(denom) < 1e-9) return eo;
-            var t = (eo * de - od) / denom;
-            return t * de + eo;
+            var s =
+              Math.abs(denom) < 1e-9 ? eo : ((eo * de - od) / denom) * de + eo;
+            return [base[0] + s * ex, base[1] + s * ey, base[2] + s * ez];
+          }
+
+          // ---- 坐标系的创建与删除 ----
+
+          /** 按组反查坐标系。3D 命中对象挂在 frame.group 下，用它找回所属坐标系。 */
+          function frameOfGroup(group) {
+            for (var i = 0; i < frames.length; i++) {
+              if (frames[i].group === group) return frames[i];
+            }
+            return null;
+          }
+
+          /** 当前缩放下新坐标系的候选半跨度，方块单位。 */
+          function zoomHalfBlocks() {
+            var halfFov = Math.tan((camera.fov * Math.PI) / 360);
+            return ((2 * radius * halfFov) / UNIT) * FRAME_ZOOM_FRACTION;
+          }
+
+          /**
+           * 逐层内切：新坐标系要装进所属坐标系的立方体里，三轴取最紧的那一轴，放不下返回负值。
+           * 所属坐标系是全域那个时不夹：它的半跨度就是 int32 全域，拿它当墙会把靠边的创建全拒掉，
+           * 而 int32 边界只是数据的边界，不是坐标系可以画到哪里的边界。
+           */
+          function fitHalfBlocks(parent, center) {
+            if (parent.root) return Infinity;
+            var margin = parent.half * FRAME_FIT_MARGIN;
+            var room = Infinity;
+            for (var d = 0; d < 3; d++) {
+              var c = d === 0 ? center[0] : d === 1 ? center[1] : center[2];
+              room = Math.min(
+                room,
+                parent.half - Math.abs(c - frameCenterOn(parent, d)) - margin,
+              );
+            }
+            return room;
+          }
+
+          /**
+           * 在 center 处建一个坐标系，所属坐标系是发起创建的那一个。
+           * 半跨度取「视野系数」与「逐层内切」的较小者；放不下就拒绝，返回 {ok, message}。
+           */
+          function createFrameAt(parent, center) {
+            if (frames.length >= FRAME_LIMIT) {
+              return {
+                ok: false,
+                message: "坐标系数量已达上限 " + FRAME_LIMIT + " 个。",
+              };
+            }
+            var room = fitHalfBlocks(parent, center);
+            var half = Math.min(zoomHalfBlocks(), room);
+            if (!(half >= FRAME_MIN_BLOCKS)) {
+              return {
+                ok: false,
+                message:
+                  "该位置距所属坐标系的边界过近，可用半跨度 " +
+                  Math.max(0, Math.floor(room)) +
+                  " 格，小于下限 " +
+                  FRAME_MIN_BLOCKS +
+                  " 格。",
+              };
+            }
+            frameSeq++;
+            var frame = makeFrame({
+              id: "frame" + frameSeq,
+              parent: parent,
+              center: center,
+              half: half,
+            });
+            invalidate();
+            return { ok: true, frame: frame };
+          }
+
+          /** 摘掉一个坐标系：3D 件、标签、轴拾取表与坐标系表一起清。 */
+          function removeFrame(frame) {
+            for (var c = 0; c < frame.group.children.length; c++) {
+              var obj = frame.group.children[c];
+              if (obj.geometry && obj.geometry.dispose) obj.geometry.dispose();
+              if (obj.material && obj.material.dispose) obj.material.dispose();
+            }
+            guides.remove(frame.group);
+            for (var i = 0; i < frame.axes.length; i++) {
+              var at = axisPicks.indexOf(frame.axes[i]);
+              if (at >= 0) axisPicks.splice(at, 1);
+            }
+            for (var n = 0; n < frame.labels.length; n++) {
+              labelHost.removeChild(frame.labels[n].el);
+            }
+            for (var d = 0; d < frame.grid.length; d++) {
+              for (var k = 0; k < frame.grid[d].length; k++) {
+                labelHost.removeChild(frame.grid[d][k].el);
+              }
+            }
+            for (var e = 0; e < frame.emphasis.length; e++) {
+              labelHost.removeChild(frame.emphasis[e].el);
+            }
+            var idx = frames.indexOf(frame);
+            if (idx >= 0) frames.splice(idx, 1);
+          }
+
+          /** 删除该坐标系及其下级。 */
+          function deleteFrame(frame) {
+            if (!frame || frame.root) return;
+            var doomed = [];
+            for (var i = 0; i < frames.length; i++) {
+              for (var p = frames[i]; p; p = p.parent) {
+                if (p === frame) {
+                  doomed.push(frames[i]);
+                  break;
+                }
+              }
+            }
+            for (var d = 0; d < doomed.length; d++) removeFrame(doomed[d]);
+            if (!frameById(attachedId)) {
+              // 删掉的正是附着的那一个：连相机一起带回全域坐标系。
+              attachTo(frames[0]);
+              return;
+            }
+            refreshHighlight();
+            hideMenu();
+            invalidate();
+          }
+
+          // ---- 附着、拾取与像素容差 ----
+
+          /** 按 id 取坐标系。 */
+          function frameById(id) {
+            for (var i = 0; i < frames.length; i++) {
+              if (frames[i].id === id) return frames[i];
+            }
+            return null;
+          }
+
+          /**
+           * 附着提示。只有创建出来的坐标系会被提亮：全域那个是场景本身，提亮它等于改默认观感，
+           * 而"没有别的坐标系被提亮"本身就表示当前附着在全域那一个上。
+           */
+          function setFrameHighlight(frame, on) {
+            if (!frame || frame.root) return;
+            for (var i = 0; i < frame.axes.length; i++) {
+              var bar = frame.axes[i];
+              bar.material.opacity = on ? 1 : 0.85;
+              bar.material.color
+                .copy(bar.userData.baseColor)
+                .lerp(FRAME_HL_COLOR, on ? 0.3 : 0);
+            }
+            if (frame.cube) frame.cube.material.opacity = on ? 0.55 : 0.4;
+          }
+
+          /** 按 attachedId 重刷所有坐标系的附着提示。 */
+          function refreshHighlight() {
+            for (var i = 0; i < frames.length; i++) {
+              setFrameHighlight(frames[i], frames[i].id === attachedId);
+            }
+          }
+
+          /** 把相机环绕中心附着到该坐标系。缩放不动，只换环绕中心。 */
+          function attachTo(frame) {
+            if (!frame) return;
+            attachedId = frame.id;
+            targetFocus.set(
+              frame.center.x * UNIT,
+              frame.center.y * UNIT,
+              frame.center.z * UNIT,
+            );
+            refreshHighlight();
+            setHovered(-1);
+            hideMenu();
+            invalidate();
+          }
+
+          /** 指针下的坐标系：只认轴柱与中心点，立方体框不参与。 */
+          function framePickAt(e) {            pointerNdc(e);
+            raycaster.setFromCamera(pointer, camera);
+            var targets = [];
+            for (var i = 0; i < frames.length; i++) {
+              var frame = frames[i];
+              for (var a = 0; a < frame.axes.length; a++) {
+                targets.push(frame.axes[a]);
+              }
+              if (frame.dot && frame.dot.visible) targets.push(frame.dot);
+            }
+            var hits = raycaster.intersectObjects(targets, false);
+            if (hits.length === 0) return null;
+            return frameOfGroup(hits[0].object.parent);
+          }
+
+          /** 指针到线段的最小像素距离，以及最近点在线段上的参数。 */
+          function pointerToSegment(px, py, x0, y0, x1, y1) {
+            var dx = x1 - x0;
+            var dy = y1 - y0;
+            var len2 = dx * dx + dy * dy;
+            var t = len2 > 1e-9 ? ((px - x0) * dx + (py - y0) * dy) / len2 : 0;
+            t = Math.max(0, Math.min(1, t));
+            return {
+              pixels: Math.hypot(px - (x0 + t * dx), py - (y0 + t * dy)),
+              t: t,
+            };
+          }
+
+          /**
+           * 屏幕空间上离指针最近的坐标轴，超出容差返回 null。
+           * 轴的圆柱只有 1.5 像素宽，只靠射线命中要求精确点到；这里按像素兜一层。
+           * 端点按各自所属坐标系的中心与半跨度取，全用 ±1 会把创建出来的量到全域那根轴上。
+           */
+          function nearestAxis(e) {
+            var rect = canvas.getBoundingClientRect();
+            var px = e.clientX - rect.left;
+            var py = e.clientY - rect.top;
+            var best = null;
+            for (var i = 0; i < axisPicks.length; i++) {
+              var bar = axisPicks[i];
+              var key = bar.userData.axis;
+              var frame = frameOfGroup(bar.parent);
+              if (!frame) continue;
+              var half = frame.half * UNIT;
+              var cx = frame.center.x * UNIT;
+              var cy = frame.center.y * UNIT;
+              var cz = frame.center.z * UNIT;
+              var ex = key === "x" ? half : 0;
+              var ey = key === "y" ? half : 0;
+              var ez = key === "z" ? half : 0;
+              var s0 = new THREE.Vector3(cx - ex, cy - ey, cz - ez).project(
+                camera,
+              );
+              var s1 = new THREE.Vector3(cx + ex, cy + ey, cz + ez).project(
+                camera,
+              );
+              var x0 = (s0.x * 0.5 + 0.5) * rect.width;
+              var y0 = (-s0.y * 0.5 + 0.5) * rect.height;
+              var x1 = (s1.x * 0.5 + 0.5) * rect.width;
+              var y1 = (-s1.y * 0.5 + 0.5) * rect.height;
+              var hit = pointerToSegment(px, py, x0, y0, x1, y1);
+              if (hit.pixels > AXIS_PICK_PIXELS) continue;
+              var near = new THREE.Vector3(
+                cx - ex + hit.t * 2 * ex,
+                cy - ey + hit.t * 2 * ey,
+                cz - ez + hit.t * 2 * ez,
+              );
+              if (
+                best === null ||
+                hit.pixels < best.pixels ||
+                (hit.pixels === best.pixels &&
+                  camera.position.distanceTo(near) < best.distance)
+              ) {
+                best = {
+                  axis: key,
+                  pixels: hit.pixels,
+                  distance: camera.position.distanceTo(near),
+                  group: bar.parent,
+                };
+              }
+            }
+            return best;
+          }
+
+          /**
+           * 指针是否落在某个可见刻度数字上。标签是 pointer-events: none 的，
+           * 点数字本来等于点在背后的画布上，这里按各自的方框做一次命中。
+           * 刻度数字给出的三元组，另两轴取所属坐标系的中心。
+           */
+          function tickLabelAt(e) {
+            var nodes = labelHost.children;
+            for (var i = 0; i < nodes.length; i++) {
+              var el = nodes[i];
+              if (!el.dataset) continue;
+              var isCentre =
+                el.dataset.origin === "1" || el.dataset.center === "1";
+              if (!isCentre && el.dataset.blocks === undefined) continue;
+              if (el.style.opacity === "0") continue;
+              var r = el.getBoundingClientRect();
+              if (
+                e.clientX < r.left ||
+                e.clientX > r.right ||
+                e.clientY < r.top ||
+                e.clientY > r.bottom
+              ) {
+                continue;
+              }
+              var owner = frameById(el.dataset.frame);
+              if (!owner) continue;
+              if (isCentre) {
+                return {
+                  block: [owner.center.x, owner.center.y, owner.center.z],
+                  frame: owner,
+                };
+              }
+              var v = Number(el.dataset.blocks);
+              if (!isFinite(v)) continue;
+              var axis = el.dataset.axis;
+              var block =
+                axis === "x"
+                  ? [v, owner.center.y, owner.center.z]
+                  : axis === "y"
+                    ? [owner.center.x, v, owner.center.z]
+                    : [owner.center.x, owner.center.y, v];
+              return { block: block, frame: owner };
+            }
+            return null;
           }
 
           function hideMenu() {
@@ -3754,26 +4556,67 @@ SOFTWARE.
               Math.max(2, Math.min(x, stage.clientWidth - el.offsetWidth - 4)) +
               "px";
             el.style.top =
-              Math.max(2, Math.min(y, stage.clientHeight - el.offsetHeight - 4)) +
-              "px";
+              Math.max(
+                2,
+                Math.min(y, stage.clientHeight - el.offsetHeight - 4),
+              ) + "px";
           }
 
           function openMenu(e) {
             pointerNdc(e);
             raycaster.setFromCamera(pointer, camera);
+            var labelHit = tickLabelAt(e);
             var planeHits = raycaster.intersectObjects(
               visiblePlaneMeshes(),
               false,
             );
             var axisHits = raycaster.intersectObjects(axisPicks, false);
+            if (axisHits.length === 0) {
+              var nearAxis = nearestAxis(e);
+              if (nearAxis) {
+                axisHits = [
+                  {
+                    distance: nearAxis.distance,
+                    // 兜底命中也要带上所属组，后面按组反查坐标系。
+                    object: {
+                      userData: { axis: nearAxis.axis },
+                      parent: nearAxis.group,
+                    },
+                  },
+                ];
+              }
+            }
             var markHits = markGroup.visible
               ? raycaster.intersectObject(markMesh, false)
               : [];
+            // 中心点也是右键目标：它的尺寸只有几像素，而旁边的中心标签可能被防重叠挡掉，
+            // 那时点在点上会落到"虚空"，只能给定位。
+            var dotTargets = [];
+            for (var di = 0; di < frames.length; di++) {
+              if (frames[di].dot && frames[di].dot.visible) {
+                dotTargets.push(frames[di].dot);
+              }
+            }
+            var dotHits = raycaster.intersectObjects(dotTargets, false);
+            var axisFrame =
+              axisHits.length > 0
+                ? frameOfGroup(axisHits[0].object.parent)
+                : null;
             // 取最上层：几种命中里离相机更近的那一个。
             var best = null;
             var planeHit = null;
             if (markHits.length > 0) {
               best = { kind: "mark", distance: markHits[0].distance };
+            }
+            if (
+              dotHits.length > 0 &&
+              (best === null || dotHits[0].distance < best.distance)
+            ) {
+              best = {
+                kind: "dot",
+                frame: frameOfGroup(dotHits[0].object.parent),
+                distance: dotHits[0].distance,
+              };
             }
             if (
               axisHits.length > 0 &&
@@ -3796,12 +4639,19 @@ SOFTWARE.
               };
               planeHit = planeHits[0];
             }
+            // 点在刻度数字上就是要复制那个数字，优先于轴、面与标记。
+            if (labelHit) best = { kind: "label", distance: 0 };
             if (best === null) {
               // 虚空：只给定位。
               lastPointer = { x: e.clientX, y: e.clientY };
               ctxTarget = null;
               ctxRowIndex = -1;
               ctxCopy.hidden = true;
+              ctxFrame.hidden = true;
+              ctxDelete.hidden = true;
+              ctxError.hidden = true;
+              ctxBlock = null;
+              ctxParent = null;
               ctxPin.hidden = true;
               ctxGoto.hidden = false;
               ctxMenu.hidden = false;
@@ -3810,8 +4660,20 @@ SOFTWARE.
             }
 
             var block = null;
-            if (best.kind === "mark") {
-              block = markBlock ? [markBlock.x, markBlock.y, markBlock.z] : null;
+            if (best.kind === "label") {
+              block = labelHit.block;
+            } else if (best.kind === "dot") {
+              block = best.frame
+                ? [
+                    best.frame.center.x,
+                    best.frame.center.y,
+                    best.frame.center.z,
+                  ]
+                : null;
+            } else if (best.kind === "mark") {
+              block = markBlock
+                ? [markBlock.x, markBlock.y, markBlock.z]
+                : null;
             } else if (best.kind === "plane") {
               var rows = ui.getRows() || [];
               var row = rows[best.index - 1];
@@ -3825,17 +4687,10 @@ SOFTWARE.
                 planeHit ? planeHit.point : null,
               );
             } else {
-              var s = axisCoordOf(raycaster.ray, best.axis);
-              if (s === null) {
-                hideMenu();
-                return;
-              }
-              block =
-                best.axis === "x"
-                  ? [s, 0, 0]
-                  : best.axis === "y"
-                    ? [0, s, 0]
-                    : [0, 0, s];
+              var axisBase = axisFrame
+                ? [axisFrame.center.x, axisFrame.center.y, axisFrame.center.z]
+                : [0, 0, 0];
+              block = axisCoordOf(raycaster.ray, best.axis, axisBase);
             }
             if (block === null) {
               hideMenu();
@@ -3851,6 +4706,27 @@ SOFTWARE.
               clampBlock(block[2]);
             ctxCopy.textContent = "复制坐标";
             ctxCopy.hidden = false;
+            ctxFrame.hidden = false;
+            ctxError.hidden = true;
+            // 创建用的坐标与复制完全同源，避免两处夹取不一致。
+            ctxBlock = [
+              clampBlock(block[0]),
+              clampBlock(block[1]),
+              clampBlock(block[2]),
+            ];
+            // 所属坐标系取「发起这次右键的那一个」：命中轴柱时是轴所属的那一个，
+            // 命中中心点时是它自己，命中平面或定位标记时没有归属，回到全域坐标系。
+            var owner =
+              best.kind === "label" && labelHit
+                ? labelHit.frame
+                : best.kind === "dot"
+                  ? best.frame
+                  : best.kind === "axis"
+                    ? axisFrame
+                    : null;
+            ctxParent = owner || frames[0];
+            // 只有创建出来的坐标系可以删，全域那个不给。
+            ctxDelete.hidden = !(owner && !owner.root);
             ctxGoto.hidden = true;
             lastPointer = { x: e.clientX, y: e.clientY };
             ctxRowIndex = best.kind === "plane" ? best.index : -1;
@@ -3922,6 +4798,21 @@ SOFTWARE.
             if (gotoX.focus) gotoX.focus();
           });
 
+          ctxFrame.addEventListener("click", function () {
+            if (!ctxBlock) return;
+            var result = createFrameAt(ctxParent || frames[0], ctxBlock);
+            if (!result.ok) {
+              ctxError.textContent = result.message;
+              ctxError.hidden = false;
+              return;
+            }
+            hideMenu();
+          });
+
+          ctxDelete.addEventListener("click", function () {
+            deleteFrame(ctxParent);
+          });
+
           function parseBlock(text) {
             var s = String(text).trim();
             if (!/^[+-]?[0-9]+$/.test(s)) return null;
@@ -3957,6 +4848,9 @@ SOFTWARE.
             markBlock = { x: bx, y: by, z: bz };
             markGroup.position.set(px, py, pz);
             markGroup.visible = true;
+            // 定位到的点不属于任何坐标系，附着解除。
+            attachedId = null;
+            refreshHighlight();
             clearViewSelection();
             hideMenu();
             invalidate();
@@ -4046,24 +4940,32 @@ SOFTWARE.
             lastFrame = now;
             var blend = reducedMotion.matches ? 1 : 1 - Math.exp(-dt * 15);
             var moving = false;
-            function approach(current, target) {
-              if (Math.abs(current - target) < 0.0001) return target;
+            function approach(current, target, floor) {
+              // 阈值必须跟着量级走。radius 从 5.4 跨到 1e-4，固定 0.0001 的阈值
+              // 会让百万格以下每一格滚轮都直接跳变，阻尼等于没有，看起来一顿一顿。
+              // floor 是各通道自己的下限：焦点用半个方块，否则目标为原点时相对阈值
+              // 退化成 1e-12，尾巴会拖出几个方块的残差。
+              var eps =
+                Math.max(Math.abs(target), Math.abs(current)) * 1e-4 +
+                (floor === undefined ? 1e-12 : floor);
+              if (Math.abs(target - current) < eps) return target;
               moving = true;
               return current + (target - current) * blend;
             }
             theta = approach(theta, targetTheta);
             phi = approach(phi, targetPhi);
             radius = approach(radius, targetRadius);
-            focus.x = approach(focus.x, targetFocus.x);
-            focus.y = approach(focus.y, targetFocus.y);
-            focus.z = approach(focus.z, targetFocus.z);
-            // 标记按世界半径画，跟场景一起缩放；只在屏幕上小到 4 像素时不再缩，
+            focus.x = approach(focus.x, targetFocus.x, HALF_BLOCK);
+            focus.y = approach(focus.y, targetFocus.y, HALF_BLOCK);
+            focus.z = approach(focus.z, targetFocus.z, HALF_BLOCK);
+            // 标记是一张软边圆片：Sprite 的 scale 是四边形边长，所以给直径。
+            // 它按世界尺度画，跟场景一起缩放；只在屏幕上小到 4 像素时不再缩，
             // 既看着像场景里的物体，又不会缩远之后找不回来。
             var markHalfFov = Math.tan((camera.fov * Math.PI) / 360);
             var markPixelFloor =
               (4 * radius * markHalfFov) / Math.max(stage.clientHeight, 1);
             var markScale = Math.max(MARK_RADIUS, markPixelFloor);
-            markGroup.scale.set(markScale, markScale, markScale);
+            markGroup.scale.set(markScale * 2, markScale * 2, 1);
             for (var i = 0; i < rowObjects.length; i++) {
               var entry = rowObjects[i];
               if (!entry) continue;
@@ -4096,8 +4998,11 @@ SOFTWARE.
             }
             updateCamera();
             camera.updateMatrixWorld();
-            drawScene();
+            // 先写状态再画：updateLabels 决定刻度长度与标签显隐，写在绘制之后的话，
+            // 那一帧画出去的是错状态，而相机停稳后循环就停了，错画面会一直留在屏上，
+            // 直到下一次交互把它赶走，也就是转视角或聚焦。
             updateLabels();
+            drawScene();
             if (moving) invalidate();
           }
           document.addEventListener("visibilitychange", function () {
