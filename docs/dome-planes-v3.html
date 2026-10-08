@@ -4351,8 +4351,9 @@ SOFTWARE.
               }
             }
             for (var d = 0; d < doomed.length; d++) removeFrame(doomed[d]);
-            if (!frameById(attachedId)) {
-              // 删掉的正是附着的那一个：连相机一起带回全域坐标系。
+            // 只有"确实附着着某一个、而它被删掉了"才把相机带回全域坐标系。
+            // 定位之后 attachedId 是 null，那是"没有附着"，删任何东西都不该动相机。
+            if (attachedId !== null && !frameById(attachedId)) {
               attachTo(frames[0]);
               return;
             }
