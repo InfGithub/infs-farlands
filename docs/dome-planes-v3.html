@@ -3080,16 +3080,49 @@ SOFTWARE.
           /** 视野内希望出现的网格刻度个数，用来定换挡步长。 */
           var TICK_TARGET = 5;
           /**
-           * 常显且加长的强调值，单位方块，每项是一对 [正, 负]。
-           * 三个 2 的幂边界取 MAX 与 ~MAX，与本仓库 MIN_SECTION = ~MAX_SECTION 同规；
-           * 边境之地那一对按给定值照录，不由取反推出。
+           * 常显且加长的强调值，单位方块，按轴分组。每组 = { axes: 出现在哪些轴, pairs: 对子表 }。
+           * 负值取正值的按位取反，与本仓库 MIN_SECTION = ~MAX_SECTION 同规；
+           * 按给定值照录、不由取反推出的几对如下：33554431、12550821 与 1004065920 只在 x 与 z，
+           * y 轴另有 2047、25101648 与 2008131840 三对。
            */
-          var EMPHASIS_PAIRS = [
-            [12550821, -12550824],
-            [33554431, -33554432],
-            [268435455, -268435456],
-            [2147483647, -2147483648],
+          var EMPHASIS_GROUPS = [
+            {
+              axes: ["x", "y", "z"],
+              pairs: [
+                [268435455, -268435456],
+                [2147483647, -2147483648],
+              ],
+            },
+            {
+              axes: ["x", "z"],
+              pairs: [
+                [33554431, -33554432],
+                [12550821, -12550824],
+                [1004065920, -1004065921],
+              ],
+            },
+            {
+              axes: ["y"],
+              pairs: [
+                [2047, -2048],
+                [25101648, -25101649],
+                [2008131840, -2008131841],
+              ],
+            },
           ];
+
+          /** 该轴上要常显的强调对子。是否真的画出来，还要按该坐标系自身跨度再筛一次。 */
+          function emphasisPairsOn(axisKey) {
+            var out = [];
+            for (var g = 0; g < EMPHASIS_GROUPS.length; g++) {
+              var group = EMPHASIS_GROUPS[g];
+              if (group.axes.indexOf(axisKey) < 0) continue;
+              for (var e = 0; e < group.pairs.length; e++) {
+                out.push(group.pairs[e]);
+              }
+            }
+            return out;
+          }
           var BLOCKS_MAX = 2147483647;
           var BLOCKS_MIN = ~BLOCKS_MAX;
           var BLOCKS_UNIT = 1 / UNIT;
@@ -3250,10 +3283,11 @@ SOFTWARE.
                 frame.group.add(t.line);
                 frame.grid[d].push(t);
               }
-              // 强调点只画该坐标系能表达的那些。全域坐标系八个全在。
-              for (var e = 0; e < EMPHASIS_PAIRS.length; e++) {
+              // 强调点只画该轴该有的、且该坐标系能表达的那些。
+              var pairsOnAxis = emphasisPairsOn(def.key);
+              for (var e = 0; e < pairsOnAxis.length; e++) {
                 for (var s = 0; s < 2; s++) {
-                  var blocks = EMPHASIS_PAIRS[e][s];
+                  var blocks = pairsOnAxis[e][s];
                   if (!emphasisExpressible(frame, d, blocks)) continue;
                   var m = makeTick(def, MARK_PIXELS, true);
                   m.blocks = blocks;
