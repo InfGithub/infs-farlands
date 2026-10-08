@@ -4410,7 +4410,8 @@ SOFTWARE.
           }
 
           /** 指针下的坐标系：只认轴柱与中心点，立方体框不参与。 */
-          function framePickAt(e) {            pointerNdc(e);
+          function framePickAt(e) {
+            pointerNdc(e);
             raycaster.setFromCamera(pointer, camera);
             var targets = [];
             for (var i = 0; i < frames.length; i++) {
