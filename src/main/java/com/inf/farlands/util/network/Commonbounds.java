@@ -7,7 +7,10 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload.TypeAndCodec;
 
-public class Commonbounds {
+public final class Commonbounds {
+    private Commonbounds() {
+    }
+
     public static final List<TypeAndCodec<? super RegistryFriendlyByteBuf, ?>> gameplayBounds = new ArrayList<>();
     public static final List<TypeAndCodec<? super FriendlyByteBuf, ?>> configBounds = new ArrayList<>();
 

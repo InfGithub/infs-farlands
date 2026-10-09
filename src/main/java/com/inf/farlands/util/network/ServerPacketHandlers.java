@@ -7,7 +7,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
-public class ServerPacketHandlers {
+public final class ServerPacketHandlers {
+    private ServerPacketHandlers() {
+    }
+
     private static final Map<CustomPacketPayload.Type<?>, BiConsumer<? extends CustomPacketPayload, ServerGamePacketListenerImpl>> HANDLERS = new HashMap<>();
 
     public static <T extends CustomPacketPayload> void register(

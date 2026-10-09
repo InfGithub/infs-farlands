@@ -1,6 +1,9 @@
 package com.inf.farlands.util.hash;
 
-public class HashMath {
+public final class HashMath {
+    private HashMath() {
+    }
+
     public static long hash(long x, long y, long z) {
         long xb = ((y & 0xFFFFFFFFL) << 32) | (z & 0xFFFFFFFFL);
         long ha = x & 0xFFFFFFFFL;

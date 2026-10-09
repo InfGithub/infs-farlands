@@ -3,7 +3,10 @@ package com.inf.farlands.util.maps;
 import com.inf.farlands.util.map.Long2ObjectStripedMap;
 import com.inf.farlands.util.pos.IntSectionPos;
 
-public class SectionUtil {
+public final class SectionUtil {
+    private SectionUtil() {
+    }
+
     public static final Long2ObjectStripedMap<IntSectionPos> lookup = new Long2ObjectStripedMap<>(1 << 20);
 
     public static void put(long key, int x, int y, int z) {

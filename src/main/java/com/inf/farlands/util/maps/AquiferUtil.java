@@ -4,7 +4,10 @@ import com.inf.farlands.util.pos.AquiferPos;
 import com.inf.farlands.FarlandsTick;
 import com.inf.farlands.util.map.Long2ObjectStripedMap;
 
-public class AquiferUtil {
+public final class AquiferUtil {
+    private AquiferUtil() {
+    }
+
     private static final Long2ObjectStripedMap<AquiferPos> lookup = new Long2ObjectStripedMap<>(1 << 20);
 
     public static AquiferPos get(long key) {

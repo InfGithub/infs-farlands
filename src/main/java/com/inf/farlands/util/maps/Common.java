@@ -11,7 +11,10 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 
-public class Common {
+public final class Common {
+    private Common() {
+    }
+
     private static volatile long lastConflictInfo = 0;
 
     public static void conflict(String kind, long key, int ox, int oy, int oz, int nx, int ny, int nz) {
