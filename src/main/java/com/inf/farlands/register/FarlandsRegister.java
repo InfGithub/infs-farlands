@@ -17,6 +17,7 @@ import com.inf.farlands.terrain.system.decoration.overworld.Vanilla.VanillaDecor
 import com.inf.farlands.terrain.system.surface.misc.Void.VoidSurfaceSystem;
 import com.inf.farlands.terrain.system.surface.overworld.Vanilla.VanillaSurfaceSystem;
 import com.inf.farlands.terrain.system.terrain.block.misc.Sierpinski.SierpinskiPyramidBlockSystem;
+import com.inf.farlands.terrain.system.terrain.block.misc.TheFourthDimension.TheFourthDimensionBlockSystem;
 import com.inf.farlands.terrain.system.terrain.block.overworld.Infdev.Infdev20100226BlockSystem;
 import com.inf.farlands.terrain.system.terrain.noise.misc.Hex.HexNoiseSystem;
 import com.inf.farlands.terrain.system.terrain.noise.misc.Void.VoidNoiseSystem;
@@ -70,7 +71,7 @@ public class FarlandsRegister {
         }
     }
 
-    /** 18 个内置系统按五族登记，id 与实现类的对应关系集中在此。 */
+    /** 19 个内置系统按五族登记，id 与实现类的对应关系集中在此。 */
     private static void registerSystems() {
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_VOID_NOISE_SYSTEM, VoidNoiseSystem.class);
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OVERWORLD_VANILLA_NOISE_SYSTEM,
@@ -85,6 +86,8 @@ public class FarlandsRegister {
                 Infdev20100226BlockSystem.class);
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_SIERPINSKI_PYRAMID_BLOCK_SYSTEM,
                 SierpinskiPyramidBlockSystem.class);
+        SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_MISC_THE_FOURTH_DIMENSION_BLOCK_SYSTEM,
+                TheFourthDimensionBlockSystem.class);
         SystemRegistries.registerTerrain(SystemRegistries.TERRAIN_OVERWORLD_CWG_NOISE_SYSTEM,
                 CwgNoiseSystem.class);
 

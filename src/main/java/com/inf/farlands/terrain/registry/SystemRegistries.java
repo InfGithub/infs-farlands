@@ -12,7 +12,7 @@ import com.inf.farlands.terrain.TerrainSystem;
 import net.minecraft.resources.Identifier;
 
 /**
- * 系统注册表的静态门面：五张类型化表、18 个内置 id 常量、五个登记入口、五个取用入口与元信息。
+ * 系统注册表的静态门面：五张类型化表、19 个内置 id 常量、五个登记入口、五个取用入口与元信息。
  *
  * <p>
  * 门面不读配置也不引 level：维度到 id 的选择由调用点给出，注册表层因此不依赖任何上层。
@@ -44,6 +44,8 @@ public final class SystemRegistries {
             "overworld_infdev_20100226_block_system");
     public static final SystemId TERRAIN_MISC_SIERPINSKI_PYRAMID_BLOCK_SYSTEM = id(
             "misc_sierpinski_pyramid_block_system");
+    public static final SystemId TERRAIN_MISC_THE_FOURTH_DIMENSION_BLOCK_SYSTEM = id(
+            "misc_the_fourth_dimension_block_system");
     public static final SystemId TERRAIN_OVERWORLD_CWG_NOISE_SYSTEM = id("overworld_cwg_noise_system");
 
     public static final SystemId BIOME_MISC_VOID_BIOME_SYSTEM = id("misc_void_biome_system");
