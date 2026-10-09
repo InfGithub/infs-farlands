@@ -552,25 +552,6 @@
       #canvas:focus-visible {
         box-shadow: inset 0 0 0 2px #abc6f460;
       }
-      .stage-header {
-        position: absolute;
-        left: 26px;
-        top: 24px;
-        pointer-events: none;
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        color: #9eacc0;
-        font-size: 11px;
-        letter-spacing: 1px;
-      }
-      .stage-header:before {
-        content: "";
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        background: #91aac8;
-      }
       .view-tools {
         position: absolute;
         top: 18px;
@@ -660,6 +641,16 @@
       }
       .axis-name {
         font-size: 12px;
+        font-weight: 600;
+      }
+      /* 网格刻度与中心坐标标签：小一号、暗一档，不与轴名抢注意力。
+         强调值另带 tick-mark，字号回到 10px 并加粗；它的颜色由内联的轴色给。 */
+      .tick-label {
+        font-size: 9px;
+        color: #8fa0b6;
+      }
+      .tick-mark {
+        font-size: 10px;
         font-weight: 600;
       }
       #tip {
@@ -863,9 +854,6 @@
         .plane .coef {
           font-size: 8.5px;
         }
-        .stage-header {
-          left: 20px;
-        }
         .view-tools {
           right: 16px;
         }
@@ -975,11 +963,6 @@
           flex: 0 0 290px;
           align-self: flex-start;
           margin: 0;
-        }
-        .stage-header {
-          top: 19px;
-          left: 16px;
-          font-size: 10px;
         }
         .view-tools {
           top: 10px;
@@ -1206,10 +1189,7 @@
                   >、<span class="tex" data-tex="|y| \ge 2T_k">|y| ≥ 2T_k</span>
                   内的单阶零面。
                 </p>
-                <p>
-                  <code>1</code> 单位 = <code>2^31</code> 方块，刻度每
-                  <code>0.25</code> 单位。
-                </p>
+                <p>渲染域：int32</p>
               </div>
             </details>
           </section>
@@ -1222,7 +1202,6 @@
             aria-label="拖动旋转，滚轮缩放，右键复制坐标；方向键旋转，加减键缩放"
           ></canvas>
           <div id="labels" aria-hidden="true"></div>
-          <div class="stage-header">三维视图</div>
           <nav class="view-tools" aria-label="视角">
             <button
               type="button"
@@ -1273,8 +1252,9 @@
             </button>
           </nav>
           <div class="stage-footer">
-            <span class="scale-label"
-              ><i class="scale-mark"></i>1 单位 = 2³¹ 方块</span
+            <span class="scale-label" title="标尺：条长对应它标的方块数"
+              ><i id="scale-bar" class="scale-mark"></i
+              ><span id="scale-text"></span></span
             ><span id="visible-count" class="visible-count"></span>
           </div>
           <div id="tip"></div>
@@ -2871,12 +2851,22 @@ SOFTWARE.
 
           var scene = new THREE.Scene();
           var camera = new THREE.PerspectiveCamera(42, 1, 0.01, 200);
+          /**
+           * 渲染相机：位置恒在原点，朝向与投影跟绝对相机同步。
+           * GPU 端只有 float32，在 |x| ≈ 1 处最小间隔约 6e-8，而本页世界归一化到 ±1，
+           * 于是"相机位置与顶点位置的差"在十万格视野以下会被直接吃掉，表现为抖动。
+           * three.js 是在 CPU 上用 float64 把 modelViewMatrix 算完再上传的，所以只要
+           * 送进 GPU 的净位移是小的，精度就保住了：绘制的对象一律摆到"自身位置减相机"。
+           * 绝对相机保留给标签投影与拾取，那些在 float64 里算，精度足够。
+           */
+          var renderCamera = new THREE.PerspectiveCamera(42, 1, 0.01, 200);
 
           var DEFAULT_RADIUS = 5.4;
           /** 定位要放大到的尺度：视野高约一百万格。 */
           var LOCATE_BLOCKS = 1000000;
-          // 归一化世界下一百万格只有 4.7e-4，最小视距必须放到同一量级，否则缩不进去。
-          var MIN_RADIUS = 0.0001;
+          // 最小视距取"视野高恰好一个方块"：1 格乘 UNIT 得归一化高度，再除以竖直张角的两倍正切。
+          // 与相机 fov 一致，改 fov 时这里跟着对。
+          var MIN_RADIUS = UNIT / (2 * Math.tan((42 * Math.PI) / 360));
           var MAX_RADIUS = 24.0;
           /** 相机环绕并注视的点，默认原点；定位后移到目标点。 */
           var focus = new THREE.Vector3(0, 0, 0);
@@ -2887,12 +2877,6 @@ SOFTWARE.
             var halfFov = Math.tan((camera.fov * Math.PI) / 360);
             return blocks / BLOCK_UNIT / (2 * halfFov);
           }
-
-          /**
-           * 定位标记的世界半径：定位视窗高的 0.75%，换算到屏幕上约 13 像素。
-           * 它是场景里的物体，跟着缩放走；缩到屏幕上不足 4 像素时由像素下限兜住。
-           */
-          var MARK_RADIUS = ((LOCATE_BLOCKS * 0.015) / 2) * UNIT;
 
           var theta = 0.62;
           var phi = 1.12;
@@ -2933,7 +2917,6 @@ SOFTWARE.
             if (reset) {
               targetRadius = fitRadius();
               targetFocus.set(0, 0, 0);
-              markGroup.visible = false;
               // 回到原点即附着回全域坐标系。
               attachedId = "root";
               refreshHighlight();
@@ -2984,10 +2967,21 @@ SOFTWARE.
               focus.z + radius * Math.sin(phi) * Math.cos(theta),
             );
             camera.lookAt(focus);
-            // 允许缩到十万格量级之后，近远平面必须跟着视距走，否则近平面会把整个场景切掉。
-            camera.near = Math.max(radius * 0.01, 1e-8);
-            camera.far = radius * 8 + 4;
+            // 近远平面必须整段跟着视距等比走。近平面留固定下限，原来那个 1e-8 相当于二十多个
+            // 方块，会把亚方块尺度下的整个场景切掉；远平面留固定加数，原来那个 +4 会让远近比
+            // 到 1e11 量级，深度精度全丢。两者都按 radius 等比取，比例恒定在 1:400 上下。
+            camera.near = Math.max(radius * 0.02, 1e-14);
+            camera.far = radius * 8;
             camera.updateProjectionMatrix();
+            // 渲染相机只同步朝向与投影，位置留在原点。lookAt 写的是朝向，复制四元数即可。
+            renderCamera.position.set(0, 0, 0);
+            renderCamera.quaternion.copy(camera.quaternion);
+            renderCamera.fov = camera.fov;
+            renderCamera.aspect = camera.aspect;
+            renderCamera.near = camera.near;
+            renderCamera.far = camera.far;
+            renderCamera.updateProjectionMatrix();
+            renderCamera.updateMatrixWorld();
             updateAxisWidth();
           }
 
@@ -3025,7 +3019,7 @@ SOFTWARE.
             return bar;
           }
 
-          /** 每个坐标系的轴柱按当前视距换算成恒定 AXIS_PIXELS 像素宽，长度按各自半跨度。 */
+          /** 每个坐标系的轴柱按当前视距换算成恒定 AXIS_PIXELS 像素宽；长度与位置由 placeScene 按可见段给。 */
           function updateAxisWidth() {
             var h = stage.clientHeight;
             if (h <= 0) return;
@@ -3033,10 +3027,48 @@ SOFTWARE.
             var worldRadius = (AXIS_PIXELS * radius * halfFov) / h;
             for (var f = 0; f < frames.length; f++) {
               var frame = frames[f];
-              var halfNorm = frame.half * UNIT;
               for (var i = 0; i < frame.axes.length; i++) {
-                frame.axes[i].scale.set(worldRadius, halfNorm, worldRadius);
+                frame.axes[i].scale.x = worldRadius;
+                frame.axes[i].scale.z = worldRadius;
               }
+            }
+          }
+
+          /**
+           * 把所有绘制的对象摆到"自身位置减相机"，并把跨全域的几何夹到视野附近。
+           * 两件事目的相同：送进 GPU 的数必须是小的，不能是 O(1) 的绝对值与相机位置之差。
+           * 轴柱只画视野附近这一段，长度取 min(自身半跨度, 4 倍视野跨度)，中心贴着相机在该轴上的投影。
+           */
+          function placeScene() {
+            var camPos = camera.position;
+            var halfFov = Math.tan((camera.fov * Math.PI) / 360);
+            var viewSpanBlocks = (2 * radius * halfFov) / UNIT;
+            for (var f = 0; f < frames.length; f++) {
+              var frame = frames[f];
+              frame.group.position.set(
+                frame.centerVec.x - camPos.x,
+                frame.centerVec.y - camPos.y,
+                frame.centerVec.z - camPos.z,
+              );
+              var lenBlocks = Math.min(frame.half, 4 * viewSpanBlocks);
+              var limitBlocks = Math.max(0, frame.half - lenBlocks);
+              for (var i = 0; i < frame.axes.length; i++) {
+                var bar = frame.axes[i];
+                var camBlocks =
+                  (i === 0 ? camPos.x : i === 1 ? camPos.y : camPos.z) / UNIT;
+                var localBlocks = camBlocks - frameCenterOn(frame, i);
+                if (localBlocks > limitBlocks) localBlocks = limitBlocks;
+                if (localBlocks < -limitBlocks) localBlocks = -limitBlocks;
+                bar.scale.y = lenBlocks * UNIT;
+                bar.position.set(
+                  i === 0 ? localBlocks * UNIT : 0,
+                  i === 1 ? localBlocks * UNIT : 0,
+                  i === 2 ? localBlocks * UNIT : 0,
+                );
+              }
+            }
+            for (var p = 0; p < rowObjects.length; p++) {
+              if (rowObjects[p]) refreshPlaneGeometry(rowObjects[p]);
             }
           }
 
@@ -3079,6 +3111,12 @@ SOFTWARE.
           var GRID_TICKS = 7;
           /** 视野内希望出现的网格刻度个数，用来定换挡步长。 */
           var TICK_TARGET = 5;
+          /**
+           * 平面几何夹取盒的半边长度，单位是"视野跨度"的倍数。
+           * 远平面在 8·radius，折成视野跨度是 10.4 倍，所以取 12 倍能盖住整个视锥，
+           * 而顶点跨度从全域的 ±2^31 收到几十格量级。
+           */
+          var CLIP_SPANS = 12;
           /**
            * 常显且加长的强调值，单位方块，按轴分组。每组 = { axes: 出现在哪些轴, pairs: 对子表 }。
            * 负值取正值的按位取反，与本仓库 MIN_SECTION = ~MAX_SECTION 同规；
@@ -3360,7 +3398,7 @@ SOFTWARE.
             if (!frame.root) {
               var dot = new THREE.Sprite(
                 new THREE.SpriteMaterial({
-                  map: sharedMarkTexture(),
+                  map: sharedDotTexture(),
                   transparent: true,
                   depthTest: false,
                   depthWrite: false,
@@ -3467,6 +3505,38 @@ SOFTWARE.
             for (var i = 0; i < frame.labels.length; i++) {
               frame.labels[i].el.style.opacity = "0";
             }
+          }
+
+          /**
+           * 左下角的标尺：条的长度对应一个整数方块数，读数写在旁边，按缩放换挡。
+           * 候选取 1、2、5 乘 10 的幂，挑像素宽度不超过 120 且最接近 80 的那一个，
+           * 与地图的比例尺同形：条有多长，就标多少格。
+           */
+          function updateScaleBar() {
+            var spanBlocks =
+              (2 * radius * Math.tan((camera.fov * Math.PI) / 360)) / UNIT;
+            var pxPerBlock = stage.clientHeight / spanBlocks;
+            var best = null;
+            for (var k = -3; k <= 12; k++) {
+              for (var m = 0; m < 3; m++) {
+                var n = Math.pow(10, k) * (m === 0 ? 1 : m === 1 ? 2 : 5);
+                var px = n * pxPerBlock;
+                if (px > 120) continue;
+                if (!best || Math.abs(px - 80) < Math.abs(best.px - 80)) {
+                  best = { n: n, px: px };
+                }
+              }
+            }
+            if (!best) return;
+            var text = formatBlocks(best.n) + " 方块";
+            if (scaleText.textContent !== text) scaleText.textContent = text;
+            var width = best.px.toFixed(0) + "px";
+            if (scaleBar.style.width !== width) scaleBar.style.width = width;
+          }
+
+          /** 标尺读数就是平铺的数字，不做万、亿这类量级换算。 */
+          function formatBlocks(n) {
+            return String(n);
           }
 
           function updateLabels() {
@@ -3690,6 +3760,7 @@ SOFTWARE.
                   "px)";
               }
             }
+            updateScaleBar();
           }
 
           // ---- 平面 ----
@@ -3698,11 +3769,11 @@ SOFTWARE.
           scene.add(planes);
 
           /**
-           * 定位标记与中心点句柄共用的一张软边圆片。
-           * 用 16×12 的球时，放大到几十像素轮廓就是折线，而基色那一路没有多重采样，
-           * 硬边只会更难看。圆片的边缘由纹理 alpha 渐隐，任何缩放倍率下都平滑。
+           * 中心点句柄的软边圆片。用 16×12 的球时，放大到几十像素轮廓就是折线，
+           * 而基色那一路没有多重采样，硬边只会更难看。圆片的边缘由纹理 alpha 渐隐，
+           * 任何缩放倍率下都平滑。
            */
-          function makeMarkTexture() {
+          function makeDotTexture() {
             var size = 64;
             var canvas = document.createElement("canvas");
             canvas.width = size;
@@ -3726,29 +3797,12 @@ SOFTWARE.
            * 全场共用一张。每个坐标系各建一张的话，上限 1024 个就是 1024 张 64×64 画布
            * 加同样多的 GPU 纹理，而它们的内容完全相同。
            */
-          var markTexture = null;
+          var dotTexture = null;
 
-          function sharedMarkTexture() {
-            if (!markTexture) markTexture = makeMarkTexture();
-            return markTexture;
+          function sharedDotTexture() {
+            if (!dotTexture) dotTexture = makeDotTexture();
+            return dotTexture;
           }
-
-          /** 定位点标记。关掉深度测试，缩到极小尺度时也不会被别的几何盖住。 */
-          var markGroup = new THREE.Group();
-          var markMesh = new THREE.Sprite(
-            new THREE.SpriteMaterial({
-              map: sharedMarkTexture(),
-              transparent: true,
-              depthTest: false,
-              depthWrite: false,
-            }),
-          );
-          markGroup.add(markMesh);
-          markGroup.renderOrder = 999;
-          markGroup.visible = false;
-          scene.add(markGroup);
-          /** 定位点的方块坐标，右键复制时直接用它，不走浮点回程。 */
-          var markBlock = null;
 
           // Weighted blended order-independent transparency (two geometry passes).
           // Only display compositing changes; triangle positions and analytic picking are untouched.
@@ -3865,13 +3919,13 @@ SOFTWARE.
           }
           function drawScene() {
             if (!useOIT) {
-              renderer.render(scene, camera);
+              renderer.render(scene, renderCamera);
               return;
             }
             renderer.setRenderTarget(baseTarget);
             renderer.setClearColor(0x000000, 0);
             renderer.clear();
-            renderer.render(scene, camera);
+            renderer.render(scene, renderCamera);
             passUniform.value = 0;
             for (var i = 0; i < rowObjects.length; i++)
               if (rowObjects[i]) {
@@ -3883,7 +3937,7 @@ SOFTWARE.
             renderer.setRenderTarget(accumTarget);
             renderer.setClearColor(0x000000, 0);
             renderer.clear();
-            renderer.render(oitScene, camera);
+            renderer.render(oitScene, renderCamera);
             passUniform.value = 1;
             for (var j = 0; j < rowObjects.length; j++)
               if (rowObjects[j]) {
@@ -3895,7 +3949,7 @@ SOFTWARE.
             renderer.setRenderTarget(revealTarget);
             renderer.setClearColor(0xffffff, 1);
             renderer.clear();
-            renderer.render(oitScene, camera);
+            renderer.render(oitScene, renderCamera);
             renderer.setRenderTarget(null);
             renderer.setClearColor(0x000000, 0);
             renderer.clear();
@@ -3912,78 +3966,166 @@ SOFTWARE.
               .convertSRGBToLinear();
           }
 
-          function buildPlane(row) {
-            var polys = window.DomeMath.planePolygons(row);
-            if (polys.length === 0) return null;
+          /**
+           * 把多边形夹到轴对齐盒里，逐面裁。
+           * 平面本身跨全域，顶点跨度 O(1) 的绝对值与相机位置相减会丢位，所以先裁到视野附近，
+           * 送进 GPU 的顶点才会都是小量。
+           */
+          function clipPolygonToBox(poly, lo, hi) {
+            var out = poly;
+            for (var a = 0; a < 3 && out.length; a++) {
+              out = clipPolygonByPlane(out, a, lo[a], true);
+              out = clipPolygonByPlane(out, a, hi[a], false);
+            }
+            return out;
+          }
+
+          /** 单面裁：keepAbove 为真时保留坐标大于等于 limit 的一侧，为假时保留小于等于一侧。 */
+          function clipPolygonByPlane(poly, axis, limit, keepAbove) {
+            var out = [];
+            for (var i = 0; i < poly.length; i++) {
+              var p = poly[i];
+              var q = poly[(i + 1) % poly.length];
+              var dp = keepAbove ? p[axis] - limit : limit - p[axis];
+              var dq = keepAbove ? q[axis] - limit : limit - q[axis];
+              if (dp >= 0) out.push(p);
+              if (dp >= 0 !== dq >= 0) {
+                var t = dp / (dp - dq);
+                out.push([
+                  p[0] + t * (q[0] - p[0]),
+                  p[1] + t * (q[1] - p[1]),
+                  p[2] + t * (q[2] - p[2]),
+                ]);
+              }
+            }
+            return out;
+          }
+
+          /**
+           * 按当前相机重建这个平面的几何：多边形先夹到视野附近的盒子，顶点写成
+           * "方块坐标减相机"再乘 UNIT。相机位置、关注点或视距没变就不重建。
+           */
+          function refreshPlaneGeometry(entry) {
+            var camPos = camera.position;
+            var camX = camPos.x / UNIT;
+            var camY = camPos.y / UNIT;
+            var camZ = camPos.z / UNIT;
+            var key =
+              camX +
+              "," +
+              camY +
+              "," +
+              camZ +
+              "," +
+              focus.x +
+              "," +
+              focus.y +
+              "," +
+              focus.z +
+              "," +
+              radius;
+            if (entry.clipKey === key) return;
+            entry.clipKey = key;
+
+            var halfFov = Math.tan((camera.fov * Math.PI) / 360);
+            var spanBlocks = (2 * radius * halfFov) / UNIT;
+            var half = CLIP_SPANS * spanBlocks;
+            var fx = focus.x / UNIT;
+            var fy = focus.y / UNIT;
+            var fz = focus.z / UNIT;
+            var lo = [fx - half, fy - half, fz - half];
+            var hi = [fx + half, fy + half, fz + half];
 
             var positions = [];
             var edges = [];
-            for (var pi = 0; pi < polys.length; pi++) {
-              var poly = polys[pi];
+            for (var pi = 0; pi < entry.polys.length; pi++) {
+              var poly = clipPolygonToBox(entry.polys[pi], lo, hi);
               var n = poly.length;
+              if (n < 3) continue;
+              var rel = [];
+              for (var v = 0; v < n; v++) {
+                rel.push([
+                  (poly[v][0] - camX) * UNIT,
+                  (poly[v][1] - camY) * UNIT,
+                  (poly[v][2] - camZ) * UNIT,
+                ]);
+              }
               for (var i = 1; i + 1 < n; i++) {
                 positions.push(
-                  poly[0][0] * UNIT,
-                  poly[0][1] * UNIT,
-                  poly[0][2] * UNIT,
-                  poly[i][0] * UNIT,
-                  poly[i][1] * UNIT,
-                  poly[i][2] * UNIT,
-                  poly[i + 1][0] * UNIT,
-                  poly[i + 1][1] * UNIT,
-                  poly[i + 1][2] * UNIT,
+                  rel[0][0],
+                  rel[0][1],
+                  rel[0][2],
+                  rel[i][0],
+                  rel[i][1],
+                  rel[i][2],
+                  rel[i + 1][0],
+                  rel[i + 1][1],
+                  rel[i + 1][2],
                 );
               }
               for (var j = 0; j < n; j++) {
-                var p = poly[j];
-                var q = poly[(j + 1) % n];
-                edges.push(
-                  p[0] * UNIT,
-                  p[1] * UNIT,
-                  p[2] * UNIT,
-                  q[0] * UNIT,
-                  q[1] * UNIT,
-                  q[2] * UNIT,
-                );
+                var p = rel[j];
+                var q = rel[(j + 1) % n];
+                edges.push(p[0], p[1], p[2], q[0], q[1], q[2]);
               }
             }
 
-            var color = familyColor(row);
             var fillGeometry = new THREE.BufferGeometry();
             fillGeometry.setAttribute(
               "position",
               new THREE.Float32BufferAttribute(positions, 3),
             );
-            var fillMaterial = surfaceMaterial(color, false);
-            var mesh = new THREE.Mesh(fillGeometry, fillMaterial);
-            mesh.userData.rowIndex = row.index;
+            entry.mesh.geometry.dispose();
+            entry.mesh.geometry = fillGeometry;
 
             var edgeGeometry = new THREE.BufferGeometry();
             edgeGeometry.setAttribute(
               "position",
               new THREE.Float32BufferAttribute(edges, 3),
             );
-            var edgeMaterial = surfaceMaterial(
-              color.clone().lerp(new THREE.Color(0xffffff), 0.12),
-              true,
+            entry.outline.geometry.dispose();
+            entry.outline.geometry = edgeGeometry;
+          }
+
+          function buildPlane(row) {
+            var polys = window.DomeMath.planePolygons(row);
+            if (polys.length === 0) return null;
+
+            var color = familyColor(row);
+            var mesh = new THREE.Mesh(
+              new THREE.BufferGeometry(),
+              surfaceMaterial(color, false),
             );
-            var outline = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+            mesh.userData.rowIndex = row.index;
+
+            var outline = new THREE.LineSegments(
+              new THREE.BufferGeometry(),
+              surfaceMaterial(
+                color.clone().lerp(new THREE.Color(0xffffff), 0.12),
+                true,
+              ),
+            );
 
             var object = new THREE.Group();
             object.add(mesh);
             object.add(outline);
             object.userData.rowIndex = row.index;
 
-            rowObjects[row.index] = {
+            var entry = {
               object: object,
               mesh: mesh,
-              fill: fillMaterial,
-              edge: edgeMaterial,
+              fill: mesh.material,
+              edge: outline.material,
               outline: outline,
+              polys: polys,
+              clipKey: null,
               visibility: 0,
               targetVisibility: 1,
               focus: 0,
             };
+            rowObjects[row.index] = entry;
+            // 几何是相机相对量，对象本身不需要再平移。
+            refreshPlaneGeometry(entry);
             return object;
           }
 
@@ -4144,6 +4286,33 @@ SOFTWARE.
           var raycaster = new THREE.Raycaster();
           var pointer = new THREE.Vector2();
 
+          /**
+           * 命中测试用的射线必须和几何在同一个空间：几何现在是相机相对量，射线也要用
+           * 渲染相机来发，也就是位置在原点的那一台，否则两边差一整个相机位移，拾取会整体偏掉。
+           * 而解析求交仍在绝对空间里做，平面方程与轴最近点都是，所以这里把相机位置加回起点。
+           */
+          function absoluteRay() {
+            var o = raycaster.ray.origin;
+            var d = raycaster.ray.direction;
+            return {
+              origin: {
+                x: o.x + camera.position.x,
+                y: o.y + camera.position.y,
+                z: o.z + camera.position.z,
+              },
+              direction: { x: d.x, y: d.y, z: d.z },
+            };
+          }
+
+          /** 渲染空间的点换算回绝对空间。 */
+          function toAbsolutePoint(p) {
+            return {
+              x: p.x + camera.position.x,
+              y: p.y + camera.position.y,
+              z: p.z + camera.position.z,
+            };
+          }
+
           function pointerNdc(e) {
             var rect = canvas.getBoundingClientRect();
             pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -4161,7 +4330,7 @@ SOFTWARE.
 
           function probe(e) {
             pointerNdc(e);
-            raycaster.setFromCamera(pointer, camera);
+            raycaster.setFromCamera(pointer, renderCamera);
             var hits = raycaster.intersectObjects(visiblePlaneMeshes(), false);
             if (hits.length === 0) {
               setHovered(-1);
@@ -4185,6 +4354,8 @@ SOFTWARE.
           var gotoZ = document.getElementById("goto-z");
           var gotoApply = document.getElementById("goto-apply");
           var gotoError = document.getElementById("goto-error");
+          var scaleBar = document.getElementById("scale-bar");
+          var scaleText = document.getElementById("scale-text");
           /** 最近一次右键的位置，面板照着它摆。 */
           var lastPointer = null;
           var ctxTarget = null;
@@ -4372,19 +4543,16 @@ SOFTWARE.
             if (idx >= 0) frames.splice(idx, 1);
           }
 
-          /** 删除该坐标系及其下级。 */
+          /**
+           * 删除该坐标系本身。下级不受影响，继续留在场景里；它们的所属坐标系指针改挂到
+           * 全域那一个，避免留悬空引用，这个指针只在创建新坐标系时用来算逐层内切。
+           */
           function deleteFrame(frame) {
             if (!frame || frame.root) return;
-            var doomed = [];
+            removeFrame(frame);
             for (var i = 0; i < frames.length; i++) {
-              for (var p = frames[i]; p; p = p.parent) {
-                if (p === frame) {
-                  doomed.push(frames[i]);
-                  break;
-                }
-              }
+              if (frames[i].parent === frame) frames[i].parent = frames[0];
             }
-            for (var d = 0; d < doomed.length; d++) removeFrame(doomed[d]);
             // 只有"确实附着着某一个、而它被删掉了"才把相机带回全域坐标系。
             // 定位之后 attachedId 是 null，那是"没有附着"，删任何东西都不该动相机。
             if (attachedId !== null && !frameById(attachedId)) {
@@ -4447,7 +4615,7 @@ SOFTWARE.
           /** 指针下的坐标系：只认轴柱与中心点，立方体框不参与。 */
           function framePickAt(e) {
             pointerNdc(e);
-            raycaster.setFromCamera(pointer, camera);
+            raycaster.setFromCamera(pointer, renderCamera);
             var targets = [];
             for (var i = 0; i < frames.length; i++) {
               var frame = frames[i];
@@ -4577,10 +4745,16 @@ SOFTWARE.
 
           function hideMenu() {
             ctxMenu.hidden = true;
-            // 定位面板与右键菜单是同一批浮层，同一批手势一起收。
-            gotoPanel.hidden = true;
             ctxTarget = null;
             ctxRowIndex = -1;
+          }
+
+          /**
+           * 收起定位面板。它只在明确的动作里收：Esc、定位成功、以及再次右键开菜单。
+           * 窗口失焦不在此列：切走去看一眼坐标再切回来，已经填进去的数字不该被清掉。
+           */
+          function hideGoto() {
+            gotoPanel.hidden = true;
           }
 
           /** 把浮层摆在指针处，越出可视区就夹回来。 */
@@ -4599,9 +4773,12 @@ SOFTWARE.
           }
 
           function openMenu(e) {
+            // 再次右键开菜单意味着不再填那张表了，把它收掉。
+            hideGoto();
             pointerNdc(e);
-            raycaster.setFromCamera(pointer, camera);
+            raycaster.setFromCamera(pointer, renderCamera);
             var labelHit = tickLabelAt(e);
+            var absRay = absoluteRay();
             var planeHits = raycaster.intersectObjects(
               visiblePlaneMeshes(),
               false,
@@ -4622,9 +4799,6 @@ SOFTWARE.
                 ];
               }
             }
-            var markHits = markGroup.visible
-              ? raycaster.intersectObject(markMesh, false)
-              : [];
             // 中心点也是右键目标：它的尺寸只有几像素，而旁边的中心标签可能被防重叠挡掉，
             // 那时点在点上会落到"虚空"，只能给定位。
             var dotTargets = [];
@@ -4641,9 +4815,6 @@ SOFTWARE.
             // 取最上层：几种命中里离相机更近的那一个。
             var best = null;
             var planeHit = null;
-            if (markHits.length > 0) {
-              best = { kind: "mark", distance: markHits[0].distance };
-            }
             if (
               dotHits.length > 0 &&
               (best === null || dotHits[0].distance < best.distance)
@@ -4675,7 +4846,7 @@ SOFTWARE.
               };
               planeHit = planeHits[0];
             }
-            // 点在刻度数字上就是要复制那个数字，优先于轴、面与标记。
+            // 点在刻度数字上就是要复制那个数字，优先于轴与面。
             if (labelHit) best = { kind: "label", distance: 0 };
             if (best === null) {
               // 虚空：只给定位。
@@ -4706,10 +4877,6 @@ SOFTWARE.
                     best.frame.center.z,
                   ]
                 : null;
-            } else if (best.kind === "mark") {
-              block = markBlock
-                ? [markBlock.x, markBlock.y, markBlock.z]
-                : null;
             } else if (best.kind === "plane") {
               var rows = ui.getRows() || [];
               var row = rows[best.index - 1];
@@ -4718,15 +4885,15 @@ SOFTWARE.
                 return;
               }
               block = blockOfPlane(
-                raycaster.ray,
+                absRay,
                 row,
-                planeHit ? planeHit.point : null,
+                planeHit ? toAbsolutePoint(planeHit.point) : null,
               );
             } else {
               var axisBase = axisFrame
                 ? [axisFrame.center.x, axisFrame.center.y, axisFrame.center.z]
                 : [0, 0, 0];
-              block = axisCoordOf(raycaster.ray, best.axis, axisBase);
+              block = axisCoordOf(absRay, best.axis, axisBase);
             }
             if (block === null) {
               hideMenu();
@@ -4751,7 +4918,7 @@ SOFTWARE.
               clampBlock(block[2]),
             ];
             // 所属坐标系取「发起这次右键的那一个」：命中轴柱时是轴所属的那一个，
-            // 命中中心点时是它自己，命中平面或定位标记时没有归属，回到全域坐标系。
+            // 命中中心点时是它自己，命中平面时没有归属，回到全域坐标系。
             var owner =
               best.kind === "label" && labelHit
                 ? labelHit.frame
@@ -4858,8 +5025,9 @@ SOFTWARE.
           }
 
           /**
-           * 把相机平滑转到该点所在方向。相机始终看着原点，所以该点要落在视轴上就得
-           * 让相机方向取该点方向的反向；距离取页面自己的适配半径。
+           * 转到该点所在方向并把关注点移到该点。相机始终注视关注点，而关注点默认在原点，
+           * 所以要让该点落在视轴上，就得让相机方向取该点方向的反向；视距取定位尺度对应的值。
+           * 到位后在该点建一个坐标系并附着上去，于是定位的结果是一把可用的尺子，而不是一个标记。
            */
           function goTo(bx, by, bz) {
             // 方块坐标是整数，没有方向的只有原点本身；归一化尺度上的阈值会把原点附近
@@ -4881,19 +5049,24 @@ SOFTWARE.
             targetPhi = Math.max(0.02, Math.min(Math.PI - 0.02, wantedPhi));
             targetFocus.set(px, py, pz);
             targetRadius = radiusForBlocks(LOCATE_BLOCKS);
-            markBlock = { x: bx, y: by, z: bz };
-            markGroup.position.set(px, py, pz);
-            markGroup.visible = true;
-            // 定位到的点不属于任何坐标系，附着解除。
-            attachedId = null;
-            refreshHighlight();
+            // 定位到的点直接建一个坐标系，相机附着到它。早先这里只摆一个只能看的标记，
+            // 现在它是一把可用的尺子，也是一个可右键创建与删除的对象。
+            var created = createFrameAt(frames[0], [bx, by, bz]);
+            if (!created.ok) {
+              // 建不出来就把相机停在原处，并在面板里说明原因，不收起面板。
+              gotoError.textContent = created.message;
+              gotoError.hidden = false;
+              return false;
+            }
+            attachTo(created.frame);
+            // 定位成功，表单收起。
+            hideGoto();
             clearViewSelection();
-            hideMenu();
-            invalidate();
             return true;
           }
 
           function applyGoto() {
+            gotoError.textContent = "";
             var bx = parseBlock(gotoX.value);
             var by = parseBlock(gotoY.value);
             var bz = parseBlock(gotoZ.value);
@@ -4904,7 +5077,10 @@ SOFTWARE.
               return;
             }
             if (!goTo(bx, by, bz)) {
-              gotoError.textContent = "原点没有方向，换一个点。";
+              if (gotoError.textContent === "") {
+                gotoError.textContent =
+                  "该点是原点 (0,0,0)，方向由它相对原点决定，原点本身没有方向。";
+              }
               gotoError.hidden = false;
             }
           }
@@ -4917,7 +5093,10 @@ SOFTWARE.
           });
 
           window.addEventListener("keydown", function (e) {
-            if (e.key === "Escape") hideMenu();
+            if (e.key === "Escape") {
+              hideMenu();
+              hideGoto();
+            }
           });
           window.addEventListener("blur", hideMenu);
 
@@ -4976,32 +5155,28 @@ SOFTWARE.
             lastFrame = now;
             var blend = reducedMotion.matches ? 1 : 1 - Math.exp(-dt * 15);
             var moving = false;
-            function approach(current, target, floor) {
-              // 阈值必须跟着量级走。radius 从 5.4 跨到 1e-4，固定 0.0001 的阈值
-              // 会让百万格以下每一格滚轮都直接跳变，阻尼等于没有，看起来一顿一顿。
-              // floor 是各通道自己的下限：焦点用半个方块，否则目标为原点时相对阈值
-              // 退化成 1e-12，尾巴会拖出几个方块的残差。
-              var eps =
-                Math.max(Math.abs(target), Math.abs(current)) * 1e-4 +
-                (floor === undefined ? 1e-12 : floor);
+            function approach(current, target, floor, scale) {
+              // 阈值必须跟着量级走，而且要跟着"视野的量级"，不是位置的量级。
+              // radius 从 5.4 跨到 1e-10：固定 0.0001 会让百万格以下每一格滚轮都直接跳变，
+              // 阻尼等于没有；而用 max(|target|,|current|) 又会把关注点的收敛门槛抬到
+              // 位置量级的 1e-4，也就是在十亿格处允许几十万格的残差，深缩放下定位会偏。
+              var mag =
+                scale === undefined
+                  ? Math.max(Math.abs(target), Math.abs(current))
+                  : scale;
+              var eps = mag * 1e-4 + (floor === undefined ? 1e-12 : floor);
               if (Math.abs(target - current) < eps) return target;
               moving = true;
               return current + (target - current) * blend;
             }
+            // 关注点的下限也随视距收：缩到亚方块尺度时，半个方块的下限相当于半个屏幕。
+            var focusFloor = Math.min(HALF_BLOCK, radius * 1e-6);
             theta = approach(theta, targetTheta);
             phi = approach(phi, targetPhi);
             radius = approach(radius, targetRadius);
-            focus.x = approach(focus.x, targetFocus.x, HALF_BLOCK);
-            focus.y = approach(focus.y, targetFocus.y, HALF_BLOCK);
-            focus.z = approach(focus.z, targetFocus.z, HALF_BLOCK);
-            // 标记是一张软边圆片：Sprite 的 scale 是四边形边长，所以给直径。
-            // 它按世界尺度画，跟场景一起缩放；只在屏幕上小到 4 像素时不再缩，
-            // 既看着像场景里的物体，又不会缩远之后找不回来。
-            var markHalfFov = Math.tan((camera.fov * Math.PI) / 360);
-            var markPixelFloor =
-              (4 * radius * markHalfFov) / Math.max(stage.clientHeight, 1);
-            var markScale = Math.max(MARK_RADIUS, markPixelFloor);
-            markGroup.scale.set(markScale * 2, markScale * 2, 1);
+            focus.x = approach(focus.x, targetFocus.x, focusFloor, radius);
+            focus.y = approach(focus.y, targetFocus.y, focusFloor, radius);
+            focus.z = approach(focus.z, targetFocus.z, focusFloor, radius);
             for (var i = 0; i < rowObjects.length; i++) {
               var entry = rowObjects[i];
               if (!entry) continue;
@@ -5034,6 +5209,7 @@ SOFTWARE.
             }
             updateCamera();
             camera.updateMatrixWorld();
+            placeScene();
             // 先写状态再画：updateLabels 决定刻度长度与标签显隐，写在绘制之后的话，
             // 那一帧画出去的是错状态，而相机停稳后循环就停了，错画面会一直留在屏上，
             // 直到下一次交互把它赶走，也就是转视角或聚焦。
