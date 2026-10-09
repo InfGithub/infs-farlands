@@ -2938,6 +2938,22 @@ SOFTWARE.
             .addEventListener("click", function () {
               chooseView("iso", true);
             });
+          /**
+           * 顺序跳到下一个坐标系并把相机附着上去，循环。全域那一个也参与，于是连按能回到全局。
+           * 当前没有附着时从全域那一个开始。只挂在画布的 keydown 上，所以要先聚焦渲染区。
+           */
+          function cycleAttach() {
+            if (frames.length === 0) return;
+            var at = -1;
+            for (var i = 0; i < frames.length; i++) {
+              if (frames[i].id === attachedId) {
+                at = i;
+                break;
+              }
+            }
+            attachTo(frames[(at + 1) % frames.length]);
+          }
+
           canvas.addEventListener("keydown", function (e) {
             var used = true;
             if (e.key === "ArrowLeft") targetTheta += 0.12;
@@ -2950,6 +2966,7 @@ SOFTWARE.
               targetRadius = Math.max(MIN_RADIUS, targetRadius / 1.15);
             else if (e.key === "-")
               targetRadius = Math.min(MAX_RADIUS, targetRadius * 1.15);
+            else if (e.key === " " || e.code === "Space") cycleAttach();
             else if (e.key === "Home") {
               chooseView("iso", true);
             } else used = false;
