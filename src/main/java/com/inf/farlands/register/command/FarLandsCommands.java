@@ -352,7 +352,8 @@ public class FarLandsCommands {
                 }
                 InfsFarlands.LOGGER.info("{}", sb);
             }
-            source.sendSuccess(() -> Component.literal("BIOCALC written to server log"), false);
+            source.sendSuccess(
+                    () -> Component.translatable("commands.infs-farlands.section.biome.compute"), false);
         } catch (Exception e) {
             InfsFarlands.LOGGER.error("BIOCALC err", e);
         }

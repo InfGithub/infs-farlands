@@ -42,36 +42,37 @@ final class ChunkyPregenHook {
                         .executes(context -> {
                             int value = IntegerArgumentType.getInteger(context, "y");
                             if (!ChunkyPregen.setMinSection(value)) {
-                                context.getSource().sendFailure(Component.literal(
-                                        "minY must be <= maxY(" + ChunkyPregen.maxSection()
-                                                + ") and within the section range"));
+                                context.getSource().sendFailure(Component.translatable(
+                                        "commands.infs-farlands.chunky.farlands.minY.range",
+                                        ChunkyPregen.maxSection()));
                                 return 0;
                             }
-                            reply(context, "farlands pregen band " + ChunkyPregen.minSection() + ".."
-                                    + ChunkyPregen.maxSection());
+                            reply(context, "commands.infs-farlands.chunky.farlands.band",
+                                    ChunkyPregen.minSection(), ChunkyPregen.maxSection());
                             return 1;
                         })))
                 .then(Commands.literal("maxY").then(Commands.argument("y", IntegerArgumentType.integer())
                         .executes(context -> {
                             int value = IntegerArgumentType.getInteger(context, "y");
                             if (!ChunkyPregen.setMaxSection(value)) {
-                                context.getSource().sendFailure(Component.literal(
-                                        "maxY must be >= minY(" + ChunkyPregen.minSection()
-                                                + ") and within the section range"));
+                                context.getSource().sendFailure(Component.translatable(
+                                        "commands.infs-farlands.chunky.farlands.maxY.range",
+                                        ChunkyPregen.minSection()));
                                 return 0;
                             }
-                            reply(context, "farlands pregen band " + ChunkyPregen.minSection() + ".."
-                                    + ChunkyPregen.maxSection());
+                            reply(context, "commands.infs-farlands.chunky.farlands.band",
+                                    ChunkyPregen.minSection(), ChunkyPregen.maxSection());
                             return 1;
                         })))
                 .executes(context -> {
-                    reply(context, "farlands pregen band " + ChunkyPregen.minSection() + ".."
-                            + ChunkyPregen.maxSection());
+                    reply(context, "commands.infs-farlands.chunky.farlands.band",
+                            ChunkyPregen.minSection(), ChunkyPregen.maxSection());
                     return 1;
                 })));
     }
 
-    private static void reply(CommandContext<CommandSourceStack> context, String text) {
-        context.getSource().sendSuccess(() -> Component.literal(text), false);
+    /** 三条成功回复共用一条文案，两个数值是当前预生成范围的两端。 */
+    private static void reply(CommandContext<CommandSourceStack> context, String key, Object... args) {
+        context.getSource().sendSuccess(() -> Component.translatable(key, args), false);
     }
 }
