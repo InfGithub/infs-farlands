@@ -1,6 +1,7 @@
 package com.inf.farlands.client.mixin.compat.sodium;
 
 import com.inf.farlands.util.window.WindowedChunk;
+import com.inf.farlands.util.world.WorldBounds;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
@@ -15,6 +16,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Sodium 0.9.2+mc26.1.2 版本绑定，升级即碎。
@@ -41,6 +44,30 @@ import org.spongepowered.asm.mixin.injection.At;
 @Pseudo
 @Mixin(RenderSectionManager.class)
 public abstract class RenderSectionManagerMixin {
+
+    /**
+     * 横向越界的段一律不建。onSectionAdded 是全树唯一 new RenderSection 的地方，它的唯一调用方是
+     * onChunkAdded 的循环，所以在 HEAD 取消即等于该段不进 renderSections、不进 RenderRegion、不进
+     * 遮挡图、不产生构建任务。
+     *
+     * <p>
+     * 判据是横向段坐标 x、z 落在可玩段范围内。这个界不需要实测：段坐标 134217727 时，Sodium 用
+     * (段坐标 >> 3) << 7 推出的区域原点是 2^31，int 存不下，回绕成负值；134217726 时是 2147483520，
+     * 仍在 int 内。分界点正好落在 WorldBounds.MAX_PLAYABLE_SECTION 上。
+     *
+     * <p>
+     * 这些段对应的方块坐标在 Integer.MAX_VALUE 之外，世界上不存在那样的方块，所以拒绝它们不丢内容；
+     * 而按原样放进去，它们的区域原点无法用 int 表示，只会被画到错的位置上。
+     *
+     * <p>
+     * 竖向的 y 不在这条判据内，竖向窗口另有既有机制。
+     */
+    @Inject(method = "onSectionAdded", at = @At("HEAD"), cancellable = true)
+    private void farlands$rejectHorizontalOutOfBounds(int x, int y, int z, CallbackInfo ci) {
+        if (!WorldBounds.inSection(x) || !WorldBounds.inSection(z)) {
+            ci.cancel();
+        }
+    }
 
     @WrapOperation(method = "onSectionAdded", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientLevel;getSectionIndexFromSectionY(I)I"))
     private int farlands$windowIndex(ClientLevel instance, int y, Operation<Integer> original,
