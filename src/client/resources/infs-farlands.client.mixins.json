@@ -52,7 +52,10 @@
     "compat.sodium.OcclusionCullerMixin",
     "compat.sodium.SodiumWorldRendererAccessor",
     "compat.sodium.TaskCollectingTreeMixin",
-    "compat.sodium.DeferredTaskListMixin"
+    "compat.sodium.DeferredTaskListMixin",
+    "compat.sodium.LevelColorCacheMixin",
+    "compat.sodium.LevelBiomeSliceMixin",
+    "compat.sodium.ArrayLightDataCacheMixin"
   ],
   "injectors": {
     "defaultRequire": 1
