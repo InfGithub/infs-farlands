@@ -166,7 +166,7 @@ public class FarlandsConfig {
             .build();
     public static final int sectionSendBytesPerTick;
 
-    // 调试配置：四条周期日志的启用开关，改文件后需重启生效。
+    // 调试配置：诊断日志的启用开关，改文件后需重启生效。
 
     public static final ConfigEntry<Boolean> LOG_BLOCK_LOOKUP_SWAP = DEBUG.setBoolean("logBlockLookupSwap")
             .comment("en_us", "Log the BlockUtil lookup generation swap every 200 ticks")
@@ -197,6 +197,22 @@ public class FarlandsConfig {
             .build();
     public static final boolean logStageMetrics;
 
+    public static final ConfigEntry<Boolean> LOG_INVERTED_BOUNDING_BOX = DEBUG
+            .setBoolean("logInvertedBoundingBox")
+            .comment("en_us", "Log inverted BoundingBox constructions, one line per call path per second")
+            .comment("zh_cn", "每秒至多打印一次反序的 BoundingBox 构造，同一调用路径限流")
+            .define(true)
+            .build();
+    public static final boolean logInvertedBoundingBox;
+
+    public static final ConfigEntry<Boolean> LOG_INVERTED_BOUNDING_BOX_MOVE = DEBUG
+            .setBoolean("logInvertedBoundingBoxMove")
+            .comment("en_us", "Log BoundingBox moves that invert the bounds, one line per call path per second")
+            .comment("zh_cn", "每秒至多打印一次使 BoundingBox 反序的 move，同一调用路径限流")
+            .define(true)
+            .build();
+    public static final boolean logInvertedBoundingBoxMove;
+
     static {
         // 两份文件各读一次、解析一次、约束一次。本类初始化由首个引用它的类触发。
         CONFIG.init();
@@ -220,5 +236,7 @@ public class FarlandsConfig {
         logSectionLookupTrim = LOG_SECTION_LOOKUP_TRIM.get();
         logAquiferLookupTrim = LOG_AQUIFER_LOOKUP_TRIM.get();
         logStageMetrics = LOG_STAGE_METRICS.get();
+        logInvertedBoundingBox = LOG_INVERTED_BOUNDING_BOX.get();
+        logInvertedBoundingBoxMove = LOG_INVERTED_BOUNDING_BOX_MOVE.get();
     }
 }
