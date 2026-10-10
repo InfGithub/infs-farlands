@@ -123,6 +123,8 @@ public abstract class ClientPacketListenerMixin {
         // setSectionDirtyWithNeighbors 一次连带 3x3x3 共 27 个段（LevelRenderer:1343-1345），
         // 逐段调用会让同一个 27 格盒被重复标几十遍；而窗口内各段的盒子的并集正好是一个连续区间，
         // 所以按区间发一次 setSectionRangeDirty 即可，盒内每个目标恰好一次。区间必须以窗口为界。
+        // 两个端点各自独立更新，单条项时取等；「无条目」不用哨兵值表示，见 ChunkDataPacketRegister
+        // 里同一形态的说明。
         WindowedChunk windowed = (WindowedChunk) chunk;
         int winMin = windowed.getWindowMinY();
         int winMax = windowed.getWindowMaxY();
