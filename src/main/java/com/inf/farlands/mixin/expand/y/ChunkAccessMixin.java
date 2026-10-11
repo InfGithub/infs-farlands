@@ -1,6 +1,7 @@
 package com.inf.farlands.mixin.expand.y;
 
 import com.inf.farlands.light.FarLandsLightEngine;
+import com.inf.farlands.serialize.PendingBlockEntities;
 import com.inf.farlands.terrain.CarvingMaskStorage;
 import com.inf.farlands.terrain.ChunkBeardifier;
 import com.inf.farlands.util.window.EntitySectionWindow;
@@ -26,6 +27,7 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.CrashReport;
 import net.minecraft.CrashReportCategory;
 import net.minecraft.ReportedException;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
@@ -58,7 +60,8 @@ import net.minecraft.world.level.chunk.ProtoChunk;
 import org.slf4j.Logger;
 
 @Mixin(ChunkAccess.class)
-public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStorage, ChunkBeardifier {
+public abstract class ChunkAccessMixin
+        implements WindowedChunk, CarvingMaskStorage, ChunkBeardifier, PendingBlockEntities {
 
     @Unique
     private final Map<Integer, LevelChunkSection> allSections = new ConcurrentHashMap<>();
@@ -549,6 +552,52 @@ public abstract class ChunkAccessMixin implements WindowedChunk, CarvingMaskStor
             }
             int l = QuartPos.fromSection(k);
             s.fillBiomesFromNoise(resolver, sampler, i, l, j);
+        }
+    }
+
+    /**
+     * 待建方块实体标签表，即声明在 ChunkAccess 上的那个字段。@Shadow 不解析继承成员，所以影子只能放在
+     * 本类；只读不写，字段虽是 final 也不需要 @Mutable。
+     */
+    @Shadow
+    protected Map<BlockPos, CompoundTag> pendingBlockEntities;
+
+    /**
+     * 把某一段已就位的待建标签晋升成实例。
+     *
+     * <p>
+     * 读的是 vanilla 自己的表，不新增存储。先收集再调用，因为晋升会从表里摘条目；段未就位时消费门会拒绝，
+     * 这一次调用便什么都不做，标签留着等该段落位后的下一轮。
+     *
+     * <p>
+     * 那格已经不是 BE 方块的标签直接丢掉：它没有落点，留着只会在每次载入重演一条
+     * {@code Failed to create block entity}。这类孤儿来自装饰期把 BE 方块换掉之后活实例没被摘除，
+     * 账在写门那边，这里只负责不让它被反复消费。
+     */
+    @Override
+    public void promotePendingBlockEntities(int sectionY) {
+        if (this.pendingBlockEntities.isEmpty()) {
+            return;
+        }
+        List<BlockPos> ready = null;
+        for (BlockPos pos : this.pendingBlockEntities.keySet()) {
+            if ((pos.getY() >> 4) == sectionY) {
+                if (ready == null) {
+                    ready = new ArrayList<>();
+                }
+                ready.add(pos);
+            }
+        }
+        if (ready == null) {
+            return;
+        }
+        ChunkAccess self = (ChunkAccess) (Object) this;
+        for (BlockPos pos : ready) {
+            if (!self.getBlockState(pos).hasBlockEntity()) {
+                this.pendingBlockEntities.remove(pos);
+                continue;
+            }
+            self.getBlockEntity(pos);
         }
     }
 }

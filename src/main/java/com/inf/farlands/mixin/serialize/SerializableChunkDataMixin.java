@@ -1,8 +1,20 @@
 package com.inf.farlands.mixin.serialize;
 
+import com.inf.farlands.serialize.ChunkReadiness;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.SectionPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.DataLayer;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.storage.SerializableChunkData;
 import net.minecraft.world.level.lighting.LayerLightEventListener;
@@ -35,10 +47,13 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * net/fabricmc 条目数为 0，ChunkAccess 没有 Fabric attachment API。旧设计里 attachment
  * 承载的 stage 在本 port 已由 SectionStage 自有承载。
  *
- * 读盘侧无需处理。没有 sections 时 parse 得到空 sectionData，read() 建出全 null 的
+ * 读盘侧：没有 sections 时 parse 得到空 sectionData，read() 建出全 null 的
  * LevelChunkSection 数组，LevelChunk 构造会走 replaceMissingSections，本 port 的
  * ChunkAccessMixin 已 @Overwrite 该方法并用 containerFactory 建占位 section，因此不会 NPE。
  * 真实数据由 fsa 的读回路径灌回。
+ *
+ * 方块不在 NBT 里这件事另有两处后果，见本类尾部两个注入点：落盘时方块实体标签必须一律写成
+ * packed 形态，载入时所在段尚未就位的标签不能拿去建实例。
  *
  * 写入链路的唯一生产点：26.1.2 全树只有 ChunkMap 第 760 行一处调用
  * SerializableChunkData.copyOf。
@@ -56,5 +71,49 @@ public class SerializableChunkDataMixin {
     @Redirect(method = "copyOf", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/lighting/LayerLightEventListener;getDataLayerData(Lnet/minecraft/core/SectionPos;)Lnet/minecraft/world/level/chunk/DataLayer;"))
     private static DataLayer farlands$noSectionLight(LayerLightEventListener listener, SectionPos pos) {
         return null;
+    }
+
+    /**
+     * 方块实体标签一律写成 packed 形态。
+     *
+     * <p>
+     * vanilla 的约定是「非 packed 标签蕴含方块态就在同一份 NBT 里」：{@code LevelChunk.getBlockEntityNbtForSaving}
+     * 给活着的方块实体写 {@code keepPacked=false}，给还没建的写 {@code true}。本 port 的 sections 在 fsa 里，
+     * NBT 没有方块，照活实体写 false 就成了假陈述：载入时 {@code SerializableChunkData} 会拿空气态去建实例，
+     * 抛 Invalid block entity 之后由 {@code BlockEntity.loadStatic} 吞掉，这个方块实体就没了。
+     *
+     * <p>
+     * 置 true 之后标签进 pending，由 {@code LevelChunk.promotePendingBlockEntity} 在方块到位时再建，
+     * 载入顺序与方块位置解耦：窗口内的由 ticking 准备那一轮晋升，窗口外的留给读回收尾。
+     */
+    @Redirect(method = "copyOf(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkAccess;)Lnet/minecraft/world/level/chunk/storage/SerializableChunkData;", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/ChunkAccess;getBlockEntityNbtForSaving(Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/HolderLookup$Provider;)Lnet/minecraft/nbt/CompoundTag;"))
+    private static CompoundTag farlands$packBlockEntity(ChunkAccess chunk, BlockPos pos,
+            HolderLookup.Provider registries) {
+        CompoundTag tag = chunk.getBlockEntityNbtForSaving(pos, registries);
+        if (tag != null) {
+            tag.putBoolean("keepPacked", true);
+        }
+        return tag;
+    }
+
+    /**
+     * 载入时所在段尚未就位的标签不进建实例那一支。
+     *
+     * <p>
+     * 读盘那一路的标签只活在 {@code postLoadChunk} 生成的处理器闭包里，跑 {@code runPostLoad} 之前看不到它，
+     * 所以已经落盘成非 packed 的旧标签只能在被消费的那一刻拦。判据是段级就绪：该段没到 LIGHTED 或仍在读回时，
+     * 把标签交给 {@code setBlockEntityNbt} 停进 pending 表并返回 null，不打那条 ERROR；段已就绪就放行原方法，
+     * 让真正错配的方块按 vanilla 语义报错。
+     */
+    @WrapOperation(method = "lambda$postLoadChunk$0", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/entity/BlockEntity;loadStatic(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/core/HolderLookup$Provider;)Lnet/minecraft/world/level/block/entity/BlockEntity;"))
+    private static BlockEntity farlands$parkUnready(BlockPos pos, BlockState state, CompoundTag tag,
+            HolderLookup.Provider registries, Operation<BlockEntity> original,
+            @Local(argsOnly = true, index = 3) LevelChunk levelChunk) {
+        if (levelChunk.getLevel() instanceof ServerLevel level
+                && !ChunkReadiness.isReady(level, levelChunk.getPos(), pos.getY() >> 4)) {
+            levelChunk.setBlockEntityNbt(tag);
+            return null;
+        }
+        return original.call(pos, state, tag, registries);
     }
 }

@@ -697,6 +697,7 @@ public final class SectionLifecycle {
                         }
                         if (pending.decrementAndGet() <= 0) {
                             SectionIO.unmarkReadingBatch(lc, windowSy);
+                            promotePendingSections(lc, windowSy);
                             skySourcesReady(lc);
                             ChunkReadiness.drive();
                             onDone.run();
@@ -782,10 +783,26 @@ public final class SectionLifecycle {
             for (SectionIO.DecodedWithSy d : decodedList) {
                 applyDecoded(lc, d.sectionY(), d.decoded());
             }
+            promotePendingSections(lc, List.of(sectionY));
             skySourcesReady(lc);
             ChunkReadiness.drive();
             onDone.run();
         });
+    }
+
+    /**
+     * 读回收尾的晋升：把刚就位那些段的待建方块实体标签促其晋升。
+     *
+     * <p>
+     * 标签由 vanilla 的 pendingBlockEntities 承载，消费门在 serialize/LevelChunkMixin 里，判据是段级就绪。
+     * 本方法必须排在 unmark 之后而不是 applyDecoded 里：applyDecoded 执行期间该段仍标着在读，会被那道门挡回。
+     * 段未就位的标签在这里被拒是正常的，留给它自己落位后的下一轮。
+     */
+    private static void promotePendingSections(LevelChunk lc, List<Integer> sectionYs) {
+        PendingBlockEntities host = (PendingBlockEntities) lc;
+        for (int sy : sectionYs) {
+            host.promotePendingBlockEntities(sy);
+        }
     }
 
     /**

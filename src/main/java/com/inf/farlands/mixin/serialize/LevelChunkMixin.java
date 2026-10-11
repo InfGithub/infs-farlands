@@ -1,9 +1,14 @@
 package com.inf.farlands.mixin.serialize;
 
+import com.inf.farlands.serialize.ChunkReadiness;
 import com.inf.farlands.serialize.SectionSerializer;
 import com.inf.farlands.util.window.WindowedChunk;
 
+import java.util.Map;
+
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
@@ -16,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * 写方块的段级入口：调色板写入与编码池互斥，并给 fsa 标脏。
+ * 写方块的段级入口，与待建方块实体的消费门。
  *
  * <p>写入侧：普通方块写最终都落到 setBlockState 里那一次 LevelChunkSection.setBlockState
  * 调用，它走带线程检测的调色板重载，而 fsa 编码在 farlands-encode 池上打包同一个容器，
@@ -30,6 +35,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  *
  * <p>26.1.2 的签名是 setBlockState(BlockPos, BlockState, int flags)，已 javap 核实。另一处标脏点是
  * terrain 的 fill，GenTask 逐段 fill 与 surface、carvers 升段后标脏。
+ *
+ * <p>方块实体侧：pending 标签的消费与清表都按段判定。段没落位的标签不得摘走、也不得被清掉，因为那一刻
+ * 没有方块态可以建实例，而方块在 fsa 里、要等读回才到。两处判据见本类尾部两个 redirect。
  */
 @Mixin(LevelChunk.class)
 public abstract class LevelChunkMixin {
@@ -69,5 +77,46 @@ public abstract class LevelChunkMixin {
         if (cir.getReturnValue() != null) {
             ((WindowedChunk) this).markSectionDirty(pos.getY() >> 4);
         }
+    }
+
+    /**
+     * 段未就位时不消费 pending 标签。
+     *
+     * <p>
+     * vanilla 的原序是先 {@code remove} 再 {@code promotePendingBlockEntity}，而晋升要拿方块态去建实例：
+     * 段还没读回来时读到的是空气，{@code BlockEntity.loadStatic} 判定非法、吞掉异常、返回 null，标签随之
+     * 消失。本 port 的方块在 fsa，载入瞬间必然没有方块，所以这道守卫是必须的：段未就绪就返回 null、不摘
+     * 标签，等该段被读回灌好之后由 {@code SectionLifecycle} 的读回收尾那一处晋升。
+     *
+     * <p>
+     * 「段已定」与写入门同源，用 {@link ChunkReadiness}：已到 LIGHTED 且此刻不在读回。
+     *
+     * <p>
+     * 本方法里有两处 {@code Map.remove}。本处作用在 {@code pendingBlockEntities} 上，另一处在后面的
+     * {@code isRemoved} 分支上，作用在活表 {@code blockEntities} 上；裸写会同时命中两处，因此钉
+     * {@code ordinal = 0}。客户端 chunk 的 pending 表恒空，这里直接走原路。
+     */
+    @Redirect(method = "getBlockEntity(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/chunk/LevelChunk$EntityCreationType;)Lnet/minecraft/world/level/block/entity/BlockEntity;", at = @At(value = "INVOKE", target = "Ljava/util/Map;remove(Ljava/lang/Object;)Ljava/lang/Object;", ordinal = 0))
+    private Object farlands$keepPendingUntilReady(Map<BlockPos, CompoundTag> pending, Object key) {
+        LevelChunk self = (LevelChunk) (Object) this;
+        if (!(self.getLevel() instanceof ServerLevel level) || !pending.containsKey(key)) {
+            return pending.remove(key);
+        }
+        BlockPos pos = (BlockPos) key;
+        if (!ChunkReadiness.isReady(level, self.getPos(), pos.getY() >> 4)) {
+            return null;
+        }
+        return pending.remove(key);
+    }
+
+    /**
+     * ticking 准备那一轮晋升走完之后不清空 pending 表。
+     *
+     * <p>
+     * {@code postProcessGeneration} 结尾会 clear。此时表里剩下的条目恰好是上一处守卫拒掉的，也就是所在段
+     * 还没落位的标签；清掉等于把守卫白做，它们会在这一轮无声消失。留给读回收尾那一处晋升。
+     */
+    @Redirect(method = "postProcessGeneration(Lnet/minecraft/server/level/ServerLevel;)V", at = @At(value = "INVOKE", target = "Ljava/util/Map;clear()V"))
+    private void farlands$keepUnreadyPending(Map<BlockPos, CompoundTag> pending) {
     }
 }

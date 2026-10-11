@@ -26,6 +26,9 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * 都会与它抢同一个容器。写点拿不到 chunk 引用，键由取段那一侧留在 {@link DecorationRegion} 的线程
  * 侧信道上。
  *
+ * <p>这一路同样绕过 {@code DecorationRegion.setBlock} 对 BE 方块的记账：把 BE 方块换成非 BE 方块时，
+ * 那一笔要在这里按写自身的返回值补记，交给装饰收尾在主线程摘掉旧实例。
+ *
  * <p>两个 {@code @Redirect} 都用 {@code doPlace}：取数打的是构造点 NEW，处理体的形参就是构造器的形参
  * 表；写入打的是那一次 {@code setBlockState}，全方法只此一处，所以不带 ordinal。
  */
@@ -43,12 +46,20 @@ public abstract class OreFeatureSectionAccessMixin {
     private static BlockState farlands$oreWriteUnderPackLock(LevelChunkSection section, int localX, int localY,
             int localZ, BlockState state, boolean useLocks) {
         Long chunkKey = DecorationRegion.handedChunkKey();
+        BlockState oldState;
         if (chunkKey == null) {
             // 非装饰路径：没有取段那一侧交下来的键，保持原样。
-            return section.setBlockState(localX, localY, localZ, state, useLocks);
+            oldState = section.setBlockState(localX, localY, localZ, state, useLocks);
+        } else {
+            synchronized (SectionSerializer.packLockFor(chunkKey)) {
+                oldState = section.setBlockState(localX, localY, localZ, state, useLocks);
+            }
         }
-        synchronized (SectionSerializer.packLockFor(chunkKey)) {
-            return section.setBlockState(localX, localY, localZ, state, useLocks);
+        if (oldState != null && oldState.hasBlockEntity() && !state.hasBlockEntity()) {
+            // 矿石绕过 DecorationRegion.setBlock 直接写段，所以「把 BE 方块换掉」这件事要在这里补记一笔，
+            // 位置取该侧信道上最近一次 getSection 的入参，与这一写同轮相邻。
+            DecorationRegion.recordHandedBlockEntityReplacement();
         }
+        return oldState;
     }
 }

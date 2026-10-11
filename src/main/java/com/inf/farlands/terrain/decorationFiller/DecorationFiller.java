@@ -679,6 +679,20 @@ public final class DecorationFiller {
                 LAST_EVAL_EPOCH.remove(key);
                 return;
             }
+            // 被本次装饰换成非 BE 方块的那些位置：那里的活实例要在这里摘掉，否则留成孤儿。孤儿过不了
+            // 服务端的刻判据，客户端还会打 invalid for ticking，而直写段绕开了 LevelChunk.setBlockState
+            // 的摘除，所以只能由本收尾补。判据落在当前方块上：后来者若又合法铺回 BE 方块并装了实例，
+            // 这里就放过它；不存在的实例 removeBlockEntity 自己幂等。
+            for (BlockPos pos : region.pendingBlockEntityRemovals()) {
+                LevelChunk owner = SectionLifecycle.latestChunk(level, SectionPos.blockToSectionCoord(pos.getX()),
+                        SectionPos.blockToSectionCoord(pos.getZ()));
+                if (owner == null) {
+                    continue;
+                }
+                if (!owner.getBlockState(pos).hasBlockEntity()) {
+                    owner.removeBlockEntity(pos);
+                }
+            }
             // 方块实体按各自所属的 chunk 安装：写域是九格，实体可能落在邻居上。
             for (Map.Entry<BlockPos, BlockEntity> e : region.pendingBlockEntities().entrySet()) {
                 BlockPos pos = e.getKey();

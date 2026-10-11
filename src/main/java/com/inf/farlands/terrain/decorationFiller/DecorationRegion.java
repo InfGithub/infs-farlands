@@ -1,8 +1,10 @@
 package com.inf.farlands.terrain.decorationFiller;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -132,6 +134,15 @@ public final class DecorationRegion implements WorldGenLevel {
     /** 本次装饰建出的方块实体，主线程收尾安装；安装前不持有 live level。 */
     private final Map<BlockPos, BlockEntity> pendingBlockEntities = new HashMap<>();
 
+    /**
+     * 本次装饰把 BE 方块换成非 BE 方块的那些位置，主线程收尾摘掉那里可能存在的活实例。
+     *
+     * <p>
+     * 直写段绕开了 {@code LevelChunk.setBlockState} 的摘除，而本区域不碰活表，所以只能池上记账、
+     * 主线程执行。记与不记只由写自身的返回值与新区块态决定，两者都在池线程本地，不读任何活状态。
+     */
+    private final Set<BlockPos> pendingBlockEntityRemovals = new HashSet<>();
+
     /** 本次装饰写到过的 chunk，收尾按它补发下发标记。写域是九格，键是 pack。 */
     private final LongSet writtenChunks = new LongOpenHashSet();
 
@@ -211,6 +222,22 @@ public final class DecorationRegion implements WorldGenLevel {
     /** 本次装饰建出的方块实体。主线程收尾安装。 */
     Map<BlockPos, BlockEntity> pendingBlockEntities() {
         return this.pendingBlockEntities;
+    }
+
+    /** 本次装饰写过、且写后不是 BE 方块的位置。主线程收尾摘除。 */
+    Set<BlockPos> pendingBlockEntityRemovals() {
+        return this.pendingBlockEntityRemovals;
+    }
+
+    /**
+     * 记一笔「这一写把 BE 方块换掉了」。本类的 {@link #setBlock} 与矿石那条直写旁路都从这里补记。
+     *
+     * <p>
+     * 不需要判那里有没有活的实例：那要读主线程独占的表，池上不许。摘的时候由收尾按当前方块判，
+     * 不存在的实例 {@code removeBlockEntity} 自己幂等。
+     */
+    public void recordBlockEntityReplacement(BlockPos pos) {
+        this.pendingBlockEntityRemovals.add(pos.immutable());
     }
 
     /** 本次装饰写到过的 chunk 键。收尾补发下发标记用。 */
@@ -337,6 +364,8 @@ public final class DecorationRegion implements WorldGenLevel {
      * <li>不做邻居更新：装饰只放方块。</li>
      * <li>方块实体只建出来放进本区域，由主线程收尾安装，因为 {@code blockEntities} 与 ticker 表是
      * 主线程独占状态。</li>
+     * <li>把 BE 方块换成非 BE 方块时，位置记进本区域，由主线程收尾摘掉那里的活实例。vanilla 的
+     * {@code WorldGenRegion.setBlock} 是当场摘的，本区域碰不了活表，只能分池上记账与主线程执行两段。</li>
      * </ul>
      */
     @Override
@@ -377,8 +406,15 @@ public final class DecorationRegion implements WorldGenLevel {
             if (blockEntity != null) {
                 this.pendingBlockEntities.put(pos.immutable(), blockEntity);
             }
-        } else if (!this.pendingBlockEntities.isEmpty()) {
-            this.pendingBlockEntities.remove(pos);
+        } else {
+            if (!this.pendingBlockEntities.isEmpty()) {
+                this.pendingBlockEntities.remove(pos);
+            }
+            if (oldState != null && oldState.hasBlockEntity()) {
+                // 这一写把 BE 方块换掉了。vanilla 在 WorldGenRegion.setBlock 里当场摘活实例，本区域
+                // 不碰活表，只能记一笔交给主线程收尾。
+                recordBlockEntityReplacement(pos);
+            }
         }
         this.writtenChunks.add(owner.getPos().pack());
         return true;
@@ -418,22 +454,48 @@ public final class DecorationRegion implements WorldGenLevel {
     // ---- 不属于本步的两块：位置门与方块实体辅助 ----
 
     /**
-     * 最近一次经 {@link UnlockedSectionAccess} 交出去的段所属 chunk 键。
+     * 最近一次经 {@link UnlockedSectionAccess} 交出去的段：所属区域、chunk 键与那个世界坐标。
      *
-     * <p>矿石那一路绕过 {@link #setBlock} 直接写段，而 {@code LevelChunkSection} 不持有 chunk 引用，
-     * 写点拿不到锁键，所以由取段那一侧把键留在线程上，写点照它取同一把包锁。装饰整段跑在同一条池线程
-     * 上，任务收尾清掉。
+     * <p>
+     * 矿石那一路绕过 {@link #setBlock} 直接写段，而 {@code LevelChunkSection} 不持有 chunk 引用：
+     * 写点取包锁要 chunk 键，把 BE 方块换掉时要位置，两样都由取段那一侧留在线程上。
+     *
+     * <p>
+     * 用可变 holder 而不是每次新建：一次矿石生成会按被测位置反复调 {@code getSection}，按位置分配会在
+     * 池线程上堆垃圾。装饰整段跑在同一条池线程上，任务收尾清掉。
      */
-    private static final ThreadLocal<Long> HANDED_CHUNK_KEY = new ThreadLocal<>();
+    private static final class HandedSection {
+        private DecorationRegion region;
+        private long chunkKey;
+        private int x;
+        private int y;
+        private int z;
+    }
+
+    private static final ThreadLocal<HandedSection> HANDED = ThreadLocal.withInitial(HandedSection::new);
 
     /** 最近交出去的段所属 chunk 键，没有则 null。供 OreFeatureSectionAccessMixin 取锁用。 */
     public static Long handedChunkKey() {
-        return HANDED_CHUNK_KEY.get();
+        HandedSection handed = HANDED.get();
+        return handed.region == null ? null : handed.chunkKey;
+    }
+
+    /**
+     * 把最近一次交出去的世界坐标记为「BE 方块被换掉」，供矿石写点调用。没有记录时什么都不做。
+     *
+     * <p>
+     * 位置取最近一次 {@code getSection} 的入参，与那次写在同轮循环内相邻，所以是准的。
+     */
+    public static void recordHandedBlockEntityReplacement() {
+        HandedSection handed = HANDED.get();
+        if (handed.region != null) {
+            handed.region.recordBlockEntityReplacement(new BlockPos(handed.x, handed.y, handed.z));
+        }
     }
 
     /** 清掉本线程的记录。装饰任务收尾调用，防同一条池线程把上一个任务的值带给下一个。 */
     public static void clearHandedChunkKey() {
-        HANDED_CHUNK_KEY.remove();
+        HANDED.remove();
     }
 
     /**
@@ -445,7 +507,8 @@ public final class DecorationRegion implements WorldGenLevel {
      * {@code LevelChunkSection.getBlockState} 走调色板的 get，本来就不加锁。
      *
      * <p>它交出去的段随后由矿石直接写，那一次写由 {@code OreFeatureSectionAccessMixin} 用同一把包锁
-     * 包住；键从本类的 {@link #handedChunkKey()} 取。
+     * 包住；锁键与那一写的位置都从本类的 {@link #handedChunkKey()} 与
+     * {@link #recordHandedBlockEntityReplacement()} 取。
      */
     public static final class UnlockedSectionAccess extends BulkSectionAccess {
 
@@ -464,9 +527,14 @@ public final class DecorationRegion implements WorldGenLevel {
             // 与这次写没有落点同义。
             if (section != null) {
                 // 它绕过本区域的 setBlock 直接写段，所以写过的 chunk 要在这里补记，收尾才补得上下发；
-                // 写那一次要取的包锁键也从这里交出去。
+                // 写那一次要取的包锁键、以及 BE 方块被换掉时要记的位置，也都从这里交出去。
                 this.region.writtenChunks.add(owner.getPos().pack());
-                HANDED_CHUNK_KEY.set(owner.getPos().pack());
+                HandedSection handed = HANDED.get();
+                handed.region = this.region;
+                handed.chunkKey = owner.getPos().pack();
+                handed.x = pos.getX();
+                handed.y = pos.getY();
+                handed.z = pos.getZ();
             }
             return section;
         }
