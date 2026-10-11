@@ -1,6 +1,6 @@
 package com.inf.farlands.client.mixin.compat.sodium;
 
-import com.inf.farlands.FarlandsConstant;
+import com.inf.farlands.util.world.WorldBounds;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 
@@ -17,8 +17,8 @@ import org.spongepowered.asm.mixin.injection.At;
  *
  * <p>
  * update 用 origin 的最小方块端点减 16 当自己的基准：blockX = minBlockX() - 16，三轴各一。这个基准
- * 与 getBiome 的入参相减得相对坐标，所以它必须是真实的方块坐标；而它减 16 会比邻域那两族（减 2、
- * 减 2）更早下溢：minBlockX() 低到 -2147483632 时减 16 就落到 int 下界之外，回绕成一个正数。
+ * 与 getBiome 的入参相减得相对坐标，所以它必须是真实的方块坐标；而它减 16 比邻域两族的减 2 更早下溢：
+ * minBlockX() 低于 -2147483632 时，减 16 就落到 int 下界之外，回绕成一个正数。
  * 基准翻正之后 getBiome 的 relBlockX 是负的二十亿，QuartPos.fromBlock 与 dataArrayIndex 随即在长度
  * 1728 的数组上越界。
  *
@@ -30,25 +30,25 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(LevelBiomeSlice.class)
 public abstract class LevelBiomeSliceMixin {
 
-    /** 使原地那次 -16 停在 int 内的最小端点。 */
+    /** 使原地那次 -16 停在 int 内的最小端点，也就是 base 不可表示的界。 */
     @Unique
-    private static final int farlands$minEndpoint16 = FarlandsConstant.MAX_PLAYABLE_BLOCK;
+    private static final int farlands$minEndpoint16 = WorldBounds.MIN_PLAYABLE_BLOCK;
 
     @WrapOperation(method = "update", at = @At(value = "INVOKE", target = "Lnet/minecraft/core/SectionPos;minBlockX()I"))
     private int farlands$satMinBlockX(SectionPos self, Operation<Integer> original) {
         int value = original.call(self);
-        return value < farlands$minEndpoint16 + 16 ? farlands$minEndpoint16 + 16 : value;
+        return value < farlands$minEndpoint16 ? farlands$minEndpoint16 : value;
     }
 
     @WrapOperation(method = "update", at = @At(value = "INVOKE", target = "Lnet/minecraft/core/SectionPos;minBlockY()I"))
     private int farlands$satMinBlockY(SectionPos self, Operation<Integer> original) {
         int value = original.call(self);
-        return value < farlands$minEndpoint16 + 16 ? farlands$minEndpoint16 + 16 : value;
+        return value < farlands$minEndpoint16 ? farlands$minEndpoint16 : value;
     }
 
     @WrapOperation(method = "update", at = @At(value = "INVOKE", target = "Lnet/minecraft/core/SectionPos;minBlockZ()I"))
     private int farlands$satMinBlockZ(SectionPos self, Operation<Integer> original) {
         int value = original.call(self);
-        return value < farlands$minEndpoint16 + 16 ? farlands$minEndpoint16 + 16 : value;
+        return value < farlands$minEndpoint16 ? farlands$minEndpoint16 : value;
     }
 }
