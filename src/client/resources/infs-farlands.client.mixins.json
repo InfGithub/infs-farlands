@@ -29,6 +29,7 @@
     "fix.xz.RenderSectionRegionMixin",
     "fix.xz.WeatherEffectRendererMixin",
     "fix.xyz.SectionRenderDispatcher$RenderSectionMixin",
+    "fix.y.CameraMixin",
     "integratedserver.IntegratedServerMixin",
     "network.ClientPayloadDispatchMixin",
     "command.ClientPacketListenerMixin",
